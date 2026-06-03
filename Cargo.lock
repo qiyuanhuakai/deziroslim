@@ -2294,31 +2294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "myclipboard"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "chrono",
- "crossbeam-channel",
- "dirs",
- "eframe",
- "egui",
- "egui_extras",
- "image",
- "ksni",
- "open",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
- "windows 0.58.0",
- "x11-clipboard",
- "x11rb",
-]
-
-[[package]]
 name = "naga"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3638,6 +3613,32 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "tiez-slim-linux"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "chrono",
+ "crossbeam-channel",
+ "dirs",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "image",
+ "ksni",
+ "open",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "windows 0.58.0",
+ "x11-clipboard",
+ "x11rb",
 ]
 
 [[package]]

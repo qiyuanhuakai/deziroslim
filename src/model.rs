@@ -1,9 +1,129 @@
 use chrono::{DateTime, Local, TimeZone};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 pub const MAX_ENTRIES: usize = 1_000;
 pub const MAX_CONTENT_BYTES: usize = 10 * 1024 * 1024;
 pub const RETENTION_DAYS: i64 = 30;
+
+const CODE_KEYWORDS: &[&str] = &[
+    "fn", "let", "const", "class", "function", "import", "export", "use", "impl", "struct", "enum",
+    "trait", "def", "pub", "cargo", "rustup", "npm",
+];
+
+static PHONE_RE: OnceLock<Regex> = OnceLock::new();
+static IDCARD_RE: OnceLock<Regex> = OnceLock::new();
+static EMAIL_RE: OnceLock<Regex> = OnceLock::new();
+static SECRET_RE: OnceLock<Regex> = OnceLock::new();
+
+fn phone_re() -> &'static Regex {
+    PHONE_RE.get_or_init(|| {
+        Regex::new(r"(?:\+?86)?[-\s\(]*1[3-9]\d{1}[-\s\)]*\d{4}[-\s]*\d{4}").unwrap()
+    })
+}
+
+fn idcard_re() -> &'static Regex {
+    IDCARD_RE.get_or_init(|| Regex::new(r"\b\d{17}[\dXx]\b").unwrap())
+}
+
+fn email_re() -> &'static Regex {
+    EMAIL_RE.get_or_init(|| Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap())
+}
+
+fn secret_re() -> &'static Regex {
+    SECRET_RE.get_or_init(|| {
+        Regex::new(r"(?i)(?:sk-[a-zA-Z0-9]{20,}|pk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{30,}|AIza[a-zA-Z0-9_-]{30,}|AKIA[A-Z0-9]{16}|ya29\.[a-zA-Z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)").unwrap()
+    })
+}
+
+/// Heuristic password detection – avoids Rust-unsupported regex lookahead.
+fn is_password_like(value: &str) -> bool {
+    let len = value.len();
+    if !(8..=64).contains(&len) {
+        return false;
+    }
+    if value.contains(' ') || value.contains('\n') {
+        return false;
+    }
+    let has_lower = value.bytes().any(|b| b.is_ascii_lowercase());
+    let has_upper = value.bytes().any(|b| b.is_ascii_uppercase());
+    let has_digit = value.bytes().any(|b| b.is_ascii_digit());
+    let has_special = value.bytes().any(|b| b"@$!%*?&".contains(&b));
+    has_lower && has_upper && has_digit && has_special
+}
+
+/// Rule-based sensitive detection with pluggable kinds and custom regex rules.
+pub fn looks_sensitive_with_rules(
+    text: &str,
+    enabled_kinds: &[String],
+    custom_rules: &[Regex],
+) -> bool {
+    if text.len() > 5000 {
+        return false;
+    }
+
+    for kind in enabled_kinds {
+        match kind.as_str() {
+            "phone" => {
+                if phone_re().is_match(text) {
+                    return true;
+                }
+            }
+            "idcard" => {
+                if idcard_re().is_match(text) {
+                    return true;
+                }
+            }
+            "email" => {
+                if email_re().is_match(text) {
+                    return true;
+                }
+            }
+            "secret" => {
+                if secret_re().is_match(text) {
+                    return true;
+                }
+            }
+            "password" => {
+                if is_password_like(text) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    for rule in custom_rules {
+        if rule.is_match(text) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Compile custom regex rule strings (one per line) into validated [`Regex`] objects.
+/// Returns `Err` with per-line errors if any pattern is invalid.
+#[allow(dead_code)]
+pub fn compile_custom_rules(raw: &str) -> Result<Vec<Regex>, Vec<(usize, regex::Error)>> {
+    let mut rules = Vec::new();
+    let mut errors = Vec::new();
+    for (i, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        match Regex::new(line) {
+            Ok(re) => rules.push(re),
+            Err(e) => errors.push((i, e)),
+        }
+    }
+    if errors.is_empty() {
+        Ok(rules)
+    } else {
+        Err(errors)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClipboardKind {
@@ -283,56 +403,30 @@ fn strip_html_tags(value: &str) -> String {
 }
 
 fn looks_like_code(value: &str) -> bool {
-    let trimmed = value.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    let code_tokens = [
-        "fn ",
-        "let ",
-        "const ",
-        "class ",
-        "function ",
-        "import ",
-        "export ",
-        "use ",
-        "impl ",
-        "struct ",
-        "enum ",
-        "trait ",
-        "def ",
-        "pub ",
-        "cargo ",
-        "rustup ",
-        "npm ",
-        "git ",
-    ];
-    trimmed.contains("{") && trimmed.contains("}")
-        || trimmed.contains("=>")
-        || trimmed.contains("::")
-        || code_tokens.iter().any(|token| lower.contains(token))
+    let mut score = 0u32;
+    for kw in CODE_KEYWORDS {
+        if value.contains(kw) {
+            score += 1;
+        }
+    }
+    if value.contains(';') {
+        score += 1;
+    }
+    if value.contains('{') && value.contains('}') {
+        score += 1;
+    }
+    if value.contains("</") {
+        score += 1;
+    }
+    score >= 2
 }
 
 fn looks_sensitive(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    let sensitive_tokens = [
-        "password",
-        "passwd",
-        "secret",
-        "token",
-        "apikey",
-        "api_key",
-        "access_key",
-        "private_key",
-        "authorization:",
-        "bearer ",
-        "ssh-rsa",
-        "-----begin",
-    ];
-    if sensitive_tokens.iter().any(|token| lower.contains(token)) {
-        return true;
-    }
-    let digits = value.chars().filter(|char| char.is_ascii_digit()).count();
-    let at_count = value.matches('@').count();
-    digits >= 11 || (at_count == 1 && value.contains('.') && !value.contains(' '))
+    let default_kinds: Vec<String> = ["phone", "idcard", "email", "secret", "password"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    looks_sensitive_with_rules(value, &default_kinds, &[])
 }
 
 pub fn make_preview(value: &str, limit: usize) -> String {
@@ -352,6 +446,239 @@ pub fn make_preview(value: &str, limit: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── is_password_like ──
+
+    #[test]
+    fn is_password_like_detects_mixed_password() {
+        assert!(is_password_like("Abcdef1!"));
+        assert!(is_password_like("P@ssw0rd"));
+    }
+
+    #[test]
+    fn is_password_like_accepts_all_special_chars() {
+        for ch in b"@$!%*?&" {
+            let pw = format!("Abcdef1{}", *ch as char);
+            assert!(
+                is_password_like(&pw),
+                "should accept special '{}'",
+                *ch as char
+            );
+        }
+    }
+
+    #[test]
+    fn is_password_like_rejects_non_listed_special() {
+        assert!(!is_password_like("Abcdef1#"));
+        assert!(!is_password_like("Abcdef1^"));
+    }
+
+    #[test]
+    fn is_password_like_rejects_plain_word() {
+        assert!(!is_password_like("password"));
+        assert!(!is_password_like("abcdefgh"));
+    }
+
+    #[test]
+    fn is_password_like_rejects_too_short() {
+        assert!(!is_password_like("Ab1!"));
+    }
+
+    #[test]
+    fn is_password_like_rejects_too_long() {
+        let long = "Aa1!".to_string() + &"x".repeat(70);
+        assert!(!is_password_like(&long));
+    }
+
+    #[test]
+    fn is_password_like_rejects_spaces() {
+        assert!(!is_password_like("Abc 1234!"));
+    }
+
+    // ── Regex accessors ──
+
+    #[test]
+    fn phone_re_matches_chinese_mobile() {
+        assert!(phone_re().is_match("13812345678"));
+        assert!(phone_re().is_match("+86 138 1234 5678"));
+        assert!(!phone_re().is_match("12345"));
+    }
+
+    #[test]
+    fn idcard_re_matches_18_digit() {
+        assert!(idcard_re().is_match("11010119900307451X"));
+        assert!(idcard_re().is_match("110101199003074518"));
+        assert!(!idcard_re().is_match("12345"));
+    }
+
+    #[test]
+    fn email_re_matches_standard_email() {
+        assert!(email_re().is_match("user@example.com"));
+        assert!(!email_re().is_match("not-an-email"));
+    }
+
+    #[test]
+    fn secret_re_matches_known_prefixes() {
+        assert!(secret_re().is_match("sk-abcdefghijklmnopqrstuvwxyz1234"));
+        assert!(secret_re().is_match("pk-abcdefghijklmnopqrstuvwxyz1234"));
+        assert!(secret_re().is_match("ghp_abcdefghijklmnopqrstuvwxyz12345678"));
+        assert!(secret_re().is_match("AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+        assert!(secret_re().is_match("AKIAIOSFODNN7EXAMPLE"));
+        assert!(secret_re().is_match("ya29.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+        assert!(!secret_re().is_match("hello world"));
+    }
+
+    #[test]
+    fn secret_re_matches_private_key() {
+        assert!(secret_re().is_match("-----BEGIN RSA PRIVATE KEY-----"));
+        assert!(secret_re().is_match("-----BEGIN PRIVATE KEY-----"));
+        assert!(!secret_re().is_match("-----BEGIN CERTIFICATE-----"));
+    }
+
+    // ── looks_like_code ──
+
+    #[test]
+    fn code_keywords_has_17_entries() {
+        assert_eq!(CODE_KEYWORDS.len(), 17);
+    }
+
+    #[test]
+    fn looks_like_code_requires_at_least_two_signals() {
+        assert!(!looks_like_code("let x = 1"));
+        assert!(looks_like_code("let x = 1; const Y = 2;"));
+    }
+
+    #[test]
+    fn looks_like_code_braces_plus_keyword() {
+        assert!(looks_like_code("fn foo() { }"));
+    }
+
+    #[test]
+    fn looks_like_code_semicolons_plus_keyword() {
+        assert!(looks_like_code("let x = 1;"));
+        assert!(!looks_like_code("let x = 1"));
+    }
+
+    #[test]
+    fn looks_like_code_html_tags() {
+        assert!(looks_like_code("<div>hello</div>\nimport foo"));
+        assert!(!looks_like_code("just < some text"));
+    }
+
+    #[test]
+    fn looks_like_code_plain_text_rejected() {
+        assert!(!looks_like_code("Hello, world!"));
+        assert!(!looks_like_code("12345"));
+    }
+
+    #[test]
+    fn looks_like_code_struct_impl() {
+        assert!(looks_like_code("struct Foo { bar: i32 }"));
+    }
+
+    // ── looks_sensitive_with_rules ──
+
+    #[test]
+    fn looks_sensitive_with_rules_phone() {
+        let kinds = vec!["phone".to_string()];
+        assert!(looks_sensitive_with_rules(
+            "call me at 13812345678",
+            &kinds,
+            &[]
+        ));
+        assert!(!looks_sensitive_with_rules("no digits here", &kinds, &[]));
+    }
+
+    #[test]
+    fn looks_sensitive_with_rules_email() {
+        let kinds = vec!["email".to_string()];
+        assert!(looks_sensitive_with_rules(
+            "send to user@example.com",
+            &kinds,
+            &[]
+        ));
+    }
+
+    #[test]
+    fn looks_sensitive_with_rules_password() {
+        let kinds = vec!["password".to_string()];
+        assert!(looks_sensitive_with_rules("Abcdef1!", &kinds, &[]));
+        assert!(!looks_sensitive_with_rules("plaintext", &kinds, &[]));
+    }
+
+    #[test]
+    fn looks_sensitive_with_rules_skips_long_text() {
+        let kinds = vec!["phone".to_string()];
+        let long_text = "x".repeat(5001);
+        assert!(!looks_sensitive_with_rules(&long_text, &kinds, &[]));
+    }
+
+    #[test]
+    fn looks_sensitive_with_rules_custom_regex() {
+        let custom = vec![Regex::new(r"ORDER-\d{6}").unwrap()];
+        assert!(looks_sensitive_with_rules(
+            "see ORDER-123456 for details",
+            &[],
+            &custom
+        ));
+        assert!(!looks_sensitive_with_rules("nothing here", &[], &custom));
+    }
+
+    #[test]
+    fn looks_sensitive_with_rules_all_five_kinds() {
+        let all_kinds: Vec<String> = ["phone", "idcard", "email", "secret", "password"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert!(looks_sensitive_with_rules("13812345678", &all_kinds, &[]));
+        assert!(looks_sensitive_with_rules(
+            "user@example.com",
+            &all_kinds,
+            &[]
+        ));
+        assert!(looks_sensitive_with_rules("Abcdef1!", &all_kinds, &[]));
+        assert!(!looks_sensitive_with_rules(
+            "plain text nothing",
+            &all_kinds,
+            &[]
+        ));
+    }
+
+    // ── compile_custom_rules ──
+
+    #[test]
+    fn compile_custom_rules_valid_and_invalid() {
+        let raw = "\\d{3}\n[invalid\nhello";
+        let result = compile_custom_rules(raw);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0, 1);
+    }
+
+    #[test]
+    fn compile_custom_rules_all_valid() {
+        let raw = "\\d{3}\nhello\nORDER-\\d+";
+        let result = compile_custom_rules(raw);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 3);
+    }
+
+    #[test]
+    fn compile_custom_rules_empty_input() {
+        let result = compile_custom_rules("");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn compile_custom_rules_skips_comments_and_blanks() {
+        let raw = "# comment\n\n\\d{3}\n  \n# another\nhello";
+        let result = compile_custom_rules(raw).unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    // ── looks_sensitive (integration via is_sensitive) ──
 
     #[test]
     fn non_text_entries_do_not_use_content_sensitive_heuristics() {
@@ -379,5 +706,25 @@ mod tests {
         .expect("image entry");
         image.tags.push("sensitive".to_string());
         assert!(image.is_sensitive());
+    }
+
+    #[test]
+    fn looks_sensitive_detects_phone_number() {
+        assert!(looks_sensitive("call me at 13812345678"));
+    }
+
+    #[test]
+    fn looks_sensitive_detects_email() {
+        assert!(looks_sensitive("send to user@example.com"));
+    }
+
+    #[test]
+    fn looks_sensitive_detects_password_like() {
+        assert!(looks_sensitive("P@ssw0rd123"));
+    }
+
+    #[test]
+    fn looks_sensitive_rejects_plain_text() {
+        assert!(!looks_sensitive("hello world"));
     }
 }
