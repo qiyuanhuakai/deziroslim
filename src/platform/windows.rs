@@ -13,6 +13,7 @@ pub fn platform_note() -> &'static str {
     "Windows 预留模式：平台抽象已存在，后续可接入 Win32 剪贴板、窗口追踪和全局快捷键。"
 }
 
+#[allow(dead_code)]
 pub fn capabilities() -> PlatformCapabilities {
     PlatformCapabilities {
         active_window: "预留：GetForegroundWindow + GetWindowTextW",
