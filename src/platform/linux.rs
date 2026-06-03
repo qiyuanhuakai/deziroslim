@@ -39,6 +39,7 @@ pub fn platform_note() -> &'static str {
     "Linux 原生模式：支持文本/富文本/图片/文件剪贴板历史、X11 可配置全局热键、系统托盘、边缘停靠、模拟粘贴、前台窗口识别。"
 }
 
+#[allow(dead_code)]
 pub fn capabilities() -> PlatformCapabilities {
     PlatformCapabilities {
         active_window: "已接入 X11 _NET_ACTIVE_WINDOW，失败时回退桌面环境名",
@@ -704,18 +705,18 @@ fn tray_loop(
     use ksni::menu::StandardItem;
     use ksni::{Category, Icon, MenuItem, Tray};
 
-    struct MyClipboardTray {
+    struct TiezSlimLinuxTray {
         sender: Sender<ClipboardEvent>,
         ctx: egui::Context,
     }
 
-    impl Tray for MyClipboardTray {
+    impl Tray for TiezSlimLinuxTray {
         fn id(&self) -> String {
-            "myclipboard".to_string()
+            "tiez-slim-linux".to_string()
         }
 
         fn title(&self) -> String {
-            "MyClipboard".to_string()
+            "tiez-slim".to_string()
         }
 
         fn category(&self) -> Category {
@@ -723,7 +724,7 @@ fn tray_loop(
         }
 
         fn icon_name(&self) -> String {
-            "edit-paste".to_string()
+            "tiez-slim-linux".to_string()
         }
 
         fn icon_pixmap(&self) -> Vec<Icon> {
@@ -769,7 +770,7 @@ fn tray_loop(
         }
     }
 
-    let tray = MyClipboardTray { sender, ctx };
+    let tray = TiezSlimLinuxTray { sender, ctx };
     let _handle = tray
         .assume_sni_available(true)
         .spawn()
@@ -784,11 +785,22 @@ fn tray_icon_pixmap() -> ksni::Icon {
     let mut data = Vec::with_capacity(width * height * 4);
     for y in 0..height {
         for x in 0..width {
-            let dx = x as i32 - 16;
-            let dy = y as i32 - 16;
-            let inside = dx * dx + dy * dy <= 15 * 15;
-            let (a, r, g, b) = if inside {
-                (255, 72, 123, 219)
+            let in_round = x >= 2 && x <= 29 && y >= 2 && y <= 29;
+            let navy = (31, 58, 95);
+            let accent = (72, 123, 219);
+            let on_mark = (x >= 9 && x <= 22 && (y == 8 || y == 23))
+                || (y >= 8 && y <= 23 && (x == 9 || x == 22))
+                || (x >= 13 && x <= 18 && (y == 5 || y == 6))
+                || (y >= 11 && y <= 20 && (x == 15 || x == 16))
+                || (y == 20 && x >= 12 && x <= 19)
+                || (x >= 18 && x <= 23 && y >= 11 && y <= 16 && x + y >= 33);
+            let on_slim = y == 26 && x >= 10 && x <= 21;
+            let (a, r, g, b) = if on_mark {
+                (255, navy.0, navy.1, navy.2)
+            } else if on_slim {
+                (255, accent.0, accent.1, accent.2)
+            } else if in_round {
+                (255, 255, 255, 255)
             } else {
                 (0, 0, 0, 0)
             };
