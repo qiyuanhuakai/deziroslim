@@ -2,6 +2,8 @@ use crate::clipboard::{self, ClipboardEvent};
 use crate::model::{ClipboardEntry, ClipboardKind};
 use crate::platform;
 use crate::storage::Storage;
+use crate::ui::MacosTokens;
+use crate::ui::widgets::{macos_collapsible_group, macos_range_slider, macos_toggle};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use eframe::egui;
 use serde::{Deserialize, Serialize};
@@ -11,18 +13,24 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-const ACCENT: egui::Color32 = egui::Color32::from_rgb(72, 123, 219);
-const ACCENT_SOFT: egui::Color32 = egui::Color32::from_rgb(34, 76, 130);
-const PANEL: egui::Color32 = egui::Color32::from_rgb(31, 32, 36);
-const CARD_ACTIVE: egui::Color32 = egui::Color32::from_rgb(44, 61, 87);
-const TEXT_MUTED: egui::Color32 = egui::Color32::from_rgb(168, 171, 180);
-const TIEZ_BG: egui::Color32 = egui::Color32::from_rgb(20, 21, 24);
-const TIEZ_HEADER: egui::Color32 = egui::Color32::from_rgb(31, 32, 36);
-const TIEZ_ROW: egui::Color32 = egui::Color32::from_rgb(42, 44, 52);
-const BORDER_DARK: egui::Color32 = egui::Color32::from_rgb(70, 74, 86);
-const MACOS_CARD: egui::Color32 = egui::Color32::from_rgb(44, 46, 54);
-const MACOS_CARD_HOVER: egui::Color32 = egui::Color32::from_rgb(56, 59, 68);
-const PREFERENCES_KEY: &str = "ui.native_tiez";
+const APP_DISPLAY_NAME: &str = "tiez-slim";
+const APP_ID: &str = "tiez-slim-linux";
+const APP_REPO_URL: &str = "https://github.com/qiyuanhuakai/tiez-slim-linux";
+const PREFERENCES_KEY: &str = "ui.tiez_slim_linux";
+const LEGACY_PREFERENCES_KEY: &str = "ui.native_tiez";
+const HISTORY_MAX_WIDTH: f32 = 560.0;
+const DEFAULT_WINDOW_SIZE: egui::Vec2 = egui::vec2(380.0, 680.0);
+const MIN_NORMAL_WINDOW_SIZE: egui::Vec2 = egui::vec2(320.0, 400.0);
+const RESIZE_HIT_SIZE: f32 = 8.0;
+const CARD_ACTION_WIDTH: f32 = 92.0;
+const TOOLBAR_BUTTON_SIZE: f32 = 34.0;
+const CARD_ACTION_BUTTON_SIZE: f32 = 24.0;
+
+fn scale_alpha(color: egui::Color32, factor: f32) -> egui::Color32 {
+    let [r, g, b, a] = color.to_array();
+    let new_a = ((a as f32) * factor).clamp(0.0, 255.0) as u8;
+    egui::Color32::from_rgba_unmultiplied(r, g, b, new_a)
+}
 
 struct PendingPaste {
     entry_id: i64,
@@ -70,6 +78,13 @@ enum HotkeyTarget {
     Sequential,
     RichPaste,
     Search,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CardAction {
+    TogglePin,
+    Open,
+    Delete,
 }
 
 impl Default for DockMode {
@@ -184,8 +199,40 @@ struct AppPreferences {
     default_image_app: String,
     default_video_app: String,
     paste_method: String,
+    #[serde(default = "default_surface_opacity")]
+    surface_opacity: u8,
     #[serde(skip)]
     window_level_applied: bool,
+    #[serde(default = "default_privacy_protection_kinds")]
+    privacy_protection_kinds: Vec<String>,
+    #[serde(default)]
+    privacy_protection_custom_rules: String,
+    #[serde(default = "default_settings_panel_collapsed")]
+    settings_panel_collapsed: Vec<bool>,
+    #[serde(default = "default_color_mode")]
+    color_mode: String,
+}
+
+fn default_privacy_protection_kinds() -> Vec<String> {
+    vec![
+        "phone".into(),
+        "idcard".into(),
+        "email".into(),
+        "secret".into(),
+        "password".into(),
+    ]
+}
+
+fn default_settings_panel_collapsed() -> Vec<bool> {
+    vec![false; 11]
+}
+
+fn default_color_mode() -> String {
+    "system".to_string()
+}
+
+fn default_surface_opacity() -> u8 {
+    50
 }
 
 impl Default for AppPreferences {
@@ -211,6 +258,9 @@ impl Default for AppPreferences {
             tag_manager_enabled: true,
             sound_enabled: false,
             privacy_protection: true,
+            privacy_protection_kinds: default_privacy_protection_kinds(),
+            privacy_protection_custom_rules: String::new(),
+            settings_panel_collapsed: default_settings_panel_collapsed(),
             main_hotkeys: "Alt+C\nSuper+V".to_string(),
             sequential_hotkey: "Alt+V".to_string(),
             rich_paste_hotkey: "Ctrl+Shift+Z".to_string(),
@@ -226,7 +276,9 @@ impl Default for AppPreferences {
             default_image_app: String::new(),
             default_video_app: String::new(),
             paste_method: "shift_insert".to_string(),
+            surface_opacity: 50,
             window_level_applied: false,
+            color_mode: default_color_mode(),
         }
     }
 }
@@ -264,6 +316,9 @@ pub struct ClipboardApp {
     tag_manager_enabled: bool,
     sound_enabled: bool,
     privacy_protection: bool,
+    privacy_protection_kinds: Vec<String>,
+    privacy_protection_custom_rules: String,
+    settings_panel_collapsed: Vec<bool>,
     main_hotkeys: String,
     sequential_hotkey: String,
     rich_paste_hotkey: String,
@@ -279,6 +334,7 @@ pub struct ClipboardApp {
     default_image_app: String,
     default_video_app: String,
     paste_method: String,
+    surface_opacity: u8,
     current_database_path: String,
     database_path_input: String,
     text_app_choices: Vec<platform::AppChoice>,
@@ -302,8 +358,12 @@ pub struct ClipboardApp {
     last_edge_transition: Instant,
     pending_paste: Option<PendingPaste>,
     saved_tags: Vec<String>,
+    selected_saved_tag: Option<String>,
+    tag_detail_color: String,
+    show_tag_input: bool,
     dev_mode: bool,
     show_dev_panel: bool,
+    color_mode: String,
     event_count: u64,
     saved_count: u64,
     error_count: u64,
@@ -311,13 +371,13 @@ pub struct ClipboardApp {
     show_inspection: bool,
     show_memory: bool,
     force_quit: bool,
+    pub theme: MacosTokens,
 }
 
 impl ClipboardApp {
     pub fn new(cc: &eframe::CreationContext<'_>, storage: Storage, dev_mode: bool) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         configure_fonts(&cc.egui_ctx);
-        configure_style(&cc.egui_ctx);
 
         let (sender, events) = unbounded();
         clipboard::start_watcher(sender.clone());
@@ -375,6 +435,9 @@ impl ClipboardApp {
             tag_manager_enabled: preferences.tag_manager_enabled,
             sound_enabled: preferences.sound_enabled,
             privacy_protection: preferences.privacy_protection,
+            privacy_protection_kinds: preferences.privacy_protection_kinds,
+            privacy_protection_custom_rules: preferences.privacy_protection_custom_rules,
+            settings_panel_collapsed: preferences.settings_panel_collapsed,
             main_hotkeys: preferences.main_hotkeys,
             sequential_hotkey: preferences.sequential_hotkey,
             rich_paste_hotkey: preferences.rich_paste_hotkey,
@@ -390,6 +453,7 @@ impl ClipboardApp {
             default_image_app: preferences.default_image_app,
             default_video_app: preferences.default_video_app,
             paste_method: preferences.paste_method,
+            surface_opacity: preferences.surface_opacity,
             database_path_input: current_database_path.clone(),
             current_database_path,
             text_app_choices,
@@ -413,8 +477,12 @@ impl ClipboardApp {
             last_edge_transition: Instant::now(),
             pending_paste: None,
             saved_tags,
+            selected_saved_tag: None,
+            tag_detail_color: "#4f46e5".to_string(),
+            show_tag_input: false,
             dev_mode,
             show_dev_panel: false,
+            color_mode: preferences.color_mode.clone(),
             event_count: 0,
             saved_count: 0,
             error_count: 0,
@@ -422,9 +490,34 @@ impl ClipboardApp {
             show_inspection: false,
             show_memory: false,
             force_quit: false,
+            theme: resolve_theme(&preferences.color_mode),
         };
+        app.configure_style(&cc.egui_ctx);
         app.refresh_entries();
         app
+    }
+
+    fn configure_style(&self, ctx: &egui::Context) {
+        let opacity = self.surface_opacity as f32 / 100.0;
+        let [r, g, b, _] = self.theme.bg.to_array();
+        let is_light = (r as u16 + g as u16 + b as u16) > 384;
+        let mut visuals = if is_light {
+            egui::Visuals::light()
+        } else {
+            egui::Visuals::dark()
+        };
+        visuals.panel_fill = scale_alpha(self.theme.bg, opacity);
+        visuals.window_fill = scale_alpha(self.theme.bg, opacity);
+        visuals.override_text_color = Some(self.theme.fg);
+        visuals.widgets.inactive.bg_fill = scale_alpha(self.theme.card, opacity);
+        visuals.widgets.inactive.bg_stroke =
+            egui::Stroke::new(1.0, scale_alpha(self.theme.border, opacity));
+        visuals.widgets.hovered.bg_fill = scale_alpha(self.theme.card_hover, opacity);
+        visuals.widgets.active.bg_fill = self.theme.accent;
+        visuals.selection.bg_fill = self.theme.accent;
+        visuals.selection.stroke = egui::Stroke::new(1.0, self.theme.accent);
+        visuals.window_rounding = egui::Rounding::same(self.theme.radius_window);
+        ctx.set_visuals(visuals);
     }
 
     fn refresh_entries(&mut self) {
@@ -621,10 +714,7 @@ impl ClipboardApp {
                     };
                 }
                 if pending.restore_pinned_window {
-                    self.show_window(ctx, false);
-                    ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
-                        egui::WindowLevel::AlwaysOnTop,
-                    ));
+                    self.restore_window_after_paste(ctx);
                 }
                 self.refresh_entries();
             }
@@ -773,8 +863,12 @@ impl ClipboardApp {
             width: 1280.0,
             height: 800.0,
         });
-        let size = self.viewport_size(ctx);
         let margin = 8.0;
+        let pixels_per_point = ctx.pixels_per_point().max(1.0);
+        let mouse_x = mouse_x / pixels_per_point;
+        let mouse_y = mouse_y / pixels_per_point;
+        let screen = logical_screen_geometry(screen, pixels_per_point);
+        let size = self.normal_window_size(ctx, screen, margin);
         let gap = 12.0;
         let screen_right = screen.x + screen.width;
         let screen_bottom = screen.y + screen.height;
@@ -798,14 +892,48 @@ impl ClipboardApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(x, y)));
     }
 
+    fn restore_window_after_paste(&mut self, ctx: &egui::Context) {
+        self.window_visible = true;
+        self.edge_hide_armed = false;
+        self.pending_edge_hide = None;
+        if self.edge_hidden {
+            self.reveal_edge_hidden(ctx, false);
+            return;
+        }
+        self.send_window_level(ctx);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        self.last_edge_transition = Instant::now();
+    }
+
     fn viewport_size(&self, ctx: &egui::Context) -> egui::Vec2 {
         ctx.input(|input| {
             input
                 .viewport()
-                .outer_rect
+                .inner_rect
+                .or(input.viewport().outer_rect)
                 .map(|rect| rect.size())
-                .unwrap_or_else(|| egui::vec2(380.0, 680.0))
+                .filter(|size| {
+                    size.x >= MIN_NORMAL_WINDOW_SIZE.x && size.y >= MIN_NORMAL_WINDOW_SIZE.y
+                })
+                .unwrap_or(DEFAULT_WINDOW_SIZE)
         })
+    }
+
+    fn normal_window_size(
+        &self,
+        ctx: &egui::Context,
+        screen: platform::ScreenGeometry,
+        margin: f32,
+    ) -> egui::Vec2 {
+        let candidate = self
+            .edge_restore_size
+            .unwrap_or_else(|| self.viewport_size(ctx));
+        let max_size = egui::vec2(
+            (screen.width - margin * 2.0).max(MIN_NORMAL_WINDOW_SIZE.x),
+            (screen.height - margin * 2.0).max(MIN_NORMAL_WINDOW_SIZE.y),
+        );
+        egui::vec2(candidate.x.min(max_size.x), candidate.y.min(max_size.y))
     }
 
     fn process_edge_docking(&mut self, ctx: &egui::Context) {
@@ -837,6 +965,7 @@ impl ClipboardApp {
             }
             return;
         }
+        let screen = logical_screen_geometry(screen, ctx.pixels_per_point().max(1.0));
         if !self.window_visible || ctx.input(|input| input.pointer.any_down()) {
             return;
         }
@@ -846,6 +975,10 @@ impl ClipboardApp {
         let size = self.viewport_size(ctx);
         let dock = self.detect_edge_dock(rect, screen);
         if dock == DockMode::Off {
+            self.edge_hide_armed = true;
+            return;
+        }
+        if self.mouse_inside_viewport_rect(ctx, rect) {
             self.edge_hide_armed = true;
             return;
         }
@@ -992,6 +1125,14 @@ impl ClipboardApp {
         }
     }
 
+    fn mouse_inside_viewport_rect(&self, ctx: &egui::Context, rect: egui::Rect) -> bool {
+        let Some((x, y)) = platform::mouse_position() else {
+            return false;
+        };
+        let ppp = ctx.pixels_per_point().max(1.0);
+        rect.expand(6.0).contains(egui::pos2(x / ppp, y / ppp))
+    }
+
     fn reveal_edge_hidden(&mut self, ctx: &egui::Context, focus: bool) {
         let screen = platform::screen_geometry().unwrap_or(platform::ScreenGeometry {
             x: 0.0,
@@ -999,6 +1140,7 @@ impl ClipboardApp {
             width: 1280.0,
             height: 800.0,
         });
+        let screen = logical_screen_geometry(screen, ctx.pixels_per_point().max(1.0));
         let restore_size = self
             .edge_restore_size
             .unwrap_or_else(|| egui::vec2(380.0, 680.0));
@@ -1006,7 +1148,7 @@ impl ClipboardApp {
             visible_position_for_dock(self.current_edge_dock, restore_size, screen)
         });
         self.edge_hidden = false;
-        self.edge_hide_armed = false;
+        self.edge_hide_armed = true;
         self.current_edge_dock = DockMode::Off;
         self.edge_restore_pos = None;
         self.edge_restore_size = None;
@@ -1172,6 +1314,9 @@ impl ClipboardApp {
             tag_manager_enabled: self.tag_manager_enabled,
             sound_enabled: self.sound_enabled,
             privacy_protection: self.privacy_protection,
+            privacy_protection_kinds: self.privacy_protection_kinds.clone(),
+            privacy_protection_custom_rules: self.privacy_protection_custom_rules.clone(),
+            settings_panel_collapsed: self.settings_panel_collapsed.clone(),
             main_hotkeys: self.main_hotkeys.clone(),
             sequential_hotkey: self.sequential_hotkey.clone(),
             rich_paste_hotkey: self.rich_paste_hotkey.clone(),
@@ -1187,7 +1332,9 @@ impl ClipboardApp {
             default_image_app: self.default_image_app.clone(),
             default_video_app: self.default_video_app.clone(),
             paste_method: self.paste_method.clone(),
+            surface_opacity: self.surface_opacity,
             window_level_applied: false,
+            color_mode: self.color_mode.clone(),
         }
     }
 
@@ -1244,6 +1391,9 @@ impl ClipboardApp {
         self.tag_manager_enabled = preferences.tag_manager_enabled;
         self.sound_enabled = preferences.sound_enabled;
         self.privacy_protection = preferences.privacy_protection;
+        self.privacy_protection_kinds = preferences.privacy_protection_kinds;
+        self.privacy_protection_custom_rules = preferences.privacy_protection_custom_rules;
+        self.settings_panel_collapsed = preferences.settings_panel_collapsed;
         self.main_hotkeys = preferences.main_hotkeys;
         self.sequential_hotkey = preferences.sequential_hotkey;
         self.rich_paste_hotkey = preferences.rich_paste_hotkey;
@@ -1259,6 +1409,10 @@ impl ClipboardApp {
         self.default_image_app = preferences.default_image_app;
         self.default_video_app = preferences.default_video_app;
         self.paste_method = preferences.paste_method;
+        self.color_mode = preferences.color_mode;
+        self.surface_opacity = preferences.surface_opacity;
+        self.theme = resolve_theme(&self.color_mode);
+        self.configure_style(ctx);
         self.apply_window_level(ctx);
         self.update_hotkeys();
         self.apply_tray_visibility(ctx);
@@ -1449,6 +1603,14 @@ impl ClipboardApp {
         }
     }
 
+    fn load_tag_detail(&mut self, tag: &str) {
+        self.selected_saved_tag = Some(tag.to_string());
+        match self.storage.saved_tag_color(tag) {
+            Ok(color) => self.tag_detail_color = color,
+            Err(err) => self.status = format!("读取标签颜色失败: {err}"),
+        }
+    }
+
     fn set_kind_filter(&mut self, kind: Option<ClipboardKind>) {
         self.kind_filter = kind;
         self.persist_preferences();
@@ -1502,18 +1664,18 @@ impl ClipboardApp {
     fn draw_header(&mut self, ctx: &egui::Context) {
         let can_start_drag = self.can_start_window_drag(ctx);
         let app_border = if self.show_app_border {
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(78, 82, 96))
+            egui::Stroke::new(1.0, self.theme.border)
         } else {
             egui::Stroke::NONE
         };
         egui::TopBottomPanel::top("header")
             .frame(
                 egui::Frame::none()
-                    .fill(TIEZ_HEADER)
+                    .fill(self.theme.glass_bg)
                     .stroke(app_border)
                     .rounding(egui::Rounding {
-                        nw: 16.0,
-                        ne: 16.0,
+                        nw: self.theme.radius_window,
+                        ne: self.theme.radius_window,
                         sw: 0.0,
                         se: 0.0,
                     })
@@ -1521,13 +1683,13 @@ impl ClipboardApp {
                         left: 14.0,
                         right: 14.0,
                         top: 10.0,
-                        bottom: 10.0,
+                        bottom: 2.0,
                     }),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     if self.current_page != AppPage::Clipboard
-                        && toolbar_button(ui, "‹", "返回剪贴板").clicked()
+                        && toolbar_button(ui, "‹", "返回剪贴板", &self.theme).clicked()
                     {
                         self.current_page = AppPage::Clipboard;
                     }
@@ -1535,10 +1697,11 @@ impl ClipboardApp {
                     if page_title(
                         ui,
                         match self.current_page {
-                            AppPage::Clipboard => "TieZ",
+                            AppPage::Clipboard => APP_DISPLAY_NAME,
                             AppPage::Emoji => "表情包",
                             AppPage::Settings => "设置",
                         },
+                        &self.theme,
                     )
                     .drag_started()
                         && can_start_drag
@@ -1553,7 +1716,7 @@ impl ClipboardApp {
                     if self.dev_mode {
                         button_count += 1.0;
                     }
-                    let reserved_for_buttons = button_count * 38.0 + 18.0;
+                    let reserved_for_buttons = button_count * (TOOLBAR_BUTTON_SIZE + 4.0) + 18.0;
                     let drag_width = (ui.available_width() - reserved_for_buttons).max(18.0);
                     let (drag_rect, drag_response) = ui.allocate_exact_size(
                         egui::vec2(drag_width, 32.0),
@@ -1571,19 +1734,20 @@ impl ClipboardApp {
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if toolbar_button(ui, "×", "最小化到任务栏").clicked() {
+                        if toolbar_button(ui, "×", "最小化到任务栏", &self.theme).clicked()
+                        {
                             self.close_or_hide_window(ctx);
                         }
                         if self.current_page == AppPage::Clipboard {
-                            if toolbar_button(ui, "⚙", "设置").clicked() {
+                            if toolbar_button(ui, "⚙", "设置", &self.theme).clicked() {
                                 self.current_page = AppPage::Settings;
                             }
                             if self.emoji_panel_enabled
-                                && toolbar_button(ui, "☺", "表情包").clicked()
+                                && toolbar_button(ui, "☺", "表情包", &self.theme).clicked()
                             {
                                 self.current_page = AppPage::Emoji;
                             }
-                            if toolbar_button(ui, "⌫", "清空非置顶").clicked() {
+                            if toolbar_button(ui, "⌫", "清空非置顶", &self.theme).clicked() {
                                 match self.storage.clear_unpinned() {
                                     Ok(()) => {
                                         self.status = "已清空非置顶记录".to_string();
@@ -1594,12 +1758,15 @@ impl ClipboardApp {
                             }
                         }
                         let pin_label = if self.window_pinned { "⚐" } else { "⚑" };
-                        if toolbar_button(ui, pin_label, "窗口置顶/取消置顶").clicked() {
+                        if toolbar_button(ui, pin_label, "窗口置顶/取消置顶", &self.theme).clicked()
+                        {
                             self.window_pinned = !self.window_pinned;
                             self.apply_window_level(ctx);
                             self.persist_preferences();
                         }
-                        if self.dev_mode && toolbar_button(ui, "DEV", "开发工具").clicked() {
+                        if self.dev_mode
+                            && toolbar_button(ui, "DEV", "开发工具", &self.theme).clicked()
+                        {
                             self.show_dev_panel = !self.show_dev_panel;
                         }
                     });
@@ -1607,57 +1774,81 @@ impl ClipboardApp {
 
                 if self.current_page == AppPage::Clipboard && self.show_search_box {
                     ui.add_space(8.0);
+                    let available_width = ui.available_width().max(0.0);
+                    let content_width = available_width.min(HISTORY_MAX_WIDTH).max(120.0);
+                    let left_padding = ((available_width - content_width) / 2.0).max(0.0);
                     ui.horizontal(|ui| {
-                        let search = ui.add_sized(
-                            [ui.available_width().min(400.0), 34.0],
-                            egui::TextEdit::singleline(&mut self.query)
-                                .font(egui::TextStyle::Body)
-                                .hint_text("搜索..."),
-                        );
-                        if self.focus_search {
-                            search.request_focus();
-                            self.focus_search = false;
-                        }
-                        if search.changed() {
-                            self.refresh_entries();
-                        }
-                        if !self.query.is_empty() && toolbar_button(ui, "清", "清除搜索").clicked()
-                        {
-                            self.query.clear();
-                            self.refresh_entries();
-                        }
+                        ui.add_space(left_padding);
+                        ui.vertical(|ui| {
+                            ui.set_width(content_width);
+                            ui.horizontal(|ui| {
+                                let clear_width = if self.query.is_empty() { 0.0 } else { 42.0 };
+                                let search_width = (ui.available_width() - clear_width).max(120.0);
+                                let search =
+                                    search_box(ui, &mut self.query, search_width, &self.theme);
+                                if self.focus_search {
+                                    search.request_focus();
+                                    self.focus_search = false;
+                                }
+                                if search.changed() {
+                                    self.refresh_entries();
+                                }
+                                if !self.query.is_empty()
+                                    && toolbar_button(ui, "清", "清除搜索", &self.theme).clicked()
+                                {
+                                    self.query.clear();
+                                    self.refresh_entries();
+                                }
+                            });
+                            ui.add_space(6.0);
+                            self.draw_type_filters(ui);
+                            if self.tag_manager_enabled && !self.saved_tags.is_empty() {
+                                ui.add_space(3.0);
+                                self.draw_tag_filters(ui);
+                            }
+                        });
                     });
-                    ui.add_space(6.0);
-                    self.draw_type_filters(ui);
-                    if self.tag_manager_enabled && !self.saved_tags.is_empty() {
-                        ui.add_space(3.0);
-                        self.draw_tag_filters(ui);
-                    }
                 }
             });
     }
 
     fn can_start_window_drag(&self, ctx: &egui::Context) -> bool {
-        !self.edge_hidden
-            && self.pending_edge_hide.is_none()
-            && ctx.input(|input| {
-                input
-                    .viewport()
-                    .outer_rect
-                    .map(|rect| rect.min.x >= 0.0 && rect.min.y >= 0.0)
-                    .unwrap_or(true)
+        let _ = ctx;
+        !self.edge_hidden && self.pending_edge_hide.is_none()
+    }
+
+    fn handle_resize_edges(&self, ctx: &egui::Context) {
+        if self.edge_hidden || self.pending_edge_hide.is_some() {
+            return;
+        }
+        let Some((pos, primary_pressed)) = ctx.input(|input| {
+            input.pointer.interact_pos().map(|pos| {
+                (
+                    pos,
+                    input.pointer.button_pressed(egui::PointerButton::Primary),
+                )
             })
+        }) else {
+            return;
+        };
+        let Some(direction) = resize_direction_at(ctx.screen_rect(), pos) else {
+            return;
+        };
+        ctx.set_cursor_icon(resize_cursor_icon(direction));
+        if primary_pressed {
+            ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(direction));
+        }
     }
 
     fn draw_type_filters(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             let all_selected = self.kind_filter.is_none();
-            if filter_chip(ui, "全部", all_selected).clicked() {
+            if filter_chip(ui, "全部", all_selected, &self.theme).clicked() {
                 self.set_kind_filter(None);
             }
             for kind in ClipboardKind::ALL {
                 let selected = self.kind_filter.as_ref() == Some(&kind);
-                if filter_chip(ui, kind.label(), selected).clicked() {
+                if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
                     self.set_kind_filter(Some(kind));
                 }
             }
@@ -1666,15 +1857,15 @@ impl ClipboardApp {
 
     fn draw_tag_filters(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.label(egui::RichText::new("标签").color(TEXT_MUTED));
+            ui.label(egui::RichText::new("标签").color(self.theme.muted));
             let all_selected = self.tag_filter.is_none();
-            if filter_chip(ui, "全部", all_selected).clicked() {
+            if filter_chip(ui, "全部", all_selected, &self.theme).clicked() {
                 self.set_tag_filter(None);
             }
             let tags = self.saved_tags.clone();
             for tag in tags {
                 let selected = self.tag_filter.as_ref() == Some(&tag);
-                if filter_chip(ui, &tag, selected).clicked() {
+                if filter_chip(ui, &tag, selected, &self.theme).clicked() {
                     self.set_tag_filter(Some(tag));
                 }
             }
@@ -1698,19 +1889,29 @@ impl ClipboardApp {
             } else {
                 (
                     "暂无剪贴板历史",
-                    "复制一段文字后，它会以 TieZ 风格卡片显示在这里。",
+                    "复制一段文字后，它会以 tiez-slim 风格卡片显示在这里。",
                 )
             };
-            empty_state(ui, title, description);
+            empty_state(ui, title, description, &self.theme);
             return;
         }
 
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                let available_width = ui.available_width().max(0.0);
+                let content_width = available_width.min(HISTORY_MAX_WIDTH).max(120.0);
+                let left_padding = ((available_width - content_width) / 2.0).max(0.0);
                 let entries = self.entries.clone();
                 for entry in entries {
-                    self.history_card(ui, &entry);
+                    ui.horizontal(|ui| {
+                        ui.add_space(left_padding);
+                        ui.vertical(|ui| {
+                            ui.set_width(content_width);
+                            ui.set_max_width(content_width);
+                            self.history_card(ui, &entry);
+                        });
+                    });
                     ui.add_space(if self.compact_rows { 2.0 } else { 5.0 });
                 }
                 if self.show_detail_panel {
@@ -1721,14 +1922,22 @@ impl ClipboardApp {
     }
 
     fn history_card(&mut self, ui: &mut egui::Ui, entry: &ClipboardEntry) {
+        let card_width = ui.available_width().min(HISTORY_MAX_WIDTH);
         let selected = self.selected_id == Some(entry.id);
         let sensitive = self.privacy_protection && entry.is_sensitive();
-        let fill = if selected { CARD_ACTIVE } else { MACOS_CARD };
-        let stroke = if selected {
-            egui::Stroke::new(1.2, ACCENT)
+        let entry_id = entry.id;
+        let entry_pinned = entry.is_pinned;
+        let fill = if selected {
+            self.theme.history_selected
         } else {
-            egui::Stroke::new(1.0, BORDER_DARK)
+            self.theme.card
         };
+        let stroke = if selected {
+            egui::Stroke::new(1.2, self.theme.accent)
+        } else {
+            egui::Stroke::new(1.0, self.theme.border)
+        };
+        let mut pending_action = None;
 
         let response = egui::Frame::none()
             .fill(fill)
@@ -1741,56 +1950,180 @@ impl ClipboardApp {
                 bottom: if self.compact_rows { 6.0 } else { 9.0 },
             })
             .show(ui, |ui| {
+                ui.set_width((card_width - 22.0).max(120.0));
                 ui.horizontal(|ui| {
                     if matches!(entry.kind, crate::model::ClipboardKind::Image) {
                         self.draw_image_thumbnail(ui, entry);
                     }
                     ui.vertical(|ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(
-                                egui::RichText::new(entry.formatted_time())
-                                    .size(10.0)
-                                    .strong()
-                                    .color(TEXT_MUTED),
+                        ui.horizontal(|ui| {
+                            let row_width = ui.available_width().max(0.0);
+                            let action_width = CARD_ACTION_WIDTH.min(row_width);
+                            let meta_width = (row_width - action_width).max(0.0);
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(meta_width, 24.0),
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    ui.label(
+                                        egui::RichText::new(entry.formatted_time())
+                                            .size(10.0)
+                                            .strong()
+                                            .color(self.theme.muted),
+                                    );
+                                    kind_badge(ui, entry.kind.label(), &self.theme);
+                                    if entry.is_pinned {
+                                        ui.label(
+                                            egui::RichText::new("⚑")
+                                                .size(12.0)
+                                                .color(self.theme.accent),
+                                        );
+                                    }
+                                    if sensitive {
+                                        sensitive_badge(ui, &self.theme);
+                                    }
+                                },
                             );
-                            kind_badge(ui, entry.kind.label());
-                            if entry.is_pinned {
-                                ui.label(egui::RichText::new("⚑").size(12.0).color(ACCENT));
-                            }
+                            ui.add_space(action_width);
                         });
                         let text = if sensitive && !self.show_sensitive {
                             masked_preview(&entry.preview)
                         } else {
                             row_preview_text(entry)
                         };
-                        ui.label(
-                            egui::RichText::new(text)
-                                .size(if self.compact_rows { 12.5 } else { 13.5 })
-                                .monospace()
-                                .color(if sensitive && !self.show_sensitive {
-                                    egui::Color32::from_rgb(176, 176, 184)
-                                } else {
-                                    egui::Color32::from_rgb(245, 245, 247)
-                                }),
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(text)
+                                    .size(if self.compact_rows { 12.5 } else { 13.5 })
+                                    .monospace()
+                                    .color(if sensitive && !self.show_sensitive {
+                                        self.theme.muted
+                                    } else {
+                                        self.theme.fg
+                                    }),
+                            )
+                            .truncate(),
                         );
                         if self.tag_manager_enabled && !entry.tags.is_empty() {
                             ui.horizontal_wrapped(|ui| {
                                 ui.spacing_mut().item_spacing.y = 2.0;
                                 for tag in &entry.tags {
-                                    tag_chip(ui, tag);
+                                    tag_chip(ui, tag, &self.theme);
                                 }
                             });
-                        }
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if sensitive {
-                            sensitive_badge(ui);
                         }
                     });
                 });
             })
             .response
             .interact(egui::Sense::click());
+
+        let card_hovered = ui.ctx().input(|input| {
+            input
+                .pointer
+                .hover_pos()
+                .is_some_and(|pos| response.rect.contains(pos))
+        }) || response.hovered();
+        let show_actions = !self.compact_rows || card_hovered;
+
+        if card_hovered {
+            ui.painter().rect_stroke(
+                response.rect.expand(1.0).translate(egui::vec2(0.0, 1.0)),
+                egui::Rounding::same(13.0),
+                egui::Stroke::new(1.0, scale_alpha(self.theme.shadow_card, 0.75)),
+            );
+        }
+
+        if show_actions {
+            let action_bar_rect = egui::Rect::from_min_size(
+                egui::pos2(
+                    response.rect.right() - CARD_ACTION_WIDTH - 8.0,
+                    response.rect.top() + 6.0,
+                ),
+                egui::vec2(CARD_ACTION_WIDTH, CARD_ACTION_BUTTON_SIZE + 4.0),
+            );
+            ui.painter().rect(
+                action_bar_rect,
+                egui::Rounding::same(8.0),
+                self.theme.glass_bg,
+                egui::Stroke::new(1.0, self.theme.glass_border),
+            );
+
+            let icon_color = self.theme.fg;
+            let hover_bg = self.theme.btn_hover_bg;
+            let mut button_rect = egui::Rect::from_min_size(
+                action_bar_rect.min + egui::vec2(4.0, 2.0),
+                egui::vec2(CARD_ACTION_BUTTON_SIZE, CARD_ACTION_BUTTON_SIZE),
+            );
+            let pin_icon = if entry_pinned {
+                ToolbarIcon::Unpin
+            } else {
+                ToolbarIcon::Pin
+            };
+            if action_bar_button(
+                ui,
+                egui::Id::new(("card_action", entry_id, "pin")),
+                button_rect,
+                pin_icon,
+                icon_color,
+                hover_bg,
+            )
+            .clicked()
+            {
+                pending_action = Some(CardAction::TogglePin);
+            }
+            button_rect = button_rect.translate(egui::vec2(CARD_ACTION_BUTTON_SIZE + 4.0, 0.0));
+            if action_bar_button(
+                ui,
+                egui::Id::new(("card_action", entry_id, "open")),
+                button_rect,
+                ToolbarIcon::Open,
+                icon_color,
+                hover_bg,
+            )
+            .clicked()
+            {
+                pending_action = Some(CardAction::Open);
+            }
+            button_rect = button_rect.translate(egui::vec2(CARD_ACTION_BUTTON_SIZE + 4.0, 0.0));
+            if action_bar_button(
+                ui,
+                egui::Id::new(("card_action", entry_id, "delete")),
+                button_rect,
+                ToolbarIcon::Close,
+                icon_color,
+                hover_bg,
+            )
+            .clicked()
+            {
+                pending_action = Some(CardAction::Delete);
+            }
+        }
+
+        if let Some(action) = pending_action {
+            match action {
+                CardAction::TogglePin => match self.storage.toggle_pin(entry_id) {
+                    Ok(()) => self.refresh_entries(),
+                    Err(err) => self.status = format!("置顶失败: {err}"),
+                },
+                CardAction::Open => {
+                    self.select_entry(entry_id);
+                    if let Some(entry) = self.entries.iter().find(|e| e.id == entry_id).cloned() {
+                        self.open_entry(&entry);
+                    }
+                }
+                CardAction::Delete => match self.storage.delete(entry_id) {
+                    Ok(()) => {
+                        self.status = "已删除记录".to_string();
+                        if self.selected_id == Some(entry_id) {
+                            self.selected_id = None;
+                        }
+                        self.refresh_entries();
+                    }
+                    Err(err) => self.status = format!("删除失败: {err}"),
+                },
+            }
+            return;
+        }
 
         if response.clicked() {
             self.select_entry(entry.id);
@@ -1806,8 +2139,8 @@ impl ClipboardApp {
         if let Some(texture) = self.image_texture(ui.ctx(), entry) {
             let size = fit_texture_size(texture.size_vec2(), egui::vec2(68.0, 52.0));
             egui::Frame::none()
-                .fill(egui::Color32::from_rgb(29, 31, 37))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(65, 68, 78)))
+                .fill(self.theme.data_bg)
+                .stroke(egui::Stroke::new(1.0, self.theme.data_border))
                 .rounding(egui::Rounding::same(10.0))
                 .inner_margin(egui::Margin::same(3.0))
                 .show(ui, |ui| {
@@ -1816,7 +2149,7 @@ impl ClipboardApp {
                     );
                 });
         } else {
-            thumbnail_placeholder(ui, "image");
+            thumbnail_placeholder(ui, "image", &self.theme);
         }
     }
 
@@ -1847,6 +2180,7 @@ impl ClipboardApp {
                 ui,
                 "未选择记录",
                 "从左侧选择一条历史记录查看完整内容和操作。",
+                &self.theme,
             );
             return;
         };
@@ -1877,7 +2211,7 @@ impl ClipboardApp {
         });
 
         ui.add_space(8.0);
-        stat_grid(ui, &entry);
+        stat_grid(ui, &entry, &self.theme);
         ui.add_space(12.0);
 
         if self.tag_manager_enabled {
@@ -1897,13 +2231,14 @@ impl ClipboardApp {
             });
             if !self.saved_tags.is_empty() {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new("快速标签").color(TEXT_MUTED));
+                    ui.label(egui::RichText::new("快速标签").color(self.theme.muted));
                     let tags = self.saved_tags.clone();
                     for tag in tags {
                         if filter_chip(
                             ui,
                             &tag,
                             parse_tags(&self.tag_editor).iter().any(|t| t == &tag),
+                            &self.theme,
                         )
                         .clicked()
                         {
@@ -1913,7 +2248,9 @@ impl ClipboardApp {
                 });
             }
         } else {
-            ui.label(egui::RichText::new("标签管理已关闭，可在设置中重新启用。").color(TEXT_MUTED));
+            ui.label(
+                egui::RichText::new("标签管理已关闭，可在设置中重新启用。").color(self.theme.muted),
+            );
         }
 
         ui.add_space(12.0);
@@ -1926,8 +2263,8 @@ impl ClipboardApp {
             entry.content.clone()
         };
         egui::Frame::none()
-            .fill(egui::Color32::from_rgb(22, 25, 30))
-            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 61, 70)))
+            .fill(self.theme.data_bg)
+            .stroke(egui::Stroke::new(1.0, self.theme.data_border))
             .rounding(egui::Rounding::same(10.0))
             .inner_margin(egui::Margin::same(10.0))
             .show(ui, |ui| {
@@ -1937,7 +2274,7 @@ impl ClipboardApp {
                     .show(ui, |ui| {
                         if content_is_masked {
                             ui.colored_label(
-                                egui::Color32::from_rgb(180, 180, 190),
+                                self.theme.muted,
                                 "敏感内容已隐藏。可在设置中临时显示。",
                             );
                             ui.separator();
@@ -1956,11 +2293,18 @@ impl ClipboardApp {
 
     fn draw_emoji_page(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if filter_chip(ui, "EMOJI", self.emoji_tab == EmojiTab::Emoji).clicked() {
+            if filter_chip(ui, "EMOJI", self.emoji_tab == EmojiTab::Emoji, &self.theme).clicked() {
                 self.emoji_tab = EmojiTab::Emoji;
                 self.persist_preferences();
             }
-            if filter_chip(ui, "收藏", self.emoji_tab == EmojiTab::Favorites).clicked() {
+            if filter_chip(
+                ui,
+                "收藏",
+                self.emoji_tab == EmojiTab::Favorites,
+                &self.theme,
+            )
+            .clicked()
+            {
                 self.emoji_tab = EmojiTab::Favorites;
                 self.persist_preferences();
             }
@@ -1977,7 +2321,7 @@ impl ClipboardApp {
                             ui.separator();
                             ui.horizontal_wrapped(|ui| {
                                 for emoji in *emojis {
-                                    if emoji_button(ui, emoji).clicked() {
+                                    if emoji_button(ui, emoji, &self.theme).clicked() {
                                         match clipboard::set_text(emoji) {
                                             Ok(()) => {
                                                 self.status = format!("已复制表情：{emoji}");
@@ -1996,7 +2340,8 @@ impl ClipboardApp {
                     empty_state(
                         ui,
                         "暂无收藏",
-                        "TieZ 收藏表情图会保存在 app.emoji_favorites；原生文件选择/拖拽将在平台能力阶段继续接入。",
+                        "tiez-slim 收藏表情图会保存在 app.emoji_favorites；可在这里管理常用表情路径。",
+                        &self.theme,
                     );
                 } else {
                     egui::ScrollArea::vertical().show(ui, |ui| {
@@ -2042,8 +2387,14 @@ impl ClipboardApp {
                     ui.label("已禁用 egui 红色调试覆盖层与 widget ID 冲突提示，避免污染正常界面。");
                 });
                 ui.separator();
-                ui.checkbox(&mut self.show_inspection, "显示 egui Inspection");
-                ui.checkbox(&mut self.show_memory, "显示 egui Memory");
+                ui.horizontal(|ui| {
+                    ui.label("显示 egui Inspection");
+                    macos_toggle(ui, &mut self.show_inspection, &self.theme);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("显示 egui Memory");
+                    macos_toggle(ui, &mut self.show_memory, &self.theme);
+                });
                 if self.show_inspection {
                     ui.collapsing("egui Inspection", |ui| ctx.inspection_ui(ui));
                 }
@@ -2057,300 +2408,678 @@ impl ClipboardApp {
     }
 
     fn draw_settings_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.label(egui::RichText::new("设置会在切换时自动保存").color(TEXT_MUTED));
+        egui::ScrollArea::vertical()
+            .max_width(700.0)
+            .show(ui, |ui| {
+            ui.label(egui::RichText::new("设置会在切换时自动保存").color(self.theme.muted));
             ui.add_space(8.0);
 
-        ui.collapsing("常规设置", |ui| {
-            if ui.checkbox(&mut self.emoji_panel_enabled, "启用表情包入口").changed() {
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.tag_manager_enabled, "启用标签管理能力").changed() {
-                if !self.tag_manager_enabled {
-                    self.tag_filter = None;
-                    self.new_tag_input.clear();
-                    self.tag_editor.clear();
-                    self.refresh_entries();
-                }
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.show_search_box, "显示搜索框").changed() {
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.arrow_key_selection, "方向键选择历史").changed() {
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.hide_tray_icon, "隐藏系统托盘图标").changed() {
-                self.apply_tray_visibility(ctx);
-                self.persist_preferences();
-            }
-            let can_close_to_tray = !self.hide_tray_icon && self.tray_handle.is_some();
-            if ui
-                .add_enabled(
-                    can_close_to_tray,
-                    egui::Checkbox::new(&mut self.close_to_tray, "有托盘时关闭按钮隐藏到托盘"),
-                )
-                .changed()
-            {
-                self.persist_preferences();
-            }
-            ui.add_enabled(false, egui::Checkbox::new(&mut self.sound_enabled, "音效（预留，未接入）"));
-        });
-
-        ui.collapsing("快捷键设置", |ui| {
-            ui.label(egui::RichText::new("点击“录制”后按键盘组合，或按鼠标中键；Esc 取消。主快捷键可录制多条。" ).color(TEXT_MUTED));
-            let main_hotkeys = self.main_hotkeys.clone();
-            let sequential_hotkey = self.sequential_hotkey.clone();
-            let rich_paste_hotkey = self.rich_paste_hotkey.clone();
-            let search_hotkey = self.search_hotkey.clone();
-            hotkey_record_row(ui, "主呼出", &main_hotkeys, self.recording_hotkey == Some(HotkeyTarget::Main), |ui| {
-                if ui.button("录制新增").clicked() {
-                    self.recording_hotkey = Some(HotkeyTarget::Main);
-                    self.status = "正在录制主快捷键，可按鼠标中键".to_string();
-                }
-                if ui.button("清空").clicked() {
-                    self.main_hotkeys.clear();
-                    self.update_hotkeys();
+        {
+            let prev = self.settings_panel_collapsed[0];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "常规设置", &mut expanded, &theme, |ui| {
+                if ui.horizontal(|ui| {
+                    ui.label("启用表情包入口");
+                    macos_toggle(ui, &mut self.emoji_panel_enabled, &self.theme)
+                }).inner.changed() {
                     self.persist_preferences();
                 }
+                if ui.horizontal(|ui| {
+                    ui.label("启用标签管理能力");
+                    macos_toggle(ui, &mut self.tag_manager_enabled, &self.theme)
+                }).inner.changed() {
+                    if !self.tag_manager_enabled {
+                        self.tag_filter = None;
+                        self.new_tag_input.clear();
+                        self.tag_editor.clear();
+                        self.refresh_entries();
+                    }
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("显示搜索框");
+                    macos_toggle(ui, &mut self.show_search_box, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("简洁模式");
+                    macos_toggle(ui, &mut self.compact_rows, &self.theme)
+                }).inner.changed()
+                {
+                    self.persist_preferences();
+                }
+                ui.label(
+                    egui::RichText::new("开启后卡片更紧凑，操作按钮默认隐藏并在悬浮时显示。")
+                        .color(self.theme.muted),
+                );
+                if ui.horizontal(|ui| {
+                    ui.label("方向键选择历史");
+                    macos_toggle(ui, &mut self.arrow_key_selection, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("隐藏系统托盘图标");
+                    macos_toggle(ui, &mut self.hide_tray_icon, &self.theme)
+                }).inner.changed() {
+                    self.apply_tray_visibility(ctx);
+                    self.persist_preferences();
+                }
+                let can_close_to_tray = !self.hide_tray_icon && self.tray_handle.is_some();
+                if ui.add_enabled_ui(can_close_to_tray, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("有托盘时关闭按钮隐藏到托盘");
+                        macos_toggle(ui, &mut self.close_to_tray, &self.theme)
+                    }).inner
+                }).inner.changed()
+                {
+                    self.persist_preferences();
+                }
+                ui.add_enabled_ui(false, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("音效（预留，未接入）");
+                        macos_toggle(ui, &mut self.sound_enabled, &self.theme);
+                    });
+                });
             });
-            hotkey_single_record_row(ui, "顺序粘贴", &sequential_hotkey, self.recording_hotkey == Some(HotkeyTarget::Sequential), || {
-                self.recording_hotkey = Some(HotkeyTarget::Sequential);
-                self.status = "正在录制顺序粘贴快捷键".to_string();
-            });
-            hotkey_single_record_row(ui, "富文本粘贴", &rich_paste_hotkey, self.recording_hotkey == Some(HotkeyTarget::RichPaste), || {
-                self.recording_hotkey = Some(HotkeyTarget::RichPaste);
-                self.status = "正在录制富文本粘贴快捷键".to_string();
-            });
-            hotkey_single_record_row(ui, "搜索聚焦", &search_hotkey, self.recording_hotkey == Some(HotkeyTarget::Search), || {
-                self.recording_hotkey = Some(HotkeyTarget::Search);
-                self.status = "正在录制搜索聚焦快捷键".to_string();
-            });
-        });
+            if expanded != !prev {
+                self.settings_panel_collapsed[0] = !expanded;
+                self.persist_preferences();
+            }
+        }
 
-        ui.collapsing("剪贴板设置", |ui| {
-            ui.add_enabled(false, egui::Checkbox::new(&mut self.persistent, "持久化保存历史（当前固定开启）"));
-            if ui.checkbox(&mut self.deduplicate, "去重合并相同内容").changed() {
+        {
+            let prev = self.settings_panel_collapsed[1];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "快捷键设置", &mut expanded, &theme, |ui| {
+                ui.label(egui::RichText::new("点击\u{201c}录制\u{201d}后按键盘组合，或按鼠标中键；Esc 取消。主快捷键可录制多条。").color(self.theme.muted));
+                let main_hotkeys = self.main_hotkeys.clone();
+                let sequential_hotkey = self.sequential_hotkey.clone();
+                let rich_paste_hotkey = self.rich_paste_hotkey.clone();
+                let search_hotkey = self.search_hotkey.clone();
+                hotkey_record_row(ui, "主呼出", &main_hotkeys, self.recording_hotkey == Some(HotkeyTarget::Main), |ui| {
+                    if ui.button("录制新增").clicked() {
+                        self.recording_hotkey = Some(HotkeyTarget::Main);
+                        self.status = "正在录制主快捷键，可按鼠标中键".to_string();
+                    }
+                    if ui.button("清空").clicked() {
+                        self.main_hotkeys.clear();
+                        self.update_hotkeys();
+                        self.persist_preferences();
+                    }
+                });
+                hotkey_single_record_row(ui, "顺序粘贴", &sequential_hotkey, self.recording_hotkey == Some(HotkeyTarget::Sequential), || {
+                    self.recording_hotkey = Some(HotkeyTarget::Sequential);
+                    self.status = "正在录制顺序粘贴快捷键".to_string();
+                });
+                hotkey_single_record_row(ui, "富文本粘贴", &rich_paste_hotkey, self.recording_hotkey == Some(HotkeyTarget::RichPaste), || {
+                    self.recording_hotkey = Some(HotkeyTarget::RichPaste);
+                    self.status = "正在录制富文本粘贴快捷键".to_string();
+                });
+                hotkey_single_record_row(ui, "搜索聚焦", &search_hotkey, self.recording_hotkey == Some(HotkeyTarget::Search), || {
+                    self.recording_hotkey = Some(HotkeyTarget::Search);
+                    self.status = "正在录制搜索聚焦快捷键".to_string();
+                });
+            });
+            if expanded != !prev {
+                self.settings_panel_collapsed[1] = !expanded;
                 self.persist_preferences();
             }
-            if ui.checkbox(&mut self.capture_files, "捕获文件剪贴板（路径/URI）").changed() {
+        }
+
+        {
+            let prev = self.settings_panel_collapsed[2];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "剪贴板设置", &mut expanded, &theme, |ui| {
+                ui.add_enabled_ui(false, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("持久化保存历史（当前固定开启）");
+                        macos_toggle(ui, &mut self.persistent, &self.theme);
+                    });
+                });
+                if ui.horizontal(|ui| {
+                    ui.label("去重合并相同内容");
+                    macos_toggle(ui, &mut self.deduplicate, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("捕获文件剪贴板（路径/URI）");
+                    macos_toggle(ui, &mut self.capture_files, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("捕获富文本 HTML");
+                    macos_toggle(ui, &mut self.capture_rich_text, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("粘贴后删除");
+                    macos_toggle(ui, &mut self.delete_after_paste, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("粘贴后移到顶部");
+                    macos_toggle(ui, &mut self.move_to_top_after_paste, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                egui::ComboBox::from_label("粘贴模拟方式")
+                    .selected_text(paste_method_label(&self.paste_method))
+                    .show_ui(ui, |ui| {
+                        for (value, label) in [
+                            ("shift_insert", "Shift+Insert（文本优先，文件/图片自动 Ctrl+V）"),
+                            ("ctrl_v", "Ctrl+V"),
+                            ("type_text", "逐字输入（仅文本兜底）"),
+                        ] {
+                            if ui
+                                .selectable_value(&mut self.paste_method, value.to_string(), label)
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                        }
+                    });
+                if ui.horizontal(|ui| {
+                    ui.label("隐私保护/敏感内容识别");
+                    macos_toggle(ui, &mut self.privacy_protection, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                ui.label(egui::RichText::new("当前已落地：文本、富文本 HTML、图片、文件剪贴板捕获/写回；粘贴模拟按 tiez-slim 使用 Shift+Insert/Ctrl+V。" ).color(self.theme.muted));
+            });
+            if expanded != !prev {
+                self.settings_panel_collapsed[2] = !expanded;
                 self.persist_preferences();
             }
-            if ui.checkbox(&mut self.capture_rich_text, "捕获富文本 HTML").changed() {
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.delete_after_paste, "粘贴后删除").changed() {
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.move_to_top_after_paste, "粘贴后移到顶部").changed() {
-                self.persist_preferences();
-            }
-            egui::ComboBox::from_label("粘贴模拟方式")
-                .selected_text(paste_method_label(&self.paste_method))
-                .show_ui(ui, |ui| {
-                    for (value, label) in [
-                        ("shift_insert", "Shift+Insert（文本优先，文件/图片自动 Ctrl+V）"),
-                        ("ctrl_v", "Ctrl+V"),
-                        ("type_text", "逐字输入（仅文本兜底）"),
-                    ] {
-                        if ui
-                            .selectable_value(&mut self.paste_method, value.to_string(), label)
-                            .changed()
-                        {
+        }
+
+        {
+            let prev = self.settings_panel_collapsed[3];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "界面设置", &mut expanded, &theme, |ui| {
+                ui.label("主题模式");
+                ui.horizontal(|ui| {
+                    let modes = [("跟随系统", "system"), ("浅色", "light"), ("深色", "dark")];
+                    for (label, value) in modes {
+                        if filter_chip(ui, label, self.color_mode == value, &self.theme).clicked() {
+                            self.color_mode = value.to_string();
+                            self.theme = resolve_theme(&self.color_mode);
+                            self.configure_style(ctx);
                             self.persist_preferences();
                         }
                     }
                 });
-            if ui.checkbox(&mut self.privacy_protection, "隐私保护/敏感内容识别").changed() {
+                ui.add_space(4.0);
+                if ui.horizontal(|ui| {
+                    ui.label("显示敏感内容（Ctrl+H）");
+                    macos_toggle(ui, &mut self.show_sensitive, &self.theme)
+                }).inner.changed()
+                {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("显示详情/标签侧栏");
+                    macos_toggle(ui, &mut self.show_detail_panel, &self.theme)
+                }).inner.changed()
+                {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("显示应用边框");
+                    macos_toggle(ui, &mut self.show_app_border, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("窗口置顶");
+                    macos_toggle(ui, &mut self.window_pinned, &self.theme)
+                }).inner.changed() {
+                    self.apply_window_level(ctx);
+                    self.persist_preferences();
+                }
+                if ui.horizontal(|ui| {
+                    ui.label("呼出时跟随鼠标位置");
+                    macos_toggle(ui, &mut self.follow_mouse, &self.theme)
+                }).inner.changed() {
+                    self.persist_preferences();
+                }
+                let mut edge_docking_enabled = self.edge_docking != DockMode::Off;
+                if ui.horizontal(|ui| {
+                    ui.label("边缘停靠隐藏");
+                    macos_toggle(ui, &mut edge_docking_enabled, &self.theme)
+                }).inner.changed() {
+                    self.edge_docking = if edge_docking_enabled {
+                        DockMode::Right
+                    } else {
+                        DockMode::Off
+                    };
+                    if self.edge_docking == DockMode::Off && self.edge_hidden {
+                        self.reveal_edge_hidden(ctx, false);
+                    }
+                    self.persist_preferences();
+                }
+                ui.label(egui::RichText::new("开启后会按窗口位置自动吸附到左、右、上屏幕边缘，并留下可见边条。" ).color(self.theme.muted));
+                ui.add_space(4.0);
+                ui.label("表面不透明度");
+                let mut opacity_f32 = self.surface_opacity as f32;
+                if macos_range_slider(ui, &mut opacity_f32, 0.0..=100.0, &self.theme).changed() {
+                    self.surface_opacity = opacity_f32 as u8;
+                    self.configure_style(ctx);
+                    self.persist_preferences();
+                }
+                ui.label("左键点击/Enter：复制并粘贴；右键点击：带格式复制并粘贴；Delete 删除；↑/↓ 切换选中。");
+            });
+            if expanded != !prev {
+                self.settings_panel_collapsed[3] = !expanded;
                 self.persist_preferences();
             }
-            ui.label(egui::RichText::new("当前已落地：文本、富文本 HTML、图片、文件剪贴板捕获/写回；粘贴模拟按 TieZ 使用 Shift+Insert/Ctrl+V。" ).color(TEXT_MUTED));
-        });
+        }
 
-        ui.collapsing("界面设置", |ui| {
-            if ui
-                .checkbox(&mut self.show_sensitive, "显示敏感内容（Ctrl+H）")
-                .changed()
-            {
+        {
+            let prev = self.settings_panel_collapsed[4];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "默认打开程序", &mut expanded, &theme, |ui| {
+                ui.label(egui::RichText::new("自动扫描 XDG .desktop 应用；选择\u{201c}系统默认\u{201d}时使用 xdg-open/open crate。").color(self.theme.muted));
+                let mut changed = false;
+                changed |= app_combo_row(ui, "TEXT", &mut self.default_text_app, &self.text_app_choices);
+                changed |= app_combo_row(ui, "URL", &mut self.default_url_app, &self.url_app_choices);
+                changed |= app_combo_row(ui, "CODE", &mut self.default_code_app, &self.code_app_choices);
+                changed |= app_combo_row(ui, "FILE", &mut self.default_file_app, &self.file_app_choices);
+                changed |= app_combo_row(ui, "IMAGE", &mut self.default_image_app, &self.image_app_choices);
+                changed |= app_combo_row(ui, "VIDEO", &mut self.default_video_app, &self.video_app_choices);
+                if ui.button("重新扫描应用").clicked() {
+                    self.text_app_choices = platform::discover_apps_for_mime("text/plain");
+                    self.url_app_choices = platform::discover_apps_for_mime("x-scheme-handler/http");
+                    self.code_app_choices = platform::discover_apps_for_mime("text/plain");
+                    self.file_app_choices = platform::discover_apps_for_mime("application/octet-stream");
+                    self.image_app_choices = platform::discover_apps_for_mime("image/png");
+                    self.video_app_choices = platform::discover_apps_for_mime("video/mp4");
+                    self.status = "已重新扫描默认应用列表".to_string();
+                }
+                if changed {
+                    self.persist_preferences();
+                }
+            });
+            if expanded != !prev {
+                self.settings_panel_collapsed[4] = !expanded;
                 self.persist_preferences();
             }
-            if ui
-                .checkbox(&mut self.show_detail_panel, "显示详情/标签侧栏")
-                .changed()
-            {
-                self.persist_preferences();
-            }
-            if ui
-                .checkbox(&mut self.compact_rows, "紧凑历史列表")
-                .changed()
-            {
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.show_app_border, "显示应用边框").changed() {
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.window_pinned, "窗口置顶").changed() {
-                self.apply_window_level(ctx);
-                self.persist_preferences();
-            }
-            if ui.checkbox(&mut self.follow_mouse, "呼出时跟随鼠标位置").changed() {
-                self.persist_preferences();
-            }
-            let mut edge_docking_enabled = self.edge_docking != DockMode::Off;
-            if ui.checkbox(&mut edge_docking_enabled, "边缘停靠隐藏").changed() {
-                self.edge_docking = if edge_docking_enabled {
-                    DockMode::Right
+        }
+
+        {
+            let prev = self.settings_panel_collapsed[5];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "过滤", &mut expanded, &theme, |ui| {
+                ui.label("内容类型过滤会立即影响主列表，并随设置保存。");
+                self.draw_type_filters(ui);
+                if self.tag_manager_enabled {
+                    ui.separator();
+                    ui.label("标签过滤会只显示带有指定标签的记录。");
+                    self.draw_tag_filters(ui);
                 } else {
-                    DockMode::Off
-                };
-                if self.edge_docking == DockMode::Off && self.edge_hidden {
-                    self.reveal_edge_hidden(ctx, false);
-                }
-                self.persist_preferences();
-            }
-            ui.label(egui::RichText::new("开启后会按窗口位置自动吸附到左、右、上屏幕边缘，并留下可见边条。" ).color(TEXT_MUTED));
-            ui.label("左键点击/Enter：复制并粘贴；右键点击：带格式复制并粘贴；Delete 删除；↑/↓ 切换选中。");
-        });
-
-        ui.collapsing("默认打开程序", |ui| {
-            ui.label(egui::RichText::new("自动扫描 XDG .desktop 应用；选择“系统默认”时使用 xdg-open/open crate。" ).color(TEXT_MUTED));
-            let mut changed = false;
-            changed |= app_combo_row(ui, "TEXT", &mut self.default_text_app, &self.text_app_choices);
-            changed |= app_combo_row(ui, "URL", &mut self.default_url_app, &self.url_app_choices);
-            changed |= app_combo_row(ui, "CODE", &mut self.default_code_app, &self.code_app_choices);
-            changed |= app_combo_row(ui, "FILE", &mut self.default_file_app, &self.file_app_choices);
-            changed |= app_combo_row(ui, "IMAGE", &mut self.default_image_app, &self.image_app_choices);
-            changed |= app_combo_row(ui, "VIDEO", &mut self.default_video_app, &self.video_app_choices);
-            if ui.button("重新扫描应用").clicked() {
-                self.text_app_choices = platform::discover_apps_for_mime("text/plain");
-                self.url_app_choices = platform::discover_apps_for_mime("x-scheme-handler/http");
-                self.code_app_choices = platform::discover_apps_for_mime("text/plain");
-                self.file_app_choices = platform::discover_apps_for_mime("application/octet-stream");
-                self.image_app_choices = platform::discover_apps_for_mime("image/png");
-                self.video_app_choices = platform::discover_apps_for_mime("video/mp4");
-                self.status = "已重新扫描默认应用列表".to_string();
-            }
-            if changed {
-                self.persist_preferences();
-            }
-        });
-
-        ui.collapsing("过滤", |ui| {
-            ui.label("内容类型过滤会立即影响主列表，并随设置保存。");
-            self.draw_type_filters(ui);
-            if self.tag_manager_enabled {
-                ui.separator();
-                ui.label("标签过滤会只显示带有指定标签的记录。");
-                self.draw_tag_filters(ui);
-            } else {
-                ui.label(egui::RichText::new("标签管理关闭时不显示标签过滤。").color(TEXT_MUTED));
-            }
-        });
-
-        ui.collapsing("标签目录", |ui| {
-            if !self.tag_manager_enabled {
-                ui.label(egui::RichText::new("标签管理已关闭，目录不会显示或编辑；已有条目标签保留在数据库中。").color(TEXT_MUTED));
-                return;
-            }
-            ui.horizontal(|ui| {
-                let response = ui.add_sized(
-                    [ui.available_width() - 72.0, 28.0],
-                    egui::TextEdit::singleline(&mut self.new_tag_input).hint_text("新增目录标签"),
-                );
-                let enter = response.lost_focus()
-                    && ui.input(|input| input.key_pressed(egui::Key::Enter));
-                if ui.button("新增").clicked() || enter {
-                    self.add_saved_tag_from_input();
+                    ui.label(egui::RichText::new("标签管理关闭时不显示标签过滤。").color(self.theme.muted));
                 }
             });
-            ui.add_space(6.0);
-            if self.saved_tags.is_empty() {
-                ui.label("保存条目标签后会自动进入目录。");
-            } else {
-                ui.label("点击标签可加入当前选中条目的标签编辑框；× 只移出目录，不删除条目上的既有标签。");
-                egui::Grid::new("saved_tags_grid")
-                    .num_columns(2)
-                    .spacing([8.0, 6.0])
-                    .show(ui, |ui| {
-                    let tags = self.saved_tags.clone();
-                    for tag in tags {
-                        if tag_chip_button(ui, &tag).clicked() {
-                            self.add_tag_to_editor(&tag);
-                        }
-                            if ui.small_button("×").on_hover_text("从目录移除").clicked() {
-                                self.delete_saved_tag(&tag);
-                            }
-                            ui.end_row();
-                    }
+            if expanded != !prev {
+                self.settings_panel_collapsed[5] = !expanded;
+                self.persist_preferences();
+            }
+        }
+
+        {
+            let prev = self.settings_panel_collapsed[6];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "标签目录", &mut expanded, &theme, |ui| {
+                if !self.tag_manager_enabled {
+                    ui.label(egui::RichText::new("标签管理已关闭，目录不会显示或编辑；已有条目标签保留在数据库中。").color(self.theme.muted));
+                    return;
+                }
+
+                let available_width = ui.available_width().max(240.0);
+                let gap = ui.spacing().item_spacing.x;
+                let sidebar_w = (available_width * 0.36).clamp(116.0, 180.0);
+                let detail_w = (available_width - sidebar_w - gap).max(130.0);
+
+                ui.horizontal_top(|ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(sidebar_w);
+                        let bg = self.theme.glass_bg;
+                        let accent = self.theme.accent;
+                        egui::Frame::none()
+                            .fill(bg)
+                            .rounding(egui::Rounding::same(8.0))
+                            .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
+                            .inner_margin(6.0)
+                            .show(ui, |ui| {
+                                ui.set_width((sidebar_w - 12.0).max(80.0));
+                                if ui
+                                    .add_sized(
+                                        [ui.available_width().max(80.0), 24.0],
+                                        egui::Button::new(
+                                            egui::RichText::new("＋ 新增标签").size(11.0),
+                                        )
+                                        .rounding(egui::Rounding::same(6.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    self.show_tag_input = !self.show_tag_input;
+                                }
+
+                                if self.show_tag_input {
+                                    ui.horizontal(|ui| {
+                                        let input_width = (ui.available_width() - 42.0).max(40.0);
+                                        let response = ui.add_sized(
+                                            [input_width, 22.0],
+                                            egui::TextEdit::singleline(
+                                                &mut self.new_tag_input,
+                                            )
+                                            .hint_text("标签名")
+                                            .desired_width(input_width),
+                                        );
+                                        let enter = response.lost_focus()
+                                            && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                                        if ui
+                                            .add_sized(
+                                                [38.0, 22.0],
+                                                egui::Button::new(
+                                                    egui::RichText::new("添加").size(10.5),
+                                                )
+                                                .rounding(egui::Rounding::same(4.0)),
+                                            )
+                                            .clicked()
+                                            || enter
+                                        {
+                                            self.add_saved_tag_from_input();
+                                            self.show_tag_input = false;
+                                        }
+                                    });
+                                    ui.add_space(2.0);
+                                }
+
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                        if self.saved_tags.is_empty() {
+                                            ui.label(
+                                                egui::RichText::new("暂无标签")
+                                                    .size(11.0)
+                                                    .color(self.theme.muted),
+                                            );
+                                        } else {
+                                            let tags = self.saved_tags.clone();
+                                            for tag in &tags {
+                                                let selected =
+                                                    self.selected_saved_tag.as_deref()
+                                                        == Some(tag);
+                                                let (bg, fg, stroke) = if selected {
+                                                    (
+                                                        accent,
+                                                        egui::Color32::WHITE,
+                                                        egui::Stroke::new(1.0, accent),
+                                                    )
+                                                } else {
+                                                    (
+                                                        egui::Color32::TRANSPARENT,
+                                                        self.theme.fg,
+                                                        egui::Stroke::NONE,
+                                                    )
+                                                };
+                                                let btn = egui::Button::new(
+                                                    egui::RichText::new(tag.as_str())
+                                                        .size(11.5)
+                                                        .color(fg),
+                                                )
+                                                .fill(bg)
+                                                .stroke(stroke)
+                                                .rounding(egui::Rounding::same(6.0))
+                                                .min_size(egui::vec2(
+                                                    ui.available_width().max(80.0),
+                                                    22.0,
+                                                ));
+                                                if ui.add(btn).clicked() {
+                                                    if selected {
+                                                        self.selected_saved_tag = None;
+                                                    } else {
+                                                        self.load_tag_detail(tag);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                            });
                     });
-            }
-        });
 
-        ui.collapsing("数据管理", |ui| {
-            ui.label(format!("当前数据库：{}", self.current_database_path));
-            ui.horizontal(|ui| {
+                    ui.add_space(ui.spacing().item_spacing.x);
+
+                    ui.vertical(|ui| {
+                        ui.set_width(detail_w);
+                        egui::Frame::none()
+                            .fill(self.theme.data_bg)
+                            .rounding(egui::Rounding::same(8.0))
+                            .stroke(egui::Stroke::new(1.0, self.theme.data_border))
+                            .inner_margin(10.0)
+                            .show(ui, |ui| {
+                                ui.set_width((detail_w - 20.0).max(100.0));
+                                if let Some(ref sel) = self.selected_saved_tag.clone() {
+                                    ui.label(
+                                        egui::RichText::new(sel.as_str())
+                                            .size(14.0)
+                                            .color(self.theme.fg),
+                                    );
+                                    ui.add_space(4.0);
+
+                                    let count = self
+                                        .storage
+                                        .count_entries_for_tag(sel)
+                                        .unwrap_or(0);
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "关联记录：{count} 条"
+                                        ))
+                                        .size(11.5)
+                                        .color(self.theme.muted),
+                                    );
+                                    ui.add_space(8.0);
+
+                                    ui.label(
+                                        egui::RichText::new("标签颜色")
+                                            .size(11.0)
+                                            .color(self.theme.muted),
+                                    );
+                                    ui.add_space(2.0);
+                                    ui.horizontal(|ui| {
+                                        let preview_color =
+                                            hex_to_color32(&self.tag_detail_color)
+                                                .unwrap_or(self.theme.accent);
+                                        let (rect, _) = ui.allocate_exact_size(
+                                            egui::vec2(20.0, 20.0),
+                                            egui::Sense::hover(),
+                                        );
+                                        ui.painter().rect_filled(
+                                            rect,
+                                            egui::Rounding::same(4.0),
+                                            preview_color,
+                                        );
+                                        let color_response = ui.add_sized(
+                                            [80.0, 20.0],
+                                            egui::TextEdit::singleline(
+                                            &mut self.tag_detail_color,
+                                        )
+                                        .desired_width(80.0),
+                                        );
+                                        if color_response.changed() {
+                                            if let Err(err) = self
+                                                .storage
+                                                .update_saved_tag_color(
+                                                    sel,
+                                                    &self.tag_detail_color,
+                                                )
+                                            {
+                                                self.status =
+                                                    format!("更新颜色失败: {err}");
+                                            }
+                                        }
+                                    });
+
+                                    ui.add_space(8.0);
+                                    if ui
+                                        .add_sized(
+                                            [ui.available_width().max(100.0), 24.0],
+                                            egui::Button::new(
+                                                egui::RichText::new("加入当前条目标签")
+                                                    .size(11.0),
+                                            )
+                                            .rounding(egui::Rounding::same(6.0)),
+                                        )
+                                        .clicked()
+                                    {
+                                        let tag = sel.clone();
+                                        self.add_tag_to_editor(&tag);
+                                    }
+                                    ui.add_space(2.0);
+                                    if ui
+                                        .add_sized(
+                                            [ui.available_width().max(100.0), 24.0],
+                                            egui::Button::new(
+                                                egui::RichText::new("从目录移除")
+                                                    .size(11.0)
+                                                    .color(self.theme.danger),
+                                            )
+                                            .rounding(egui::Rounding::same(6.0)),
+                                        )
+                                        .clicked()
+                                    {
+                                        let tag = sel.clone();
+                                        self.delete_saved_tag(&tag);
+                                        self.selected_saved_tag = None;
+                                    }
+                                } else {
+                                    ui.label(
+                                        egui::RichText::new("← 点击左侧标签查看详情")
+                                            .size(12.0)
+                                            .color(self.theme.muted),
+                                    );
+                                }
+                            });
+                    });
+                });
+            });
+            if expanded != !prev {
+                self.settings_panel_collapsed[6] = !expanded;
+                self.persist_preferences();
+            }
+        }
+
+        {
+            let prev = self.settings_panel_collapsed[7];
+            let mut expanded = !prev;
+            let theme = self.theme.clone();
+            macos_collapsible_group(ui, "数据管理", &mut expanded, &theme, |ui| {
+                ui.label("当前数据库");
+                egui::Frame::none()
+                    .fill(self.theme.data_bg)
+                    .stroke(egui::Stroke::new(1.0, self.theme.data_border))
+                    .rounding(egui::Rounding::same(8.0))
+                    .inner_margin(egui::Margin::symmetric(10.0, 7.0))
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(&self.current_database_path)
+                                .monospace()
+                                .color(self.theme.fg),
+                        );
+                    });
+                ui.add_space(6.0);
                 ui.label("重启后数据库路径");
-                ui.add_sized(
-                    [ui.available_width(), 26.0],
-                    egui::TextEdit::singleline(&mut self.database_path_input),
-                );
-            });
-            ui.horizontal(|ui| {
-                if ui.button("保存数据库位置").clicked() {
-                    let path = PathBuf::from(self.database_path_input.trim());
-                    match Storage::write_redirect_path(path) {
-                        Ok(()) => self.status = "数据库位置已保存，重启后生效".to_string(),
-                        Err(err) => self.status = format!("保存数据库位置失败: {err}"),
+                egui::Frame::none()
+                    .fill(self.theme.glass_bg)
+                    .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
+                    .rounding(egui::Rounding::same(8.0))
+                    .inner_margin(egui::Margin::symmetric(10.0, 7.0))
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(&self.database_path_input)
+                                .monospace()
+                                .color(self.theme.muted),
+                        );
+                    });
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(egui::Button::new("选择…").rounding(egui::Rounding::same(8.0)))
+                        .clicked()
+                    {
+                        let current = PathBuf::from(self.database_path_input.trim());
+                        match pick_database_path_with_file_dialog(&current) {
+                            Ok(Some(path)) => {
+                                self.database_path_input = path.display().to_string();
+                            }
+                            Ok(None) => {}
+                            Err(err) => self.status = err,
+                        }
+                    }
+                    if ui
+                        .add(egui::Button::new("打开所在目录").rounding(egui::Rounding::same(8.0)))
+                        .clicked()
+                    {
+                        let path = PathBuf::from(self.current_database_path.trim());
+                        let target = path.parent().unwrap_or(path.as_path());
+                        match open::that(target) {
+                            Ok(()) => self.status = "已打开数据库所在目录".to_string(),
+                            Err(err) => self.status = format!("打开目录失败: {err}"),
+                        }
+                    }
+                    if ui.button("保存数据库位置").clicked() {
+                        let path = PathBuf::from(self.database_path_input.trim());
+                        match Storage::write_redirect_path(path) {
+                            Ok(()) => self.status = "数据库位置已保存，重启后生效".to_string(),
+                            Err(err) => self.status = format!("保存数据库位置失败: {err}"),
+                        }
+                    }
+                    if ui.button("恢复默认位置").clicked() {
+                        self.database_path_input = Storage::default_path().display().to_string();
+                    }
+                });
+                ui.label(egui::RichText::new("数据库连接已打开，移动位置需要重启；也可用 --db-path 或 TIEZ_SLIM_LINUX_DB_PATH 临时覆盖。" ).color(self.theme.muted));
+                if ui.button("清空非置顶历史").clicked() {
+                    match self.storage.clear_unpinned() {
+                        Ok(()) => {
+                            self.status = "已清空非置顶记录".to_string();
+                            self.refresh_entries();
+                        }
+                        Err(err) => self.status = format!("清空失败: {err}"),
                     }
                 }
-                if ui.button("恢复默认位置").clicked() {
-                    self.database_path_input = Storage::default_path().display().to_string();
-                }
             });
-            ui.label(egui::RichText::new("数据库连接已打开，移动位置需要重启；也可用 --db-path 或 MYCLIPBOARD_DB_PATH 临时覆盖。" ).color(TEXT_MUTED));
-            if ui.button("清空非置顶历史").clicked() {
-                match self.storage.clear_unpinned() {
-                    Ok(()) => {
-                        self.status = "已清空非置顶记录".to_string();
-                        self.refresh_entries();
-                    }
-                    Err(err) => self.status = format!("清空失败: {err}"),
-                }
+            if expanded != !prev {
+                self.settings_panel_collapsed[7] = !expanded;
+                self.persist_preferences();
             }
-        });
-
-        ui.collapsing("平台能力", |ui| {
-            let capabilities = platform::capabilities();
-            ui.label(format!("当前前台窗口：{}", platform::active_app_name()));
-            ui.label(format!("活动窗口：{}", capabilities.active_window));
-            ui.label(format!("窗口控制：{}", capabilities.window_management));
-            ui.label(format!("全局热键：{}", capabilities.global_hotkey));
-            ui.label(format!("系统托盘：{}", capabilities.tray));
-            ui.label(format!("富剪贴板：{}", capabilities.rich_clipboard));
-        });
-
-        ui.collapsing("已对齐", |ui| {
-            ui.label("• TieZ 风格顶部品牌栏与圆角工具按钮");
-            ui.label("• 单列胶囊历史流、置顶/类型/敏感标签");
-            ui.label("• Maple Mono NF CN 字体优先，CJK fallback");
-            ui.label("• SQLite 标签、设置表、向前兼容迁移列");
-            ui.label("• URL/代码/文件路径/图片数据 URL 类型识别");
-        });
-
-        ui.collapsing("待平台能力", |ui| {
-            ui.label("• Wayland 全局热键/模拟粘贴需要 portal 或 evdev 后端");
-            ui.label("• 加密和高级顺序粘贴队列属于下一阶段");
-        });
+        }
 
             ui.add_space(14.0);
             ui.horizontal_centered(|ui| {
-                if ui.button("问题反馈").clicked() {
-                    match open::that("https://github.com/") {
+                if ui
+                    .add(egui::Button::new("问题反馈").rounding(egui::Rounding::same(10.0)))
+                    .clicked()
+                {
+                    match open::that(APP_REPO_URL) {
                         Ok(()) => self.status = "已调用系统默认浏览器".to_string(),
                         Err(err) => self.status = format!("打开浏览器失败: {err}"),
                     }
                 }
-                if ui.button("恢复初始设置").clicked() {
+                if ui
+                    .add(egui::Button::new("恢复初始设置").rounding(egui::Rounding::same(10.0)))
+                    .clicked()
+                {
                     let window_pinned = self.window_pinned;
                     let show_sensitive = self.show_sensitive;
                     let preferences = AppPreferences {
@@ -2362,18 +3091,23 @@ impl ClipboardApp {
                 }
             });
             ui.vertical_centered(|ui| {
-                ui.label(egui::RichText::new("TieZ v0.3.1 / MyClipboard v0.1.0").size(15.0).strong());
-                ui.label(egui::RichText::new("让复制与粘贴，保持有序").color(TEXT_MUTED));
+                ui.label(
+                    egui::RichText::new(format!("{APP_DISPLAY_NAME} v{}", env!("CARGO_PKG_VERSION")))
+                        .size(15.0)
+                        .strong(),
+                );
             });
         });
     }
 }
 
 fn load_preferences(storage: &Storage) -> AppPreferences {
-    let mut preferences: AppPreferences = storage
+    let saved_preferences = storage
         .get_setting(PREFERENCES_KEY)
         .ok()
         .flatten()
+        .or_else(|| storage.get_setting(LEGACY_PREFERENCES_KEY).ok().flatten());
+    let mut preferences: AppPreferences = saved_preferences
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
     preferences.persistent = true;
@@ -2540,7 +3274,7 @@ fn paste_method_label(value: &str) -> &'static str {
 fn write_text_to_temp_file(content: &str, extension: &str) -> Result<PathBuf, String> {
     let dir = temp_open_dir()?;
     let path = dir.join(format!(
-        "myclipboard-open-{}.{}",
+        "tiez-slim-linux-open-{}.{}",
         timestamp_millis(),
         extension
     ));
@@ -2555,7 +3289,7 @@ fn write_data_url_to_temp_file(content: &str, extension: &str) -> Result<PathBuf
     let bytes = decode_base64(data)?;
     let dir = temp_open_dir()?;
     let path = dir.join(format!(
-        "myclipboard-open-{}.{}",
+        "tiez-slim-linux-open-{}.{}",
         timestamp_millis(),
         extension
     ));
@@ -2565,9 +3299,53 @@ fn write_data_url_to_temp_file(content: &str, extension: &str) -> Result<PathBuf
 
 fn temp_open_dir() -> Result<PathBuf, String> {
     let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-    let dir = base.join("myclipboard").join("open");
+    let dir = base.join(APP_ID).join("open");
     fs::create_dir_all(&dir).map_err(|err| format!("创建临时目录失败: {err}"))?;
     Ok(dir)
+}
+
+fn pick_database_path_with_file_dialog(current: &Path) -> Result<Option<PathBuf>, String> {
+    let default_path = if current.as_os_str().is_empty() {
+        Storage::default_path()
+    } else {
+        current.to_path_buf()
+    };
+
+    match Command::new("zenity")
+        .arg("--file-selection")
+        .arg("--save")
+        .arg("--confirm-overwrite")
+        .arg("--title=选择数据库文件")
+        .arg(format!("--filename={}", default_path.display()))
+        .arg("--file-filter=SQLite 数据库 | *.db *.sqlite *.sqlite3")
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+        }
+        Ok(_) => return Ok(None),
+        Err(_) => {}
+    }
+
+    let start_dir = default_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .display()
+        .to_string();
+    match Command::new("kdialog")
+        .arg("--getsavefilename")
+        .arg(start_dir)
+        .arg("SQLite 数据库 (*.db *.sqlite *.sqlite3)")
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok((!value.is_empty()).then(|| PathBuf::from(value)))
+        }
+        Ok(_) => Ok(None),
+        Err(_) => Err("未找到可用的文件选择器：请安装 zenity 或 kdialog".to_string()),
+    }
 }
 
 fn hidden_edge_target(
@@ -2594,6 +3372,54 @@ fn hidden_edge_target(
             egui::vec2(size.x, sliver),
         ),
         DockMode::Bottom | DockMode::Off => (visible_pos, size),
+    }
+}
+
+fn logical_screen_geometry(
+    screen: platform::ScreenGeometry,
+    pixels_per_point: f32,
+) -> platform::ScreenGeometry {
+    platform::ScreenGeometry {
+        x: screen.x / pixels_per_point,
+        y: screen.y / pixels_per_point,
+        width: screen.width / pixels_per_point,
+        height: screen.height / pixels_per_point,
+    }
+}
+
+fn resize_direction_at(rect: egui::Rect, pos: egui::Pos2) -> Option<egui::ResizeDirection> {
+    let left = pos.x <= rect.left() + RESIZE_HIT_SIZE;
+    let right = pos.x >= rect.right() - RESIZE_HIT_SIZE;
+    let top = pos.y <= rect.top() + RESIZE_HIT_SIZE;
+    let bottom = pos.y >= rect.bottom() - RESIZE_HIT_SIZE;
+
+    match (left, right, top, bottom) {
+        (true, _, true, _) => Some(egui::ResizeDirection::NorthWest),
+        (_, true, true, _) => Some(egui::ResizeDirection::NorthEast),
+        (true, _, _, true) => Some(egui::ResizeDirection::SouthWest),
+        (_, true, _, true) => Some(egui::ResizeDirection::SouthEast),
+        (true, _, _, _) => Some(egui::ResizeDirection::West),
+        (_, true, _, _) => Some(egui::ResizeDirection::East),
+        (_, _, true, _) => Some(egui::ResizeDirection::North),
+        (_, _, _, true) => Some(egui::ResizeDirection::South),
+        _ => None,
+    }
+}
+
+fn resize_cursor_icon(direction: egui::ResizeDirection) -> egui::CursorIcon {
+    match direction {
+        egui::ResizeDirection::North | egui::ResizeDirection::South => {
+            egui::CursorIcon::ResizeVertical
+        }
+        egui::ResizeDirection::East | egui::ResizeDirection::West => {
+            egui::CursorIcon::ResizeHorizontal
+        }
+        egui::ResizeDirection::NorthWest | egui::ResizeDirection::SouthEast => {
+            egui::CursorIcon::ResizeNwSe
+        }
+        egui::ResizeDirection::NorthEast | egui::ResizeDirection::SouthWest => {
+            egui::CursorIcon::ResizeNeSw
+        }
     }
 }
 
@@ -2669,9 +3495,9 @@ fn load_emoji_favorites(storage: &Storage) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn page_title(ui: &mut egui::Ui, title: &str) -> egui::Response {
+fn page_title(ui: &mut egui::Ui, title: &str, theme: &MacosTokens) -> egui::Response {
     egui::Frame::none()
-        .fill(egui::Color32::from_rgb(245, 245, 247))
+        .fill(theme.card)
         .rounding(egui::Rounding::same(8.0))
         .inner_margin(egui::Margin {
             left: 10.0,
@@ -2684,7 +3510,7 @@ fn page_title(ui: &mut egui::Ui, title: &str) -> egui::Response {
                 egui::RichText::new(title)
                     .size(14.0)
                     .strong()
-                    .color(egui::Color32::from_rgb(24, 25, 28)),
+                    .color(theme.card_fg),
             );
         })
         .response
@@ -2705,10 +3531,15 @@ impl eframe::App for ClipboardApp {
         self.drain_events(ctx);
         self.process_pending_paste(ctx);
         self.process_edge_docking(ctx);
+        if self.edge_hidden || self.pending_edge_hide.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(120));
+            return;
+        }
+        self.handle_resize_edges(ctx);
 
         self.draw_header(ctx);
         let app_border = if self.show_app_border {
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(78, 82, 96))
+            egui::Stroke::new(1.0, self.theme.border)
         } else {
             egui::Stroke::NONE
         };
@@ -2716,13 +3547,13 @@ impl eframe::App for ClipboardApp {
         egui::TopBottomPanel::bottom("status")
             .frame(
                 egui::Frame::none()
-                    .fill(PANEL)
+                    .fill(self.theme.toolbar_bg)
                     .stroke(app_border)
                     .rounding(egui::Rounding {
                         nw: 0.0,
                         ne: 0.0,
-                        sw: 16.0,
-                        se: 16.0,
+                        sw: 12.0,
+                        se: 12.0,
                     })
                     .inner_margin(egui::Margin {
                         left: 18.0,
@@ -2732,18 +3563,18 @@ impl eframe::App for ClipboardApp {
                     }),
             )
             .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new(&self.status).color(TEXT_MUTED));
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(&self.status).color(self.theme.muted));
                     ui.separator();
                     ui.label(
                         egui::RichText::new(format!("显示 {} 条", self.entries.len()))
-                            .color(TEXT_MUTED),
+                            .color(self.theme.muted),
                     );
                 });
             });
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(TIEZ_BG).stroke(app_border))
+            .frame(egui::Frame::none().fill(self.theme.bg).stroke(app_border))
             .show(ctx, |ui| {
                 egui::Frame::none()
                     .inner_margin(egui::Margin {
@@ -2760,30 +3591,9 @@ impl eframe::App for ClipboardApp {
             });
 
         self.draw_dev_panel(ctx, frame);
+
         ctx.request_repaint_after(std::time::Duration::from_millis(500));
     }
-}
-
-fn configure_style(ctx: &egui::Context) {
-    ctx.options_mut(|options| {
-        options.warn_on_id_clash = false;
-    });
-    ctx.set_visuals(egui::Visuals::dark());
-    ctx.style_mut(|style| {
-        style.spacing.item_spacing = egui::vec2(8.0, 7.0);
-        style.spacing.button_padding = egui::vec2(8.0, 5.0);
-        style.spacing.window_margin = egui::Margin::same(12.0);
-        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(52, 54, 62);
-        style.visuals.widgets.hovered.bg_fill = MACOS_CARD_HOVER;
-        style.visuals.widgets.active.bg_fill = ACCENT;
-        style.visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, BORDER_DARK);
-        style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, ACCENT);
-        style.visuals.selection.bg_fill = ACCENT_SOFT;
-        style.visuals.window_fill = TIEZ_HEADER;
-        style.visuals.panel_fill = TIEZ_BG;
-        style.visuals.extreme_bg_color = egui::Color32::from_rgb(18, 19, 22);
-        style.visuals.override_text_color = Some(egui::Color32::from_rgb(245, 245, 247));
-    });
 }
 
 fn configure_fonts(ctx: &egui::Context) {
@@ -2875,9 +3685,33 @@ fn parse_tags(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn tag_chip(ui: &mut egui::Ui, tag: &str) {
+fn search_box(
+    ui: &mut egui::Ui,
+    query: &mut String,
+    width: f32,
+    theme: &MacosTokens,
+) -> egui::Response {
     egui::Frame::none()
-        .fill(ACCENT_SOFT)
+        .fill(theme.input_bg)
+        .stroke(egui::Stroke::new(1.0, theme.input_border))
+        .rounding(egui::Rounding::same(theme.radius_input))
+        .inner_margin(egui::Margin::symmetric(8.0, 0.0))
+        .show(ui, |ui| {
+            ui.add_sized(
+                [width.max(80.0) - 16.0, 34.0],
+                egui::TextEdit::singleline(query)
+                    .font(egui::TextStyle::Body)
+                    .hint_text("搜索...")
+                    .frame(false),
+            )
+        })
+        .inner
+}
+
+fn tag_chip(ui: &mut egui::Ui, tag: &str, theme: &MacosTokens) {
+    let label = clipped_chip_label(tag, 18);
+    egui::Frame::none()
+        .fill(theme.accent_soft)
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
             left: 5.0,
@@ -2887,70 +3721,92 @@ fn tag_chip(ui: &mut egui::Ui, tag: &str) {
         })
         .show(ui, |ui| {
             ui.label(
-                egui::RichText::new(tag)
+                egui::RichText::new(label)
                     .size(10.0)
                     .color(egui::Color32::WHITE),
             );
         });
 }
 
-fn filter_chip(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
+fn filter_chip(
+    ui: &mut egui::Ui,
+    label: &str,
+    selected: bool,
+    theme: &MacosTokens,
+) -> egui::Response {
+    let display_label = clipped_chip_label(label, 18);
     let fill = if selected {
-        ACCENT_SOFT
+        theme.accent_soft
     } else {
-        egui::Color32::from_rgb(50, 54, 63)
+        theme.tag_bg
     };
     let stroke = if selected {
-        egui::Stroke::new(1.2, ACCENT)
+        egui::Stroke::new(1.2, theme.accent)
     } else {
-        egui::Stroke::new(1.0, BORDER_DARK)
+        egui::Stroke::new(1.0, theme.border)
     };
     ui.add(
-        egui::Button::new(egui::RichText::new(label).size(10.5).color(if selected {
-            egui::Color32::WHITE
-        } else {
-            TEXT_MUTED
-        }))
+        egui::Button::new(
+            egui::RichText::new(display_label)
+                .size(10.5)
+                .color(if selected {
+                    egui::Color32::WHITE
+                } else {
+                    theme.muted
+                }),
+        )
         .fill(fill)
         .stroke(stroke)
         .rounding(egui::Rounding::same(99.0))
-        .min_size(egui::vec2(0.0, 20.0)),
+        .min_size(egui::vec2(40.0, 20.0)),
     )
+    .on_hover_text(label)
 }
 
-fn tag_chip_button(ui: &mut egui::Ui, tag: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(
-            egui::RichText::new(tag)
-                .size(10.5)
-                .color(egui::Color32::WHITE),
-        )
-        .fill(ACCENT_SOFT)
-        .stroke(egui::Stroke::new(1.0, ACCENT))
-        .rounding(egui::Rounding::same(99.0))
-        .min_size(egui::vec2(0.0, 20.0)),
-    )
+fn hex_to_color32(hex: &str) -> Option<egui::Color32> {
+    let hex = hex.trim().strip_prefix('#').unwrap_or(hex.trim());
+    match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            Some(egui::Color32::from_rgb(r, g, b))
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
+            Some(egui::Color32::from_rgba_unmultiplied(r, g, b, a))
+        }
+        _ => None,
+    }
 }
 
-fn emoji_button(ui: &mut egui::Ui, emoji: &str) -> egui::Response {
+fn emoji_button(ui: &mut egui::Ui, emoji: &str, theme: &MacosTokens) -> egui::Response {
     ui.add(
         egui::Button::new(egui::RichText::new(emoji).size(20.0))
-            .fill(TIEZ_ROW)
-            .stroke(egui::Stroke::new(1.0, BORDER_DARK))
+            .fill(theme.history_bg)
+            .stroke(egui::Stroke::new(1.0, theme.border))
             .rounding(egui::Rounding::same(10.0))
             .min_size(egui::vec2(34.0, 34.0)),
     )
 }
 
-fn toolbar_button(ui: &mut egui::Ui, label: &str, tooltip: &str) -> egui::Response {
+fn toolbar_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    tooltip: &str,
+    theme: &MacosTokens,
+) -> egui::Response {
     let response = if let Some(icon) = ToolbarIcon::from_label(label) {
-        vector_toolbar_button(ui, icon)
+        vector_toolbar_button(ui, icon, theme)
     } else {
         ui.add(
             egui::Button::new(egui::RichText::new(label).size(16.0))
                 .min_size(egui::vec2(32.0, 32.0))
-                .fill(CARD_ACTIVE)
-                .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(88, 91, 103)))
+                .fill(theme.history_selected)
+                .stroke(egui::Stroke::new(2.0, theme.border))
                 .rounding(egui::Rounding::same(10.0)),
         )
     };
@@ -2966,6 +3822,7 @@ enum ToolbarIcon {
     Clear,
     Pin,
     Unpin,
+    Open,
     Dev,
 }
 
@@ -2979,35 +3836,80 @@ impl ToolbarIcon {
             "⌫" | "清" => Some(Self::Clear),
             "📌" | "⚐" => Some(Self::Pin),
             "📍" | "⚑" => Some(Self::Unpin),
+            "↗" | "打开" => Some(Self::Open),
             "DEV" => Some(Self::Dev),
             _ => None,
         }
     }
 }
 
-fn vector_toolbar_button(ui: &mut egui::Ui, icon: ToolbarIcon) -> egui::Response {
-    let desired_size = egui::vec2(34.0, 34.0);
+fn vector_toolbar_button(
+    ui: &mut egui::Ui,
+    icon: ToolbarIcon,
+    theme: &MacosTokens,
+) -> egui::Response {
+    let desired_size = egui::vec2(TOOLBAR_BUTTON_SIZE, TOOLBAR_BUTTON_SIZE);
     let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    paint_icon_button(
+        ui,
+        rect,
+        &response,
+        icon,
+        theme.fg,
+        theme.card_hover,
+        egui::Stroke::new(1.0, theme.border),
+        10.0,
+        7.0,
+    );
+    response
+}
+
+fn action_bar_button(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    rect: egui::Rect,
+    icon: ToolbarIcon,
+    icon_color: egui::Color32,
+    hover_bg: egui::Color32,
+) -> egui::Response {
+    let response = ui.interact(rect, id, egui::Sense::click());
+    paint_icon_button(
+        ui,
+        rect,
+        &response,
+        icon,
+        icon_color,
+        hover_bg,
+        egui::Stroke::new(1.0, scale_alpha(icon_color, 0.18)),
+        7.0,
+        2.0,
+    );
+    response
+}
+
+fn paint_icon_button(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    response: &egui::Response,
+    icon: ToolbarIcon,
+    icon_color: egui::Color32,
+    hover_bg: egui::Color32,
+    border: egui::Stroke,
+    rounding: f32,
+    padding: f32,
+) {
     if ui.is_rect_visible(rect) {
-        let fill = if response.hovered() {
-            egui::Color32::from_rgb(55, 58, 66)
+        let fill = if response.is_pointer_button_down_on() {
+            scale_alpha(hover_bg, 1.35)
+        } else if response.hovered() {
+            hover_bg
         } else {
             egui::Color32::TRANSPARENT
         };
-        ui.painter().rect(
-            rect,
-            egui::Rounding::same(10.0),
-            fill,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(76, 80, 92)),
-        );
-        paint_toolbar_icon(
-            ui.painter(),
-            rect.shrink(7.0),
-            icon,
-            egui::Color32::from_rgb(245, 245, 247),
-        );
+        ui.painter()
+            .rect(rect, egui::Rounding::same(rounding), fill, border);
+        paint_toolbar_icon(ui.painter(), rect.shrink(padding), icon, icon_color);
     }
-    response
 }
 
 fn paint_toolbar_icon(
@@ -3105,6 +4007,28 @@ fn paint_toolbar_icon(
                 );
             }
         }
+        ToolbarIcon::Open => {
+            painter.rect_stroke(
+                egui::Rect::from_min_max(
+                    egui::pos2(l + 3.0, t + 7.0),
+                    egui::pos2(r - 7.0, b - 3.0),
+                ),
+                egui::Rounding::same(2.0),
+                stroke,
+            );
+            painter.line_segment(
+                [egui::pos2(l + 8.0, t + 5.0), egui::pos2(r - 3.0, t + 5.0)],
+                stroke,
+            );
+            painter.line_segment(
+                [egui::pos2(r - 3.0, t + 5.0), egui::pos2(r - 3.0, b - 8.0)],
+                stroke,
+            );
+            painter.line_segment(
+                [egui::pos2(r - 4.0, t + 6.0), egui::pos2(l + 8.0, b - 6.0)],
+                stroke,
+            );
+        }
         ToolbarIcon::Dev => {
             painter.line_segment(
                 [egui::pos2(l + 4.0, c.y), egui::pos2(l + 9.0, t + 5.0)],
@@ -3133,10 +4057,11 @@ fn paint_toolbar_icon(
     }
 }
 
-fn kind_badge(ui: &mut egui::Ui, label: &str) {
+fn kind_badge(ui: &mut egui::Ui, label: &str, theme: &MacosTokens) {
+    let label = clipped_chip_label(label, 12);
     egui::Frame::none()
-        .fill(egui::Color32::from_rgb(55, 58, 68))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(78, 82, 94)))
+        .fill(theme.card)
+        .stroke(egui::Stroke::new(1.0, theme.border))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
             left: 7.0,
@@ -3149,18 +4074,15 @@ fn kind_badge(ui: &mut egui::Ui, label: &str) {
                 egui::RichText::new(label)
                     .size(11.0)
                     .italics()
-                    .color(TEXT_MUTED),
+                    .color(theme.muted),
             );
         });
 }
 
-fn sensitive_badge(ui: &mut egui::Ui) {
+fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
     egui::Frame::none()
-        .fill(egui::Color32::from_rgb(73, 72, 223))
-        .stroke(egui::Stroke::new(
-            1.0,
-            egui::Color32::from_rgb(106, 102, 255),
-        ))
+        .fill(theme.sensitive_bg)
+        .stroke(egui::Stroke::new(1.0, theme.sensitive))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
             left: 8.0,
@@ -3178,16 +4100,25 @@ fn sensitive_badge(ui: &mut egui::Ui) {
         });
 }
 
-fn thumbnail_placeholder(ui: &mut egui::Ui, label: &str) {
+fn clipped_chip_label(label: &str, max_chars: usize) -> String {
+    let char_count = label.chars().count();
+    if char_count <= max_chars {
+        return label.to_string();
+    }
+    let keep = max_chars.saturating_sub(1);
+    format!("{}…", label.chars().take(keep).collect::<String>())
+}
+
+fn thumbnail_placeholder(ui: &mut egui::Ui, label: &str, theme: &MacosTokens) {
     egui::Frame::none()
-        .fill(egui::Color32::from_rgb(29, 31, 37))
-        .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(65, 68, 78)))
+        .fill(theme.data_bg)
+        .stroke(egui::Stroke::new(2.0, theme.data_border))
         .rounding(egui::Rounding::same(12.0))
         .inner_margin(egui::Margin::same(10.0))
         .show(ui, |ui| {
             ui.set_min_size(egui::vec2(64.0, 46.0));
             ui.centered_and_justified(|ui| {
-                ui.label(egui::RichText::new(label).size(12.0).color(TEXT_MUTED));
+                ui.label(egui::RichText::new(label).size(12.0).color(theme.muted));
             });
         });
 }
@@ -3259,24 +4190,24 @@ fn masked_preview(value: &str) -> String {
     format!("{prefix}...  ({chars} 字符)")
 }
 
-fn stat_grid(ui: &mut egui::Ui, entry: &ClipboardEntry) {
+fn stat_grid(ui: &mut egui::Ui, entry: &ClipboardEntry, theme: &MacosTokens) {
     egui::Grid::new("entry_stats")
         .num_columns(2)
         .spacing([16.0, 8.0])
         .show(ui, |ui| {
-            muted(ui, "来源");
+            muted(ui, "来源", theme);
             ui.label(&entry.source_app);
             ui.end_row();
-            muted(ui, "时间");
+            muted(ui, "时间", theme);
             ui.label(entry.formatted_time());
             ui.end_row();
-            muted(ui, "使用次数");
+            muted(ui, "使用次数", theme);
             ui.label(entry.use_count.to_string());
             ui.end_row();
-            muted(ui, "字符数");
+            muted(ui, "字符数", theme);
             ui.label(entry.content.chars().count().to_string());
             ui.end_row();
-            muted(ui, "状态");
+            muted(ui, "状态", theme);
             ui.label(if entry.is_pinned {
                 "已置顶"
             } else {
@@ -3286,14 +4217,58 @@ fn stat_grid(ui: &mut egui::Ui, entry: &ClipboardEntry) {
         });
 }
 
-fn muted(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).color(TEXT_MUTED));
+fn muted(ui: &mut egui::Ui, text: &str, theme: &MacosTokens) {
+    ui.label(egui::RichText::new(text).color(theme.muted));
 }
 
-fn empty_state(ui: &mut egui::Ui, title: &str, body: &str) {
+fn empty_state(ui: &mut egui::Ui, title: &str, body: &str, theme: &MacosTokens) {
     ui.vertical_centered_justified(|ui| {
         ui.add_space(80.0);
         ui.label(egui::RichText::new(title).size(18.0).strong());
-        ui.label(egui::RichText::new(body).color(TEXT_MUTED));
+        ui.label(egui::RichText::new(body).color(theme.muted));
     });
+}
+
+fn resolve_theme(color_mode: &str) -> MacosTokens {
+    match color_mode {
+        "light" => MacosTokens::light(),
+        "dark" => MacosTokens::dark(),
+        _ => detect_system_theme(),
+    }
+}
+
+fn detect_system_theme() -> MacosTokens {
+    // Try GNOME/gsettings color-scheme
+    if let Ok(output) = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output()
+    {
+        if let Ok(text) = String::from_utf8(output.stdout) {
+            let lower = text.to_ascii_lowercase();
+            if lower.contains("prefer-light") {
+                return MacosTokens::light();
+            }
+            if lower.contains("prefer-dark") {
+                return MacosTokens::dark();
+            }
+        }
+    }
+    // Try GTK theme name
+    if let Ok(output) = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
+        .output()
+    {
+        if let Ok(text) = String::from_utf8(output.stdout) {
+            let lower = text.to_ascii_lowercase();
+            if lower.contains("dark") {
+                return MacosTokens::dark();
+            }
+            // Non-dark GTK theme suggests light mode
+            if !lower.is_empty() && !lower.contains("default") {
+                return MacosTokens::light();
+            }
+        }
+    }
+    // Default to dark
+    MacosTokens::dark()
 }

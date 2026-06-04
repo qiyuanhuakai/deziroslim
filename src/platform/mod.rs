@@ -3,6 +3,7 @@ mod linux;
 #[cfg(target_os = "windows")]
 mod windows;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct PlatformCapabilities {
     pub active_window: &'static str,
@@ -96,15 +97,13 @@ impl HotkeyUpdateHandle {
 
 #[cfg(target_os = "linux")]
 pub use linux::{
-    active_app_name, capabilities, discover_apps_for_mime, platform_note, simulate_paste,
-    start_hotkey_listener,
+    active_app_name, discover_apps_for_mime, platform_note, simulate_paste, start_hotkey_listener,
 };
 #[cfg(target_os = "linux")]
 pub use linux::{mouse_position, screen_geometry, start_tray};
 #[cfg(target_os = "windows")]
 pub use windows::{
-    active_app_name, capabilities, discover_apps_for_mime, platform_note, simulate_paste,
-    start_hotkey_listener,
+    active_app_name, discover_apps_for_mime, platform_note, simulate_paste, start_hotkey_listener,
 };
 #[cfg(target_os = "windows")]
 pub use windows::{mouse_position, screen_geometry, start_tray};
@@ -120,6 +119,7 @@ pub fn platform_note() -> &'static str {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+#[allow(dead_code)]
 pub fn capabilities() -> PlatformCapabilities {
     PlatformCapabilities {
         active_window: "通用占位",
