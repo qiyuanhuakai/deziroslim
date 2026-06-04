@@ -4,10 +4,12 @@ use crate::platform::{
     ScreenGeometry, TrayHandle,
 };
 use crossbeam_channel::Sender;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
 use x11rb::connection::Connection;
@@ -23,6 +25,55 @@ x11rb::atom_manager! {
         WM_NAME,
         UTF8_STRING,
     }
+}
+
+/// Cached X11 connection state shared across calls on the same thread.
+///
+/// `x11rb::connect(None)` opens a fresh socket per call which is wasteful when
+/// every mouse-pointer query re-handshakes. We keep one connection alive per
+/// thread (UI thread, clipboard watcher, paste worker) and reconnect only
+/// when an I/O call fails.
+struct SharedX11 {
+    conn: Rc<x11rb::rust_connection::RustConnection>,
+    screen_num: usize,
+}
+
+thread_local! {
+    static X11_SHARED: RefCell<Option<SharedX11>> = const { RefCell::new(None) };
+}
+
+fn ensure_x11_shared() -> Option<()> {
+    X11_SHARED.with(|cell| {
+        if cell.borrow().is_some() {
+            return Some(());
+        }
+        let (conn, screen_num) = x11rb::connect(None).ok()?;
+        *cell.borrow_mut() = Some(SharedX11 {
+            conn: Rc::new(conn),
+            screen_num,
+        });
+        Some(())
+    })
+}
+
+fn x11_connection() -> Option<Rc<x11rb::rust_connection::RustConnection>> {
+    ensure_x11_shared()?;
+    X11_SHARED.with(|cell| cell.borrow().as_ref().map(|s| Rc::clone(&s.conn)))
+}
+
+fn x11_screen_num() -> Option<usize> {
+    ensure_x11_shared()?;
+    X11_SHARED.with(|cell| cell.borrow().as_ref().map(|s| s.screen_num))
+}
+
+/// Drop the cached connection so the next call re-establishes it.
+///
+/// Called when an X11 I/O call fails to recover from a dropped server socket
+/// (e.g. X server restart, screen locked for too long).
+fn reset_x11_connection() {
+    X11_SHARED.with(|cell| {
+        *cell.borrow_mut() = None;
+    });
 }
 
 pub fn active_app_name() -> String {
@@ -90,7 +141,8 @@ pub fn start_tray(
 }
 
 pub fn screen_size() -> Option<(f32, f32)> {
-    let (conn, screen_num) = x11rb::connect(None).ok()?;
+    let conn = x11_connection()?;
+    let screen_num = x11_screen_num()?;
     let screen = &conn.setup().roots[screen_num];
     Some((
         screen.width_in_pixels as f32,
@@ -99,9 +151,22 @@ pub fn screen_size() -> Option<(f32, f32)> {
 }
 
 pub fn mouse_position() -> Option<(f32, f32)> {
-    let (conn, screen_num) = x11rb::connect(None).ok()?;
+    let conn = x11_connection()?;
+    let screen_num = x11_screen_num()?;
     let screen = &conn.setup().roots[screen_num];
-    let reply = conn.query_pointer(screen.root).ok()?.reply().ok()?;
+    let reply = match conn.query_pointer(screen.root) {
+        Ok(cookie) => match cookie.reply() {
+            Ok(reply) => reply,
+            Err(_) => {
+                reset_x11_connection();
+                return None;
+            }
+        },
+        Err(_) => {
+            reset_x11_connection();
+            return None;
+        }
+    };
     Some((reply.root_x as f32, reply.root_y as f32))
 }
 
@@ -306,7 +371,21 @@ fn executable_from_exec(exec: &str) -> Option<String> {
         .filter(|token| !token.is_empty())
 }
 
+/// Non-blocking: dispatches the xdotool work to a worker thread so the UI
+/// thread is not stalled for the 5-200ms the paste takes. The result of the
+/// paste is intentionally discarded — the caller cannot observe it from the
+/// UI thread, and any xdotool error is dropped.
 pub fn simulate_paste(prefer_formatted: bool, method: PasteMethod) -> Result<(), String> {
+    thread::Builder::new()
+        .name("simulate-paste".to_string())
+        .spawn(move || {
+            let _ = run_simulate_paste(prefer_formatted, method);
+        })
+        .map_err(|err| format!("启动模拟粘贴线程失败: {err}"))?;
+    Ok(())
+}
+
+fn run_simulate_paste(prefer_formatted: bool, method: PasteMethod) -> Result<(), String> {
     release_active_modifiers();
     let key = match method {
         PasteMethod::Auto => {
@@ -815,14 +894,27 @@ fn tray_icon_pixmap() -> ksni::Icon {
 }
 
 fn active_window_title() -> Option<String> {
-    let (conn, screen_num) = x11rb::connect(None).ok()?;
+    let conn = x11_connection()?;
+    let screen_num = x11_screen_num()?;
     let screen = &conn.setup().roots[screen_num];
-    let atoms = Atoms::new(&conn).ok()?.reply().ok()?;
-    let active_window = read_window_property(&conn, screen.root, atoms._NET_ACTIVE_WINDOW)?;
+    let atoms = match Atoms::new(conn.as_ref()).ok()?.reply() {
+        Ok(atoms) => atoms,
+        Err(_) => {
+            reset_x11_connection();
+            return None;
+        }
+    };
+    let active_window = read_window_property(conn.as_ref(), screen.root, atoms._NET_ACTIVE_WINDOW)?;
 
-    read_string_property(&conn, active_window, atoms._NET_WM_NAME, atoms.UTF8_STRING).or_else(
-        || read_string_property(&conn, active_window, atoms.WM_NAME, AtomEnum::STRING.into()),
-    )
+    read_string_property(conn.as_ref(), active_window, atoms._NET_WM_NAME, atoms.UTF8_STRING)
+        .or_else(|| {
+            read_string_property(
+                conn.as_ref(),
+                active_window,
+                atoms.WM_NAME,
+                AtomEnum::STRING.into(),
+            )
+        })
 }
 
 fn read_window_property<C: Connection>(conn: &C, window: Window, atom: u32) -> Option<Window> {
