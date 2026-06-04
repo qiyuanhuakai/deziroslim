@@ -906,7 +906,7 @@ fn active_window_title() -> Option<String> {
     };
     let active_window = read_window_property(conn.as_ref(), screen.root, atoms._NET_ACTIVE_WINDOW)?;
 
-    read_string_property(
+    let result = read_string_property(
         conn.as_ref(),
         active_window,
         atoms._NET_WM_NAME,
@@ -919,7 +919,11 @@ fn active_window_title() -> Option<String> {
             atoms.WM_NAME,
             AtomEnum::STRING.into(),
         )
-    })
+    });
+    if result.is_none() {
+        reset_x11_connection();
+    }
+    result
 }
 
 fn read_window_property<C: Connection>(conn: &C, window: Window, atom: u32) -> Option<Window> {

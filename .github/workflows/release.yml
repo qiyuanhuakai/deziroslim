@@ -94,7 +94,7 @@ jobs:
           path: |
             /var/lib/gems
             /usr/local/bin/fpm
-          key: fpm-ubuntu-24.04
+          key: fpm-${{ runner.os }}-${{ matrix.arch }}
 
       - name: Install fpm
         if: steps.cache-fpm.outputs.cache-hit != 'true'

@@ -2189,9 +2189,7 @@ impl ClipboardApp {
                 },
                 CardAction::Open => {
                     self.select_entry(entry_id);
-                    if let Some(summary) = self.entries.iter().find(|e| e.id == entry_id).cloned() {
-                        self.open_entry(&summary);
-                    }
+                    self.open_entry(entry);
                 }
                 CardAction::Delete => {
                     self.full_entry_cache.borrow_mut().invalidate(entry_id);

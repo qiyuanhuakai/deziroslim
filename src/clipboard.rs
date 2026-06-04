@@ -89,14 +89,16 @@ fn watch_loop(sender: Sender<ClipboardEvent>) {
                     .collect::<Vec<_>>();
                 let fingerprint = string_fingerprint(&paths.join("\n"));
                 if !paths.is_empty() && fingerprint != last_file_fingerprint {
-                    last_file_fingerprint = fingerprint;
-                    last_seen.clear();
-                    last_image_fingerprint.clear();
-                    last_html_fingerprint.clear();
-                    if let Some(entry) =
-                        ClipboardEntry::captured_files(paths, platform::active_app_name())
-                    {
-                        let _ = sender.try_send(ClipboardEvent::Captured(entry));
+                    let entry = ClipboardEntry::captured_files(paths, platform::active_app_name());
+                    let sent_or_skipped = match entry {
+                        Some(e) => sender.try_send(ClipboardEvent::Captured(e)).is_ok(),
+                        None => true,
+                    };
+                    if sent_or_skipped {
+                        last_file_fingerprint = fingerprint;
+                        last_seen.clear();
+                        last_image_fingerprint.clear();
+                        last_html_fingerprint.clear();
                     }
                 }
             } else if let Ok(html) = clipboard.get().html() {
@@ -104,45 +106,54 @@ fn watch_loop(sender: Sender<ClipboardEvent>) {
                 let text = clipboard.get_text().unwrap_or_default();
                 let fingerprint = string_fingerprint(&(text.clone() + "\u{1f}" + &html));
                 if !html.trim().is_empty() && fingerprint != last_html_fingerprint {
-                    last_html_fingerprint = fingerprint;
-                    last_seen.clear();
-                    last_image_fingerprint.clear();
-                    last_file_fingerprint.clear();
-                    if let Some(entry) =
-                        ClipboardEntry::captured_rich_text(text, html, platform::active_app_name())
-                    {
-                        let _ = sender.try_send(ClipboardEvent::Captured(entry));
+                    let entry =
+                        ClipboardEntry::captured_rich_text(text, html, platform::active_app_name());
+                    let sent_or_skipped = match entry {
+                        Some(e) => sender.try_send(ClipboardEvent::Captured(e)).is_ok(),
+                        None => true,
+                    };
+                    if sent_or_skipped {
+                        last_html_fingerprint = fingerprint;
+                        last_seen.clear();
+                        last_image_fingerprint.clear();
+                        last_file_fingerprint.clear();
                     }
                 }
             } else if let Ok(image) = clipboard.get_image() {
                 handled = true;
                 let fingerprint = image_fingerprint(image.width, image.height, &image.bytes);
-                if !fingerprint.is_empty() && fingerprint != last_image_fingerprint {
-                    last_image_fingerprint = fingerprint;
-                    last_file_fingerprint.clear();
-                    last_html_fingerprint.clear();
-                    if let Some(data_url) =
+                if !fingerprint.is_empty()
+                    && fingerprint != last_image_fingerprint
+                    && let Some(data_url) =
                         image_to_png_data_url(image.width, image.height, image.bytes.as_ref())
-                    {
+                {
+                    let entry =
+                        ClipboardEntry::captured_image(data_url, platform::active_app_name());
+                    let sent_or_skipped = match entry {
+                        Some(e) => sender.try_send(ClipboardEvent::Captured(e)).is_ok(),
+                        None => true,
+                    };
+                    if sent_or_skipped {
+                        last_image_fingerprint = fingerprint;
                         last_seen.clear();
-                        if let Some(entry) =
-                            ClipboardEntry::captured_image(data_url, platform::active_app_name())
-                        {
-                            let _ = sender.try_send(ClipboardEvent::Captured(entry));
-                        }
+                        last_file_fingerprint.clear();
+                        last_html_fingerprint.clear();
                     }
                 }
             } else if let Ok(text) = clipboard.get_text() {
                 handled = true;
                 if text != last_seen {
-                    last_seen = text.clone();
-                    last_image_fingerprint.clear();
-                    last_file_fingerprint.clear();
-                    last_html_fingerprint.clear();
-                    if let Some(entry) =
-                        ClipboardEntry::captured_text(text, platform::active_app_name())
-                    {
-                        let _ = sender.try_send(ClipboardEvent::Captured(entry));
+                    let entry =
+                        ClipboardEntry::captured_text(text.clone(), platform::active_app_name());
+                    let sent_or_skipped = match entry {
+                        Some(e) => sender.try_send(ClipboardEvent::Captured(e)).is_ok(),
+                        None => true,
+                    };
+                    if sent_or_skipped {
+                        last_seen = text;
+                        last_image_fingerprint.clear();
+                        last_file_fingerprint.clear();
+                        last_html_fingerprint.clear();
                     }
                 }
             }

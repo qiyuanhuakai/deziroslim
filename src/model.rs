@@ -66,30 +66,20 @@ pub fn looks_sensitive_with_rules(
 
     for kind in enabled_kinds {
         match *kind {
-            "phone" => {
-                if phone_re().is_match(text) {
-                    return true;
-                }
+            "phone" if phone_re().is_match(text) => {
+                return true;
             }
-            "idcard" => {
-                if idcard_re().is_match(text) {
-                    return true;
-                }
+            "idcard" if idcard_re().is_match(text) => {
+                return true;
             }
-            "email" => {
-                if email_re().is_match(text) {
-                    return true;
-                }
+            "email" if email_re().is_match(text) => {
+                return true;
             }
-            "secret" => {
-                if secret_re().is_match(text) {
-                    return true;
-                }
+            "secret" if secret_re().is_match(text) => {
+                return true;
             }
-            "password" => {
-                if is_password_like(text) {
-                    return true;
-                }
+            "password" if is_password_like(text) => {
+                return true;
             }
             _ => {}
         }
@@ -518,7 +508,7 @@ fn looks_like_code(value: &str) -> bool {
     score >= 2
 }
 
-fn looks_sensitive(value: &str) -> bool {
+pub(crate) fn looks_sensitive(value: &str) -> bool {
     const DEFAULT_KINDS: &[&str] = &["phone", "idcard", "email", "secret", "password"];
     looks_sensitive_with_rules(value, DEFAULT_KINDS, &[])
 }

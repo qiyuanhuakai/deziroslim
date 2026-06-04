@@ -144,6 +144,38 @@ impl Storage {
             "sensitive",
             "INTEGER NOT NULL DEFAULT 0",
         )?;
+        let backfill_done: bool = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'migration.sensitive_backfill_v1'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .map(|v| v == "1")
+            .unwrap_or(false);
+        if !backfill_done {
+            conn.execute(
+                "UPDATE clipboard_history
+                 SET sensitive = 1
+                 WHERE sensitive = 0
+                   AND content_type IN ('text', 'url', 'code', 'rich_text')
+                   AND (
+                     content LIKE '%@%'
+                     OR lower(content) LIKE '%password%'
+                     OR lower(content) LIKE '%secret%'
+                     OR lower(content) LIKE '%token%'
+                   )",
+                [],
+            )?;
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)",
+                params![
+                    "migration.sensitive_backfill_v1",
+                    "1",
+                    Local::now().timestamp_millis()
+                ],
+            )?;
+        }
         conn.execute(
             "INSERT OR IGNORE INTO saved_tags (name, color) VALUES (?1, ?2), (?3, ?4)",
             params!["sensitive", "#4f46e5", "密码", "#dc2626"],
@@ -374,6 +406,32 @@ impl Storage {
                 params![tag, "#4f46e5"],
             )?;
         }
+        // Recompute cached sensitive so UI masking tracks the tag set.
+        let (content, content_type): (String, String) = tx
+            .query_row(
+                "SELECT content, content_type FROM clipboard_history WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?
+            .unwrap_or_default();
+        let kind = ClipboardKind::from(content_type.as_str());
+        let tagged_sensitive = tags.iter().any(|tag| {
+            let tag = tag.to_ascii_lowercase();
+            tag == "sensitive" || tag == "密码" || tag == "password" || tag == "secret"
+        });
+        let content_sensitive = matches!(
+            kind,
+            ClipboardKind::Text
+                | ClipboardKind::Url
+                | ClipboardKind::Code
+                | ClipboardKind::RichText
+        ) && crate::model::looks_sensitive(&content);
+        let is_sensitive = (tagged_sensitive || content_sensitive) as i64;
+        tx.execute(
+            "UPDATE clipboard_history SET sensitive = ?1 WHERE id = ?2",
+            params![is_sensitive, id],
+        )?;
         tx.commit()?;
         Ok(())
     }
