@@ -305,10 +305,7 @@ impl Storage {
                 timestamp, preview, is_pinned, use_count, is_external, pinned_order
              FROM clipboard_history WHERE id = ?1",
         )?;
-        let mut entry = match stmt
-            .query_row(params![id], row_to_entry)
-            .optional()?
-        {
+        let mut entry = match stmt.query_row(params![id], row_to_entry).optional()? {
             Some(entry) => entry,
             None => return Ok(None),
         };
@@ -531,16 +528,12 @@ fn build_where_clause(
     (sql, values)
 }
 
-fn fetch_tags_batch(
-    conn: &Connection,
-    ids: &[i64],
-) -> Result<HashMap<i64, Vec<String>>> {
+fn fetch_tags_batch(conn: &Connection, ids: &[i64]) -> Result<HashMap<i64, Vec<String>>> {
     let mut tags_by_id: HashMap<i64, Vec<String>> = HashMap::new();
     if ids.is_empty() {
         return Ok(tags_by_id);
     }
-    let placeholders = std::iter::repeat("?")
-        .take(ids.len())
+    let placeholders = std::iter::repeat_n("?", ids.len())
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
@@ -977,9 +970,8 @@ mod tests {
     #[test]
     fn list_summaries_filtered_persists_sensitive_flag() {
         let storage = temp_storage();
-        let entry =
-            ClipboardEntry::captured_text("13812345678".to_string(), "test".to_string())
-                .expect("valid entry");
+        let entry = ClipboardEntry::captured_text("13812345678".to_string(), "test".to_string())
+            .expect("valid entry");
         storage.save_entry(&entry).expect("save");
 
         let summaries = storage

@@ -268,14 +268,14 @@ pub fn discover_apps_for_mime(mime: &str) -> Vec<AppChoice> {
         .filter(|value| !value.is_empty());
     let desktop_entries = scan_desktop_entries();
     let mut choices = Vec::new();
-    if let Some(default_id) = default_id.as_deref() {
-        if let Some(choice) = desktop_entries.get(default_id) {
-            choices.push(AppChoice {
-                name: format!("系统默认：{}", choice.name),
-                command: choice.command.clone(),
-                is_default: true,
-            });
-        }
+    if let Some(default_id) = default_id.as_deref()
+        && let Some(choice) = desktop_entries.get(default_id)
+    {
+        choices.push(AppChoice {
+            name: format!("系统默认：{}", choice.name),
+            command: choice.command.clone(),
+            is_default: true,
+        });
     }
     let mut seen = choices
         .iter()
@@ -864,16 +864,16 @@ fn tray_icon_pixmap() -> ksni::Icon {
     let mut data = Vec::with_capacity(width * height * 4);
     for y in 0..height {
         for x in 0..width {
-            let in_round = x >= 2 && x <= 29 && y >= 2 && y <= 29;
+            let in_round = (2..=29).contains(&x) && (2..=29).contains(&y);
             let navy = (31, 58, 95);
             let accent = (72, 123, 219);
-            let on_mark = (x >= 9 && x <= 22 && (y == 8 || y == 23))
-                || (y >= 8 && y <= 23 && (x == 9 || x == 22))
-                || (x >= 13 && x <= 18 && (y == 5 || y == 6))
-                || (y >= 11 && y <= 20 && (x == 15 || x == 16))
-                || (y == 20 && x >= 12 && x <= 19)
-                || (x >= 18 && x <= 23 && y >= 11 && y <= 16 && x + y >= 33);
-            let on_slim = y == 26 && x >= 10 && x <= 21;
+            let on_mark = ((9..=22).contains(&x) && (y == 8 || y == 23))
+                || ((8..=23).contains(&y) && (x == 9 || x == 22))
+                || ((13..=18).contains(&x) && (y == 5 || y == 6))
+                || ((11..=20).contains(&y) && (x == 15 || x == 16))
+                || (y == 20 && (12..=19).contains(&x))
+                || ((18..=23).contains(&x) && (11..=16).contains(&y) && x + y >= 33);
+            let on_slim = y == 26 && (10..=21).contains(&x);
             let (a, r, g, b) = if on_mark {
                 (255, navy.0, navy.1, navy.2)
             } else if on_slim {
@@ -906,15 +906,20 @@ fn active_window_title() -> Option<String> {
     };
     let active_window = read_window_property(conn.as_ref(), screen.root, atoms._NET_ACTIVE_WINDOW)?;
 
-    read_string_property(conn.as_ref(), active_window, atoms._NET_WM_NAME, atoms.UTF8_STRING)
-        .or_else(|| {
-            read_string_property(
-                conn.as_ref(),
-                active_window,
-                atoms.WM_NAME,
-                AtomEnum::STRING.into(),
-            )
-        })
+    read_string_property(
+        conn.as_ref(),
+        active_window,
+        atoms._NET_WM_NAME,
+        atoms.UTF8_STRING,
+    )
+    .or_else(|| {
+        read_string_property(
+            conn.as_ref(),
+            active_window,
+            atoms.WM_NAME,
+            AtomEnum::STRING.into(),
+        )
+    })
 }
 
 fn read_window_property<C: Connection>(conn: &C, window: Window, atom: u32) -> Option<Window> {

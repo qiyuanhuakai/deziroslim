@@ -6,7 +6,7 @@ use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -108,11 +108,9 @@ fn watch_loop(sender: Sender<ClipboardEvent>) {
                     last_seen.clear();
                     last_image_fingerprint.clear();
                     last_file_fingerprint.clear();
-                    if let Some(entry) = ClipboardEntry::captured_rich_text(
-                        text,
-                        html,
-                        platform::active_app_name(),
-                    ) {
+                    if let Some(entry) =
+                        ClipboardEntry::captured_rich_text(text, html, platform::active_app_name())
+                    {
                         let _ = sender.try_send(ClipboardEvent::Captured(entry));
                     }
                 }
@@ -127,10 +125,9 @@ fn watch_loop(sender: Sender<ClipboardEvent>) {
                         image_to_png_data_url(image.width, image.height, image.bytes.as_ref())
                     {
                         last_seen.clear();
-                        if let Some(entry) = ClipboardEntry::captured_image(
-                            data_url,
-                            platform::active_app_name(),
-                        ) {
+                        if let Some(entry) =
+                            ClipboardEntry::captured_image(data_url, platform::active_app_name())
+                        {
                             let _ = sender.try_send(ClipboardEvent::Captured(entry));
                         }
                     }
@@ -210,7 +207,7 @@ fn set_file_list_with_xclip(paths: &[PathBuf]) -> Result<(), String> {
         "copy\n{}\n",
         paths
             .iter()
-            .map(path_to_file_uri)
+            .map(|p| path_to_file_uri(p))
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -251,7 +248,7 @@ fn set_file_list_with_xclip(paths: &[PathBuf]) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
-fn path_to_file_uri(path: &PathBuf) -> String {
+fn path_to_file_uri(path: &Path) -> String {
     let path = path.to_string_lossy();
     format!("file://{}", percent_encode_uri_path(&path))
 }
@@ -283,12 +280,13 @@ fn percent_decode(value: &str) -> String {
     let mut output = Vec::with_capacity(bytes.len());
     let mut index = 0;
     while index < bytes.len() {
-        if bytes[index] == b'%' && index + 2 < bytes.len() {
-            if let Ok(hex) = u8::from_str_radix(&value[index + 1..index + 3], 16) {
-                output.push(hex);
-                index += 3;
-                continue;
-            }
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let Ok(hex) = u8::from_str_radix(&value[index + 1..index + 3], 16)
+        {
+            output.push(hex);
+            index += 3;
+            continue;
         }
         output.push(bytes[index]);
         index += 1;
@@ -401,8 +399,10 @@ mod tests {
     #[test]
     fn bounded_channel_rejects_when_full() {
         let (tx, rx) = bounded::<ClipboardEvent>(2);
-        tx.try_send(ClipboardEvent::ToggleWindow).expect("first send");
-        tx.try_send(ClipboardEvent::FocusSearch).expect("second send");
+        tx.try_send(ClipboardEvent::ToggleWindow)
+            .expect("first send");
+        tx.try_send(ClipboardEvent::FocusSearch)
+            .expect("second send");
         assert!(matches!(
             tx.try_send(ClipboardEvent::Quit),
             Err(TrySendError::Full(_))

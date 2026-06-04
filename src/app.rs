@@ -51,8 +51,8 @@ impl FullEntryCache {
     }
 
     fn insert(&mut self, id: i64, entry: ClipboardEntry) {
-        if self.map.contains_key(&id) {
-            self.map.insert(id, entry);
+        if let std::collections::hash_map::Entry::Occupied(mut e) = self.map.entry(id) {
+            e.insert(entry);
             self.order.retain(|existing| *existing != id);
             self.order.push_back(id);
             return;
@@ -109,14 +109,16 @@ enum AppPage {
     Settings,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 enum EmojiTab {
+    #[default]
     Emoji,
     Favorites,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 enum DockMode {
+    #[default]
     Off,
     Left,
     Right,
@@ -137,18 +139,6 @@ enum CardAction {
     TogglePin,
     Open,
     Delete,
-}
-
-impl Default for DockMode {
-    fn default() -> Self {
-        Self::Off
-    }
-}
-
-impl Default for EmojiTab {
-    fn default() -> Self {
-        Self::Emoji
-    }
 }
 
 const EMOJI_GROUPS: &[(&str, &[&str])] = &[
@@ -618,9 +608,7 @@ impl ClipboardApp {
             return Some(entry.clone());
         }
         let entry = self.storage.get_entry(id).ok().flatten()?;
-        self.full_entry_cache
-            .borrow_mut()
-            .insert(id, entry.clone());
+        self.full_entry_cache.borrow_mut().insert(id, entry.clone());
         Some(entry)
     }
 
@@ -1411,7 +1399,7 @@ impl ClipboardApp {
             search_hotkey: self.search_hotkey.clone(),
             hide_tray_icon: self.hide_tray_icon,
             close_to_tray: self.close_to_tray,
-            edge_docking: self.edge_docking.clone(),
+            edge_docking: self.edge_docking,
             follow_mouse: self.follow_mouse,
             default_text_app: self.default_text_app.clone(),
             default_url_app: self.default_url_app.clone(),
@@ -1863,7 +1851,7 @@ impl ClipboardApp {
                 if self.current_page == AppPage::Clipboard && self.show_search_box {
                     ui.add_space(8.0);
                     let available_width = ui.available_width().max(0.0);
-                    let content_width = available_width.min(HISTORY_MAX_WIDTH).max(120.0);
+                    let content_width = available_width.clamp(120.0, HISTORY_MAX_WIDTH);
                     let left_padding = ((available_width - content_width) / 2.0).max(0.0);
                     ui.horizontal(|ui| {
                         ui.add_space(left_padding);
@@ -1988,7 +1976,7 @@ impl ClipboardApp {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 let available_width = ui.available_width().max(0.0);
-                let content_width = available_width.min(HISTORY_MAX_WIDTH).max(120.0);
+                let content_width = available_width.clamp(120.0, HISTORY_MAX_WIDTH);
                 let left_padding = ((available_width - content_width) / 2.0).max(0.0);
                 // Detach the entries vec for the duration of the loop so the
                 // immutable borrow of self.entries does not overlap with the
@@ -2201,9 +2189,7 @@ impl ClipboardApp {
                 },
                 CardAction::Open => {
                     self.select_entry(entry_id);
-                    if let Some(summary) =
-                        self.entries.iter().find(|e| e.id == entry_id).cloned()
-                    {
+                    if let Some(summary) = self.entries.iter().find(|e| e.id == entry_id).cloned() {
                         self.open_entry(&summary);
                     }
                 }
@@ -2285,12 +2271,7 @@ impl ClipboardApp {
             return;
         };
         let Some(entry) = self.get_full_entry(summary.id) else {
-            empty_state(
-                ui,
-                "无法加载内容",
-                "条目可能已被删除。",
-                &self.theme,
-            );
+            empty_state(ui, "无法加载内容", "条目可能已被删除。", &self.theme);
             return;
         };
 
@@ -2593,7 +2574,7 @@ impl ClipboardApp {
                     });
                 });
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[0] = !expanded;
                 self.persist_preferences();
             }
@@ -2633,7 +2614,7 @@ impl ClipboardApp {
                     self.status = "正在录制搜索聚焦快捷键".to_string();
                 });
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[1] = !expanded;
                 self.persist_preferences();
             }
@@ -2704,7 +2685,7 @@ impl ClipboardApp {
                 }
                 ui.label(egui::RichText::new("当前已落地：文本、富文本 HTML、图片、文件剪贴板捕获/写回；粘贴模拟按 tiez-slim 使用 Shift+Insert/Ctrl+V。" ).color(self.theme.muted));
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[2] = !expanded;
                 self.persist_preferences();
             }
@@ -2787,7 +2768,7 @@ impl ClipboardApp {
                 }
                 ui.label("左键点击/Enter：复制并粘贴；右键点击：带格式复制并粘贴；Delete 删除；↑/↓ 切换选中。");
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[3] = !expanded;
                 self.persist_preferences();
             }
@@ -2819,7 +2800,7 @@ impl ClipboardApp {
                     self.persist_preferences();
                 }
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[4] = !expanded;
                 self.persist_preferences();
             }
@@ -2840,7 +2821,7 @@ impl ClipboardApp {
                     ui.label(egui::RichText::new("标签管理关闭时不显示标签过滤。").color(self.theme.muted));
                 }
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[5] = !expanded;
                 self.persist_preferences();
             }
@@ -3026,17 +3007,16 @@ impl ClipboardApp {
                                         )
                                         .desired_width(80.0),
                                         );
-                                        if color_response.changed() {
-                                            if let Err(err) = self
+                                        if color_response.changed()
+                                            && let Err(err) = self
                                                 .storage
                                                 .update_saved_tag_color(
                                                     sel,
                                                     &self.tag_detail_color,
                                                 )
-                                            {
-                                                self.status =
-                                                    format!("更新颜色失败: {err}");
-                                            }
+                                        {
+                                            self.status =
+                                                format!("更新颜色失败: {err}");
                                         }
                                     });
 
@@ -3083,7 +3063,7 @@ impl ClipboardApp {
                     });
                 });
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[6] = !expanded;
                 self.persist_preferences();
             }
@@ -3168,7 +3148,7 @@ impl ClipboardApp {
                     }
                 }
             });
-            if expanded != !prev {
+            if expanded == prev {
                 self.settings_panel_collapsed[7] = !expanded;
                 self.persist_preferences();
             }
@@ -4009,6 +3989,7 @@ fn action_bar_button(
     response
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_icon_button(
     ui: &mut egui::Ui,
     rect: egui::Rect,
@@ -4327,31 +4308,29 @@ fn detect_system_theme() -> MacosTokens {
     if let Ok(output) = std::process::Command::new("gsettings")
         .args(["get", "org.gnome.desktop.interface", "color-scheme"])
         .output()
+        && let Ok(text) = String::from_utf8(output.stdout)
     {
-        if let Ok(text) = String::from_utf8(output.stdout) {
-            let lower = text.to_ascii_lowercase();
-            if lower.contains("prefer-light") {
-                return MacosTokens::light();
-            }
-            if lower.contains("prefer-dark") {
-                return MacosTokens::dark();
-            }
+        let lower = text.to_ascii_lowercase();
+        if lower.contains("prefer-light") {
+            return MacosTokens::light();
+        }
+        if lower.contains("prefer-dark") {
+            return MacosTokens::dark();
         }
     }
     // Try GTK theme name
     if let Ok(output) = std::process::Command::new("gsettings")
         .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
         .output()
+        && let Ok(text) = String::from_utf8(output.stdout)
     {
-        if let Ok(text) = String::from_utf8(output.stdout) {
-            let lower = text.to_ascii_lowercase();
-            if lower.contains("dark") {
-                return MacosTokens::dark();
-            }
-            // Non-dark GTK theme suggests light mode
-            if !lower.is_empty() && !lower.contains("default") {
-                return MacosTokens::light();
-            }
+        let lower = text.to_ascii_lowercase();
+        if lower.contains("dark") {
+            return MacosTokens::dark();
+        }
+        // Non-dark GTK theme suggests light mode
+        if !lower.is_empty() && !lower.contains("default") {
+            return MacosTokens::light();
         }
     }
     // Default to dark
@@ -4363,9 +4342,8 @@ mod tests {
     use super::{ClipboardEntry, FullEntryCache};
 
     fn make_entry(id: i64, content: &str) -> ClipboardEntry {
-        let mut entry =
-            ClipboardEntry::captured_text(content.to_string(), "test".to_string())
-                .expect("valid entry");
+        let mut entry = ClipboardEntry::captured_text(content.to_string(), "test".to_string())
+            .expect("valid entry");
         entry.id = id;
         entry
     }
