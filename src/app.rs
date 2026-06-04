@@ -3155,21 +3155,22 @@ impl ClipboardApp {
             }
         }
 
-            ui.add_space(14.0);
-            ui.horizontal_centered(|ui| {
-                if ui
-                    .add(egui::Button::new("问题反馈").rounding(egui::Rounding::same(10.0)))
-                    .clicked()
-                {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let button_gap = 10.0;
+                let feedback_width = 112.0;
+                let reset_width = 150.0;
+                let total_width = feedback_width + button_gap + reset_width;
+                ui.add_space(((ui.available_width() - total_width) * 0.5).max(0.0));
+
+                if settings_footer_button(ui, "问题反馈", &self.theme, feedback_width).clicked() {
                     match open::that(APP_REPO_URL) {
                         Ok(()) => self.status = "已调用系统默认浏览器".to_string(),
                         Err(err) => self.status = format!("打开浏览器失败: {err}"),
                     }
                 }
-                if ui
-                    .add(egui::Button::new("恢复初始设置").rounding(egui::Rounding::same(10.0)))
-                    .clicked()
-                {
+                ui.add_space(button_gap);
+                if settings_footer_button(ui, "恢复初始设置", &self.theme, reset_width).clicked() {
                     let window_pinned = self.window_pinned;
                     let show_sensitive = self.show_sensitive;
                     let preferences = AppPreferences {
@@ -3180,6 +3181,7 @@ impl ClipboardApp {
                     self.apply_preferences(preferences, ctx);
                 }
             });
+            ui.add_space(6.0);
             ui.vertical_centered(|ui| {
                 ui.label(
                     egui::RichText::new(format!("{APP_DISPLAY_NAME} v{}", env!("CARGO_PKG_VERSION")))
@@ -3203,6 +3205,26 @@ fn load_preferences(storage: &Storage) -> AppPreferences {
     preferences.persistent = true;
     preferences.sound_enabled = false;
     preferences
+}
+
+fn settings_footer_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    theme: &MacosTokens,
+    width: f32,
+) -> egui::Response {
+    ui.add(
+        egui::Button::new(
+            egui::RichText::new(label)
+                .size(14.0)
+                .strong()
+                .color(theme.fg),
+        )
+        .min_size(egui::vec2(width, 34.0))
+        .fill(theme.card)
+        .stroke(egui::Stroke::new(1.0, theme.border))
+        .rounding(egui::Rounding::same(14.0)),
+    )
 }
 
 fn hotkey_config_from_preferences(preferences: &AppPreferences) -> platform::HotkeyConfig {
