@@ -3617,7 +3617,7 @@ dependencies = [
 
 [[package]]
 name = "tiez-slim-linux"
-version = "0.1.0"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "arboard",
