@@ -31,10 +31,12 @@ fn play_with_stdin(program: &str, args: &[&str], wav: &[u8]) -> bool {
     else {
         return false;
     };
-    if let Some(stdin) = child.stdin.as_mut() {
-        if stdin.write_all(wav).is_err() {
-            return false;
-        }
+    if child
+        .stdin
+        .as_mut()
+        .is_some_and(|stdin| stdin.write_all(wav).is_err())
+    {
+        return false;
     }
     child.wait().is_ok_and(|status| status.success())
 }
