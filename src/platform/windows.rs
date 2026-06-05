@@ -39,7 +39,7 @@ pub fn current_keyboard_modifiers() -> KeyboardModifiers {
 }
 
 pub fn validate_hotkey(_combo: &str) -> Result<(), String> {
-    Ok(())
+    Err("Windows 全局快捷键后端尚未实现，暂不支持保存快捷键".to_string())
 }
 
 pub fn autostart_enabled() -> Result<bool, String> {
