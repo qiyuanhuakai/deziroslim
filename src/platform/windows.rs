@@ -5,6 +5,9 @@ use crate::platform::{
     TrayHandle,
 };
 use crossbeam_channel::Sender;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+};
 
 pub fn active_app_name() -> String {
     "Windows".to_string()
@@ -35,7 +38,16 @@ pub fn start_hotkey_listener(
 }
 
 pub fn current_keyboard_modifiers() -> KeyboardModifiers {
-    KeyboardModifiers::default()
+    KeyboardModifiers {
+        ctrl: key_is_pressed(VK_CONTROL),
+        shift: key_is_pressed(VK_SHIFT),
+        alt: key_is_pressed(VK_MENU),
+        super_key: key_is_pressed(VK_LWIN) || key_is_pressed(VK_RWIN),
+    }
+}
+
+fn key_is_pressed(key: VIRTUAL_KEY) -> bool {
+    unsafe { GetAsyncKeyState(key.0 as i32) < 0 }
 }
 
 pub fn validate_hotkey(_combo: &str) -> Result<(), String> {
@@ -43,7 +55,7 @@ pub fn validate_hotkey(_combo: &str) -> Result<(), String> {
 }
 
 pub fn autostart_enabled() -> Result<bool, String> {
-    Ok(false)
+    Err("Windows 开机启动仍使用预留 Win32 后端".to_string())
 }
 
 pub fn set_autostart(_enabled: bool) -> Result<(), String> {
