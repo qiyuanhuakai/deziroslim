@@ -131,6 +131,18 @@ pub use windows::{autostart_enabled, set_autostart};
 #[cfg(target_os = "windows")]
 pub use windows::{mouse_position, screen_geometry, start_tray};
 
+#[cfg(target_os = "linux")]
+#[allow(dead_code)]
+pub fn capabilities() -> PlatformCapabilities {
+    linux::capabilities()
+}
+
+#[cfg(target_os = "windows")]
+#[allow(dead_code)]
+pub fn capabilities() -> PlatformCapabilities {
+    windows::capabilities()
+}
+
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn active_app_name() -> String {
     "Unknown".to_string()
