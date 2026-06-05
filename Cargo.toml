@@ -17,6 +17,7 @@ eframe = "0.28"
 egui = "0.28"
 egui_extras = { version = "0.28", features = ["svg"] }
 fontdb = "0.23"
+html2text = "0.17"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 regex = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
