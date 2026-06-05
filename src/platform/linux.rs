@@ -143,7 +143,7 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
         let exe = std::env::current_exe().map_err(|err| format!("读取程序路径失败: {err}"))?;
         let exec = desktop_exec_arg(&exe)?;
         let desktop = format!(
-            "[Desktop Entry]\nType=Application\nName=tiez-slim\nComment=Native clipboard manager\nExec={exec} --minimized\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nStartupNotify=false\nStartupWMClass=tiez-slim-linux\n",
+            "[Desktop Entry]\nType=Application\nName=tiez-slim\nComment=Native clipboard manager\nExec={exec}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nStartupNotify=false\nStartupWMClass=tiez-slim-linux\n",
         );
         fs::write(&path, desktop).map_err(|err| format!("写入开机启动配置失败: {err}"))?;
     } else if path.exists() {
