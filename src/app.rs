@@ -4448,8 +4448,12 @@ fn font_is_monospaced_name(name: &str) -> bool {
 }
 
 fn load_primary_font(primary_font: &str) -> Option<LoadedFont> {
-    if primary_font.trim().is_empty() {
+    let primary_font = primary_font.trim();
+    if primary_font.is_empty() {
         return load_cjk_font();
+    }
+    if primary_font == VENDORED_UNIFONT_LABEL {
+        return Some(load_vendored_unifont());
     }
     load_system_font_family(primary_font).or_else(load_cjk_font)
 }
