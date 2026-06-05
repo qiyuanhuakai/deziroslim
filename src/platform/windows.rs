@@ -1,7 +1,8 @@
 use super::PlatformCapabilities;
 use crate::clipboard::ClipboardEvent;
 use crate::platform::{
-    AppChoice, HotkeyConfig, HotkeyUpdateHandle, PasteMethod, ScreenGeometry, TrayHandle,
+    AppChoice, HotkeyConfig, HotkeyUpdateHandle, KeyboardModifiers, PasteMethod, ScreenGeometry,
+    TrayHandle,
 };
 use crossbeam_channel::Sender;
 
@@ -31,6 +32,22 @@ pub fn start_hotkey_listener(
 ) -> HotkeyUpdateHandle {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     HotkeyUpdateHandle::new(sender)
+}
+
+pub fn current_keyboard_modifiers() -> KeyboardModifiers {
+    KeyboardModifiers::default()
+}
+
+pub fn validate_hotkey(_combo: &str) -> Result<(), String> {
+    Ok(())
+}
+
+pub fn autostart_enabled() -> Result<bool, String> {
+    Ok(false)
+}
+
+pub fn set_autostart(_enabled: bool) -> Result<(), String> {
+    Err("Windows 开机启动仍使用预留 Win32 后端".to_string())
 }
 
 pub fn start_tray(
