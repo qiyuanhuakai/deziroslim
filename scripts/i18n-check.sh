@@ -38,10 +38,9 @@ if cjk:
     sys.exit(1)
 
 total = len(zh)
-# All en-US values non-empty (coverage = 100% when keys match and no CJK)
 en_nonempty = sum(1 for v in en.values() if v and v.strip())
-coverage = 100.0 if total > 0 else 0.0
-print(f'zh-CN: {total} keys, en-US: {total} keys, coverage: {coverage:.0f}%')
+coverage = (en_nonempty / total) * 100 if total > 0 else 0.0
+print(f'zh-CN: {total} keys, en-US: {en_nonempty} non-empty, coverage: {coverage:.1f}%')
 PYEOF
 
 echo "i18n check passed"

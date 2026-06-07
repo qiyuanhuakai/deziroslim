@@ -377,7 +377,7 @@ pub fn discover_apps_for_mime(mime: &str) -> Vec<AppChoice> {
     {
         choices.push(AppChoice {
             name: format!(
-                "{}：{}",
+                "{}: {}",
                 t!("settings.default_app.system_default"),
                 choice.name
             ),

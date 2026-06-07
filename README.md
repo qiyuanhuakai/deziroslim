@@ -64,7 +64,7 @@ cargo run --features devtools
 
 翻译文件位于 `locales/` 目录：
 
-```
+```text
 locales/
 ├── zh-CN.yml   # 源语言文件
 └── en-US.yml   # 英文翻译

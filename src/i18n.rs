@@ -3,15 +3,13 @@ pub use rust_i18n::t;
 
 /// Translate a key to the current locale.
 ///
-/// In debug builds, returns `[MISSING: key]` to surface untranslated keys.
-/// In release builds, performs the actual translation via `rust_i18n::t!`.
+/// Uses `rust_i18n::t!` to perform the lookup. To surface untranslated
+/// keys during development, enable the `log-miss-tr` cargo feature
+/// (bundled with `--features devtools` or `--features log-miss-tr`),
+/// which logs missing keys to stderr via env_logger.
 #[allow(dead_code)]
 pub fn tr(key: &'static str) -> String {
-    if cfg!(debug_assertions) {
-        format!("[MISSING: {key}]")
-    } else {
-        rust_i18n::t!(key).to_string()
-    }
+    rust_i18n::t!(key).to_string()
 }
 
 /// Return the currently active locale string (e.g. `"zh-CN"`, `"en-US"`).
