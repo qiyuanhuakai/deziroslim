@@ -1,3 +1,4 @@
+use crate::blacklist::AppBlacklist;
 use crate::model::{ClipboardEntry, ClipboardKind};
 use crate::platform;
 use arboard::Clipboard;
@@ -20,15 +21,16 @@ pub enum ClipboardEvent {
     PasteLatestRich,
     SequentialPaste,
     OpenSettings,
+    TogglePrivateMode,
     Quit,
     Status(String),
     Error(String),
 }
 
-pub fn start_watcher(sender: Sender<ClipboardEvent>) {
+pub fn start_watcher(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>) {
     thread::Builder::new()
         .name("clipboard-watcher".to_string())
-        .spawn(move || watch_loop(sender))
+        .spawn(move || watch_loop(sender, exclusion_patterns))
         .expect("spawn clipboard watcher");
 }
 
@@ -61,7 +63,8 @@ pub fn set_entry(entry: &ClipboardEntry, paste_with_format: bool) -> Result<(), 
     }
 }
 
-fn watch_loop(sender: Sender<ClipboardEvent>) {
+fn watch_loop(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>) {
+    let blacklist = AppBlacklist::new(exclusion_patterns);
     let mut last_seen = String::new();
     let mut last_image_fingerprint = String::new();
     let mut last_html_fingerprint = String::new();
@@ -83,6 +86,12 @@ fn watch_loop(sender: Sender<ClipboardEvent>) {
         }
         let mut handled = false;
         if let Some(clipboard) = clipboard.as_mut() {
+            if let Some(active_class) = platform::active_window_class()
+                && blacklist.is_match(&active_class)
+            {
+                thread::sleep(Duration::from_millis(700));
+                continue;
+            }
             if let Ok(paths) = clipboard.get().file_list() {
                 handled = true;
                 let paths = paths

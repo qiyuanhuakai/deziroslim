@@ -80,9 +80,9 @@ mod tests {
 
     #[test]
     fn wildcard_pattern_matches_glob() {
-        let bl = AppBlacklist::new(vec!["*password*".to_string()]);
+        let bl = AppBlacklist::new(vec!["*keepass*".to_string()]);
         assert!(bl.is_match("org.keepassxc.KeePassXC"));
-        assert!(bl.is_match("my-password-manager"));
+        assert!(bl.is_match("keepassxc"));
         assert!(!bl.is_match("org.kde.dolphin"));
     }
 
