@@ -14,6 +14,8 @@
 //! // TODO(T15): Implement action parameter substitution (Wave 1)
 //! // TODO(T16): Implement action hotkey binding (Wave 1)
 
+pub mod matcher;
+
 use serde::{Deserialize, Serialize};
 
 /// The kind of action to perform when triggered.
@@ -38,7 +40,7 @@ pub enum ActionKind {
 ///
 /// Serde uses `#[serde(default)]` on optional fields so that loading
 /// older JSON (missing new fields) never panics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Action {
     /// Unique ID (u64 unix nanoseconds for auto-generation).
     pub id: u64,

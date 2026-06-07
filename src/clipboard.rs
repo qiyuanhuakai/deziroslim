@@ -1,6 +1,8 @@
+use crate::actions::matcher::ActionMatcher;
 use crate::blacklist::AppBlacklist;
 use crate::model::{ClipboardEntry, ClipboardKind};
 use crate::platform;
+use crate::storage::Storage;
 use arboard::Clipboard;
 use crossbeam_channel::Sender;
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
@@ -33,10 +35,20 @@ pub fn start_watcher(
     sender: Sender<ClipboardEvent>,
     exclusion_patterns: Vec<String>,
     private_mode: Arc<AtomicBool>,
+    storage: Storage,
+    builtin_actions_enabled: bool,
 ) {
     thread::Builder::new()
         .name("clipboard-watcher".to_string())
-        .spawn(move || watch_loop(sender, exclusion_patterns, private_mode))
+        .spawn(move || {
+            watch_loop(
+                sender,
+                exclusion_patterns,
+                private_mode,
+                storage,
+                builtin_actions_enabled,
+            )
+        })
         .expect("spawn clipboard watcher");
 }
 
@@ -73,8 +85,15 @@ fn watch_loop(
     sender: Sender<ClipboardEvent>,
     exclusion_patterns: Vec<String>,
     private_mode: Arc<AtomicBool>,
+    storage: Storage,
+    builtin_actions_enabled: bool,
 ) {
     let blacklist = AppBlacklist::new(exclusion_patterns);
+    let action_matcher = if builtin_actions_enabled {
+        ActionMatcher::new(storage.load_actions().unwrap_or_default())
+    } else {
+        ActionMatcher::new(vec![])
+    };
     let mut last_seen = String::new();
     let mut last_image_fingerprint = String::new();
     let mut last_html_fingerprint = String::new();
@@ -179,10 +198,15 @@ fn watch_loop(
                         None => true,
                     };
                     if sent_or_skipped {
-                        last_seen = text;
+                        last_seen = text.clone();
                         last_image_fingerprint.clear();
                         last_file_fingerprint.clear();
                         last_html_fingerprint.clear();
+                        if builtin_actions_enabled
+                            && let Some(_matched) = action_matcher.find_first_match(&text)
+                        {
+                            // TODO(T13): execute matched action
+                        }
                     }
                 }
             }

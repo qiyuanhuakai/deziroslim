@@ -779,6 +779,8 @@ impl ClipboardApp {
             sender.clone(),
             preferences.app_exclusion_list.clone(),
             Arc::clone(&private_mode_flag),
+            storage.clone(),
+            preferences.builtin_actions_enabled,
         );
         let hotkey_handle = platform::start_hotkey_listener(
             sender.clone(),
