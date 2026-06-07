@@ -1,0 +1,3 @@
+# English (US) locale — minimal skeleton for rust-i18n v4
+# Full keys will be populated in Task 2+ of the i18n plan.
+_app_name: tiez-slim

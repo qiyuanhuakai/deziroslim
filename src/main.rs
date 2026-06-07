@@ -1,11 +1,14 @@
 mod app;
 mod clipboard;
 mod emoji_data;
+mod i18n;
 mod model;
 mod platform;
 mod sound;
 mod storage;
 mod ui;
+
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 use anyhow::Context;
 use app::ClipboardApp;
@@ -21,6 +24,9 @@ const LEGACY_DB_PATH_ENV: &str = "MYCLIPBOARD_DB_PATH";
 const LEGACY_DEV_MODE_ENV: &str = "MYCLIPBOARD_DEV";
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(feature = "log-miss-tr")]
+    env_logger::init();
+
     let dev_mode = dev_mode_enabled();
     let minimized = minimized_start_enabled();
     let storage = Storage::open(resolve_db_path()).context("打开剪贴板数据库失败")?;

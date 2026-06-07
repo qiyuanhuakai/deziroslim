@@ -367,6 +367,8 @@ struct AppPreferences {
     primary_font: String,
     #[serde(default)]
     fallback_font: String,
+    #[serde(default = "default_language")]
+    language: String,
 }
 
 fn default_privacy_protection_kinds() -> Vec<String> {
@@ -385,6 +387,10 @@ fn default_settings_panel_collapsed() -> Vec<bool> {
 
 fn default_color_mode() -> String {
     "system".to_string()
+}
+
+fn default_language() -> String {
+    "zh-CN".to_string()
 }
 
 fn default_surface_opacity() -> u8 {
@@ -441,6 +447,7 @@ impl Default for AppPreferences {
             color_mode: default_color_mode(),
             primary_font: String::new(),
             fallback_font: String::new(),
+            language: default_language(),
         }
     }
 }
@@ -553,6 +560,7 @@ pub struct ClipboardApp {
     color_mode: String,
     primary_font: String,
     fallback_font: String,
+    language: String,
     font_choices: Vec<String>,
     primary_font_search: String,
     fallback_font_search: String,
@@ -711,6 +719,7 @@ impl ClipboardApp {
             color_mode: preferences.color_mode.clone(),
             primary_font: preferences.primary_font.clone(),
             fallback_font: preferences.fallback_font.clone(),
+            language: preferences.language.clone(),
             font_choices,
             primary_font_search: String::new(),
             fallback_font_search: String::new(),
@@ -1820,6 +1829,7 @@ impl ClipboardApp {
             color_mode: self.color_mode.clone(),
             primary_font: self.primary_font.clone(),
             fallback_font: self.fallback_font.clone(),
+            language: self.language.clone(),
         }
     }
 
@@ -1927,6 +1937,10 @@ impl ClipboardApp {
         self.color_mode = preferences.color_mode;
         self.primary_font = preferences.primary_font;
         self.fallback_font = preferences.fallback_font;
+        if self.language != preferences.language {
+            self.language = preferences.language.clone();
+            crate::i18n::set_app_locale(&self.language);
+        }
         self.surface_opacity = preferences.surface_opacity;
         self.theme = resolve_theme(&self.color_mode);
         configure_fonts(ctx, &self.font_selection());
@@ -6396,6 +6410,19 @@ mod tests {
         assert_eq!(ALL_TWEMOJI_EMOJIS.len(), 4009);
         assert_eq!(grouped_count, ALL_TWEMOJI_EMOJIS.len());
         assert_eq!(grouped, all);
+    }
+
+    #[test]
+    fn test_default_language() {
+        assert_eq!(super::default_language(), "zh-CN");
+    }
+
+    #[test]
+    fn test_app_preferences_backward_compat() {
+        let old_json = r#"{"show_sensitive":false}"#;
+        let prefs: super::AppPreferences =
+            serde_json::from_str(old_json).expect("old preferences without language must deserialize");
+        assert_eq!(prefs.language, "zh-CN");
     }
 
     fn png_signature_bytes() -> Vec<u8> {
