@@ -5,7 +5,7 @@ use crate::platform;
 use crate::sound::{self, SoundEffect};
 use crate::storage::Storage;
 use crate::ui::MacosTokens;
-use crate::ui::widgets::{macos_collapsible_group, macos_range_slider, macos_toggle};
+use crate::ui::widgets::macos_toggle;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use eframe::egui;
 use rust_i18n::t;
@@ -50,9 +50,9 @@ const FORCE_HISTORY_TOP_DURATION: Duration = Duration::from_millis(260);
 const EVENT_CHANNEL_CAPACITY: usize = 100;
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(6 * 3600);
 const ACTIVITY_REPAINT_WINDOW: Duration = Duration::from_millis(500);
-const AUTO_FONT_VALUE: &str = "";
-const AUTO_PRIMARY_FONT_LABEL: &str = "Auto (CJK first)";
-const AUTO_FALLBACK_FONT_LABEL: &str = "Auto (Unifont first)";
+pub(crate) const AUTO_FONT_VALUE: &str = "";
+pub(crate) const AUTO_PRIMARY_FONT_LABEL: &str = "Auto (CJK first)";
+pub(crate) const AUTO_FALLBACK_FONT_LABEL: &str = "Auto (Unifont first)";
 const VENDORED_UNIFONT_LABEL: &str = "GNU Unifont (built-in)";
 const UNIFONT_FAMILY_CANDIDATES: &[&str] = &[
     "GNU Unifont",
@@ -71,7 +71,7 @@ struct FullEntryCache {
 }
 
 #[derive(Clone, Debug)]
-struct FontSelection {
+pub(crate) struct FontSelection {
     primary: String,
     fallback: String,
 }
@@ -126,7 +126,7 @@ impl FullEntryCache {
     }
 }
 
-fn scale_alpha(color: egui::Color32, factor: f32) -> egui::Color32 {
+pub(crate) fn scale_alpha(color: egui::Color32, factor: f32) -> egui::Color32 {
     let [r, g, b, a] = color.to_array();
     let new_a = ((a as f32) * factor).clamp(0.0, 255.0) as u8;
     egui::Color32::from_rgba_unmultiplied(r, g, b, new_a)
@@ -151,7 +151,7 @@ struct PendingEdgeHide {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-enum AppPage {
+pub(crate) enum AppPage {
     Clipboard,
     Emoji,
     Symbol,
@@ -166,7 +166,7 @@ enum EmojiTab {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-enum DockMode {
+pub(crate) enum DockMode {
     #[default]
     Off,
     Left,
@@ -176,7 +176,7 @@ enum DockMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum HotkeyTarget {
+pub(crate) enum HotkeyTarget {
     Main,
     Sequential,
     RichPaste,
@@ -491,7 +491,7 @@ impl AppPreferences {
 }
 
 pub struct ClipboardApp {
-    storage: Storage,
+    pub(crate) storage: Storage,
     event_sender: Sender<ClipboardEvent>,
     events: Receiver<ClipboardEvent>,
     entries: Vec<ClipboardEntrySummary>,
@@ -500,78 +500,78 @@ pub struct ClipboardApp {
     preview_hover_id: Option<i64>,
     preview_hover_since: Option<Instant>,
     query: String,
-    status: String,
+    pub(crate) status: String,
     last_activity: Instant,
     last_cleanup: Instant,
     selected_id: Option<i64>,
-    tag_editor: String,
-    new_tag_input: String,
+    pub(crate) tag_editor: String,
+    pub(crate) new_tag_input: String,
     focus_search: bool,
-    current_page: AppPage,
-    show_detail_panel: bool,
-    show_sensitive: bool,
-    window_pinned: bool,
-    compact_rows: bool,
+    pub(crate) current_page: AppPage,
+    pub(crate) show_detail_panel: bool,
+    pub(crate) show_sensitive: bool,
+    pub(crate) window_pinned: bool,
+    pub(crate) compact_rows: bool,
     kind_filter: Option<ClipboardKind>,
-    tag_filter: Option<String>,
-    emoji_panel_enabled: bool,
-    symbol_panel_enabled: bool,
-    autostart_enabled: bool,
+    pub(crate) tag_filter: Option<String>,
+    pub(crate) emoji_panel_enabled: bool,
+    pub(crate) symbol_panel_enabled: bool,
+    pub(crate) autostart_enabled: bool,
     emoji_tab: EmojiTab,
     emoji_favorites: Vec<String>,
     emoji_group_index: usize,
     emoji_page: usize,
-    persistent: bool,
-    deduplicate: bool,
-    capture_files: bool,
-    capture_rich_text: bool,
-    delete_after_paste: bool,
-    move_to_top_after_paste: bool,
-    show_search_box: bool,
-    show_app_border: bool,
-    arrow_key_selection: bool,
-    tag_manager_enabled: bool,
-    sound_enabled: bool,
-    sound_volume: u8,
-    paste_sound_enabled: bool,
-    privacy_protection: bool,
+    pub(crate) persistent: bool,
+    pub(crate) deduplicate: bool,
+    pub(crate) capture_files: bool,
+    pub(crate) capture_rich_text: bool,
+    pub(crate) delete_after_paste: bool,
+    pub(crate) move_to_top_after_paste: bool,
+    pub(crate) show_search_box: bool,
+    pub(crate) show_app_border: bool,
+    pub(crate) arrow_key_selection: bool,
+    pub(crate) tag_manager_enabled: bool,
+    pub(crate) sound_enabled: bool,
+    pub(crate) sound_volume: u8,
+    pub(crate) paste_sound_enabled: bool,
+    pub(crate) privacy_protection: bool,
     privacy_protection_kinds: Vec<String>,
     privacy_protection_custom_rules: String,
-    settings_panel_collapsed: Vec<bool>,
-    main_hotkeys: String,
-    sequential_hotkey: String,
-    rich_paste_hotkey: String,
-    search_hotkey: String,
-    hide_tray_icon: bool,
-    close_to_tray: bool,
-    edge_docking: DockMode,
-    follow_mouse: bool,
-    default_text_app: String,
-    default_url_app: String,
-    default_code_app: String,
-    default_file_app: String,
-    default_image_app: String,
-    default_video_app: String,
-    paste_method: String,
-    surface_opacity: u8,
-    current_database_path: String,
-    database_path_input: String,
-    text_app_choices: Vec<platform::AppChoice>,
-    url_app_choices: Vec<platform::AppChoice>,
-    code_app_choices: Vec<platform::AppChoice>,
-    file_app_choices: Vec<platform::AppChoice>,
-    image_app_choices: Vec<platform::AppChoice>,
-    video_app_choices: Vec<platform::AppChoice>,
-    recording_hotkey: Option<HotkeyTarget>,
+    pub(crate) settings_panel_collapsed: Vec<bool>,
+    pub(crate) main_hotkeys: String,
+    pub(crate) sequential_hotkey: String,
+    pub(crate) rich_paste_hotkey: String,
+    pub(crate) search_hotkey: String,
+    pub(crate) hide_tray_icon: bool,
+    pub(crate) close_to_tray: bool,
+    pub(crate) edge_docking: DockMode,
+    pub(crate) follow_mouse: bool,
+    pub(crate) default_text_app: String,
+    pub(crate) default_url_app: String,
+    pub(crate) default_code_app: String,
+    pub(crate) default_file_app: String,
+    pub(crate) default_image_app: String,
+    pub(crate) default_video_app: String,
+    pub(crate) paste_method: String,
+    pub(crate) surface_opacity: u8,
+    pub(crate) current_database_path: String,
+    pub(crate) database_path_input: String,
+    pub(crate) text_app_choices: Vec<platform::AppChoice>,
+    pub(crate) url_app_choices: Vec<platform::AppChoice>,
+    pub(crate) code_app_choices: Vec<platform::AppChoice>,
+    pub(crate) file_app_choices: Vec<platform::AppChoice>,
+    pub(crate) image_app_choices: Vec<platform::AppChoice>,
+    pub(crate) video_app_choices: Vec<platform::AppChoice>,
+    pub(crate) recording_hotkey: Option<HotkeyTarget>,
     image_textures: HashMap<i64, egui::TextureHandle>,
     hotkey_handle: platform::HotkeyUpdateHandle,
-    tray_handle: Option<platform::TrayHandle>,
-    search_box_revealed: bool,
+    pub(crate) tray_handle: Option<platform::TrayHandle>,
+    pub(crate) search_box_revealed: bool,
     search_scroll_gate: SearchScrollGate,
     history_at_top: bool,
     window_level_applied: bool,
     window_visible: bool,
-    edge_hidden: bool,
+    pub(crate) edge_hidden: bool,
     edge_hide_armed: bool,
     current_edge_dock: DockMode,
     edge_restore_pos: Option<egui::Pos2>,
@@ -580,27 +580,27 @@ pub struct ClipboardApp {
     last_edge_transition: Instant,
     pending_paste: Option<PendingPaste>,
     suppress_copy_sound_until: Option<Instant>,
-    saved_tags: Vec<String>,
-    selected_saved_tag: Option<String>,
-    tag_detail_color: String,
-    show_tag_input: bool,
+    pub(crate) saved_tags: Vec<String>,
+    pub(crate) selected_saved_tag: Option<String>,
+    pub(crate) tag_detail_color: String,
+    pub(crate) show_tag_input: bool,
     dev_mode: bool,
     show_dev_panel: bool,
-    color_mode: String,
-    primary_font: String,
-    fallback_font: String,
-    language: String,
-    font_choices: Vec<String>,
-    primary_font_search: String,
-    fallback_font_search: String,
-    paste_method_search: String,
-    language_search: String,
-    text_app_search: String,
-    url_app_search: String,
-    code_app_search: String,
-    file_app_search: String,
-    image_app_search: String,
-    video_app_search: String,
+    pub(crate) color_mode: String,
+    pub(crate) primary_font: String,
+    pub(crate) fallback_font: String,
+    pub(crate) language: String,
+    pub(crate) font_choices: Vec<String>,
+    pub(crate) primary_font_search: String,
+    pub(crate) fallback_font_search: String,
+    pub(crate) paste_method_search: String,
+    pub(crate) language_search: String,
+    pub(crate) text_app_search: String,
+    pub(crate) url_app_search: String,
+    pub(crate) code_app_search: String,
+    pub(crate) file_app_search: String,
+    pub(crate) image_app_search: String,
+    pub(crate) video_app_search: String,
     event_count: u64,
     saved_count: u64,
     error_count: u64,
@@ -787,7 +787,7 @@ impl ClipboardApp {
         app
     }
 
-    fn configure_style(&self, ctx: &egui::Context) {
+    pub(crate) fn configure_style(&self, ctx: &egui::Context) {
         let opacity = self.surface_opacity as f32 / 100.0;
         let [r, g, b, _] = self.theme.bg.to_array();
         let is_light = (r as u16 + g as u16 + b as u16) > 384;
@@ -810,7 +810,7 @@ impl ClipboardApp {
         ctx.set_visuals(visuals);
     }
 
-    fn refresh_entries(&mut self) {
+    pub(crate) fn refresh_entries(&mut self) {
         let active_tag_filter = self
             .tag_filter
             .as_deref()
@@ -1273,7 +1273,7 @@ impl ClipboardApp {
         ctx.request_repaint();
     }
 
-    fn play_sound(&self, effect: SoundEffect) {
+    pub(crate) fn play_sound(&self, effect: SoundEffect) {
         if self.sound_enabled {
             sound::play(effect, self.sound_volume);
         }
@@ -1297,13 +1297,13 @@ impl ClipboardApp {
         ctx.request_repaint();
     }
 
-    fn update_hotkeys(&mut self) {
+    pub(crate) fn update_hotkeys(&mut self) {
         if let Err(err) = self.hotkey_handle.update(self.hotkey_config()) {
             self.status = err;
         }
     }
 
-    fn apply_tray_visibility(&mut self, ctx: &egui::Context) {
+    pub(crate) fn apply_tray_visibility(&mut self, ctx: &egui::Context) {
         if self.hide_tray_icon {
             if let Some(handle) = self.tray_handle.take() {
                 handle.stop();
@@ -1667,7 +1667,7 @@ impl ClipboardApp {
         rect.expand(6.0).contains(egui::pos2(x / ppp, y / ppp))
     }
 
-    fn reveal_edge_hidden(&mut self, ctx: &egui::Context, focus: bool) {
+    pub(crate) fn reveal_edge_hidden(&mut self, ctx: &egui::Context, focus: bool) {
         let screen = platform::screen_geometry().unwrap_or(platform::ScreenGeometry {
             x: 0.0,
             y: 0.0,
@@ -1882,14 +1882,14 @@ impl ClipboardApp {
         }
     }
 
-    fn font_selection(&self) -> FontSelection {
+    pub(crate) fn font_selection(&self) -> FontSelection {
         FontSelection {
             primary: self.primary_font.clone(),
             fallback: self.fallback_font.clone(),
         }
     }
 
-    fn font_load_warning(&self) -> Option<String> {
+    pub(crate) fn font_load_warning(&self) -> Option<String> {
         if !self.primary_font.trim().is_empty()
             && load_system_font_family(&self.primary_font).is_none()
         {
@@ -1921,7 +1921,7 @@ impl ClipboardApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
     }
 
-    fn persist_preferences(&mut self) {
+    pub(crate) fn persist_preferences(&mut self) {
         match serde_json::to_string(&self.preferences()) {
             Ok(payload) => match self.storage.set_setting(PREFERENCES_KEY, &payload) {
                 Ok(()) => self.status = t!("settings.saved").to_string(),
@@ -1931,7 +1931,7 @@ impl ClipboardApp {
         }
     }
 
-    fn apply_window_level(&mut self, ctx: &egui::Context) {
+    pub(crate) fn apply_window_level(&mut self, ctx: &egui::Context) {
         self.send_window_level(ctx);
         self.status = if self.window_pinned {
             t!("status.window_pinned").to_string()
@@ -2174,7 +2174,7 @@ impl ClipboardApp {
         self.status = format!("{}: {recorded}", t!("settings.hotkey.recorded_success"));
     }
 
-    fn remove_main_hotkey(&mut self, hotkey: &str) {
+    pub(crate) fn remove_main_hotkey(&mut self, hotkey: &str) {
         let remaining = hotkey_lines(&self.main_hotkeys)
             .into_iter()
             .filter(|item| !hotkey_equal(item, hotkey))
@@ -2185,7 +2185,7 @@ impl ClipboardApp {
         self.status = format!("{}: {hotkey}", t!("settings.hotkey.removed_main"));
     }
 
-    fn add_tag_to_editor(&mut self, tag: &str) {
+    pub(crate) fn add_tag_to_editor(&mut self, tag: &str) {
         if !self.tag_manager_enabled {
             return;
         }
@@ -2203,7 +2203,7 @@ impl ClipboardApp {
         }
     }
 
-    fn add_saved_tag_from_input(&mut self) {
+    pub(crate) fn add_saved_tag_from_input(&mut self) {
         if !self.tag_manager_enabled {
             self.status = t!("settings.tags.manager_closed").to_string();
             return;
@@ -2223,7 +2223,7 @@ impl ClipboardApp {
         }
     }
 
-    fn delete_saved_tag(&mut self, tag: &str) {
+    pub(crate) fn delete_saved_tag(&mut self, tag: &str) {
         if !self.tag_manager_enabled {
             self.status = t!("settings.tags.manager_closed").to_string();
             return;
@@ -2242,7 +2242,7 @@ impl ClipboardApp {
         }
     }
 
-    fn load_tag_detail(&mut self, tag: &str) {
+    pub(crate) fn load_tag_detail(&mut self, tag: &str) {
         self.selected_saved_tag = Some(tag.to_string());
         match self.storage.saved_tag_color(tag) {
             Ok(color) => self.tag_detail_color = color,
@@ -3430,1117 +3430,18 @@ impl ClipboardApp {
                 ui.monospace(&self.status);
             });
     }
-
     fn draw_settings_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         egui::ScrollArea::vertical()
             .max_width(700.0)
             .show(ui, |ui| {
-                apply_settings_widget_rounding(ui, self.theme.radius_input);
+                crate::ui::settings::apply_settings_widget_rounding(ui, self.theme.radius_input);
                 ui.label(
                     egui::RichText::new(t!("settings.auto_save_hint")).color(self.theme.muted),
                 );
                 ui.add_space(8.0);
 
-                {
-                    let prev = self.settings_panel_collapsed[0];
-                    let mut expanded = !prev;
-                    let theme = self.theme.clone();
-                    macos_collapsible_group(
-                        ui,
-                        t!("settings.general.title"),
-                        &mut expanded,
-                        &theme,
-                        |ui| {
-                            let lang_options = [
-                                DropdownOption::borrowed(
-                                    "zh-CN",
-                                    t!("settings.general.language_option_zh_cn"),
-                                ),
-                                DropdownOption::borrowed(
-                                    "en-US",
-                                    t!("settings.general.language_option_en_us"),
-                                ),
-                                DropdownOption::borrowed(
-                                    "follow-system",
-                                    t!("settings.general.language_option_follow_system"),
-                                ),
-                            ];
-                            if searchable_combo_row(
-                                ui,
-                                t!("settings.general.language"),
-                                &mut self.language,
-                                &mut self.language_search,
-                                &lang_options,
-                                "",
-                                &self.theme,
-                            ) {
-                                // 关键修复: "follow-system" 必须存储原始值,不要 resolve 成具体 locale
-                                let new_value = self.language.clone();
-                                if new_value == "follow-system" {
-                                    let detected = crate::i18n::detect_system_locale();
-                                    crate::i18n::set_app_locale(&detected);
-                                    self.language = "follow-system".to_string();
-                                } else {
-                                    crate::i18n::set_app_locale(&new_value);
-                                    self.language = new_value;
-                                }
-                                self.persist_preferences();
-                            }
-                            ui.label(
-                                egui::RichText::new(t!("settings.general.language_desc"))
-                                    .color(self.theme.muted),
-                            );
-                            ui.label(
-                                egui::RichText::new(t!("settings.general.language_restart_notice"))
-                                    .color(self.theme.muted),
-                            );
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.emoji_entry"));
-                                    macos_toggle(ui, &mut self.emoji_panel_enabled, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                if !self.emoji_panel_enabled && self.current_page == AppPage::Emoji
-                                {
-                                    self.current_page = AppPage::Clipboard;
-                                }
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.symbol_entry"));
-                                    macos_toggle(ui, &mut self.symbol_panel_enabled, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                if !self.symbol_panel_enabled
-                                    && self.current_page == AppPage::Symbol
-                                {
-                                    self.current_page = AppPage::Clipboard;
-                                }
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.autostart"));
-                                    macos_toggle(ui, &mut self.autostart_enabled, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                match platform::set_autostart(self.autostart_enabled) {
-                                    Ok(()) => {
-                                        self.status = if self.autostart_enabled {
-                                            t!("settings.general.autostart_enabled").to_string()
-                                        } else {
-                                            t!("settings.general.autostart_disabled").to_string()
-                                        };
-                                        self.persist_preferences();
-                                    }
-                                    Err(err) => {
-                                        self.autostart_enabled = !self.autostart_enabled;
-                                        self.status = format!(
-                                            "{}: {err}",
-                                            t!("settings.general.autostart_failed")
-                                        );
-                                    }
-                                }
-                            }
-                            ui.label(
-                                egui::RichText::new(t!("settings.general.autostart_hint"))
-                                    .color(self.theme.muted),
-                            );
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.tag_manager"));
-                                    macos_toggle(ui, &mut self.tag_manager_enabled, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                if !self.tag_manager_enabled {
-                                    self.tag_filter = None;
-                                    self.new_tag_input.clear();
-                                    self.tag_editor.clear();
-                                    self.refresh_entries();
-                                }
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.always_show_search"));
-                                    macos_toggle(ui, &mut self.show_search_box, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.search_box_revealed = self.show_search_box;
-                                self.persist_preferences();
-                            }
-                            ui.label(
-                                egui::RichText::new(t!("settings.general.always_show_search_hint"))
-                                    .color(self.theme.muted),
-                            );
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.compact_mode"));
-                                    macos_toggle(ui, &mut self.compact_rows, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            ui.label(
-                                egui::RichText::new(t!("settings.general.compact_mode_hint"))
-                                    .color(self.theme.muted),
-                            );
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.arrow_key_selection"));
-                                    macos_toggle(ui, &mut self.arrow_key_selection, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.hide_tray_icon"));
-                                    macos_toggle(ui, &mut self.hide_tray_icon, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.apply_tray_visibility(ctx);
-                                self.persist_preferences();
-                            }
-                            let can_close_to_tray =
-                                !self.hide_tray_icon && self.tray_handle.is_some();
-                            if ui
-                                .add_enabled_ui(can_close_to_tray, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label(t!("settings.general.close_to_tray"));
-                                        macos_toggle(ui, &mut self.close_to_tray, &self.theme)
-                                    })
-                                    .inner
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.general.sound"));
-                                    macos_toggle(ui, &mut self.sound_enabled, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                                if self.sound_enabled {
-                                    self.play_sound(SoundEffect::Copy);
-                                }
-                            }
-                            if self.sound_enabled {
-                                let mut volume = self.sound_volume as f32;
-                                if ui
-                                    .horizontal(|ui| {
-                                        ui.label(t!("settings.general.sound_volume"));
-                                        let changed = macos_range_slider(
-                                            ui,
-                                            &mut volume,
-                                            0.0..=100.0,
-                                            &self.theme,
-                                        )
-                                        .changed();
-                                        ui.label(
-                                            egui::RichText::new(format!(
-                                                "{}%",
-                                                volume.round() as u8
-                                            ))
-                                            .color(self.theme.muted),
-                                        );
-                                        changed
-                                    })
-                                    .inner
-                                {
-                                    self.sound_volume = volume.round().clamp(0.0, 100.0) as u8;
-                                    self.persist_preferences();
-                                }
-                                if ui
-                                    .horizontal(|ui| {
-                                        ui.label(t!("settings.general.paste_sound"));
-                                        macos_toggle(ui, &mut self.paste_sound_enabled, &self.theme)
-                                    })
-                                    .inner
-                                    .changed()
-                                {
-                                    self.persist_preferences();
-                                }
-                            }
-                        },
-                    );
-                    if expanded == prev {
-                        self.settings_panel_collapsed[0] = !expanded;
-                        self.persist_preferences();
-                    }
-                }
-
-                {
-                    let prev = self.settings_panel_collapsed[1];
-                    let mut expanded = !prev;
-                    let theme = self.theme.clone();
-                    macos_collapsible_group(
-                        ui,
-                        t!("settings.hotkey.title"),
-                        &mut expanded,
-                        &theme,
-                        |ui| {
-                            ui.label(
-                                egui::RichText::new(t!("settings.hotkey.hint"))
-                                    .color(self.theme.muted),
-                            );
-                            let main_hotkeys = self.main_hotkeys.clone();
-                            let sequential_hotkey = self.sequential_hotkey.clone();
-                            let rich_paste_hotkey = self.rich_paste_hotkey.clone();
-                            let search_hotkey = self.search_hotkey.clone();
-                            hotkey_record_row(
-                                ui,
-                                t!("settings.hotkey.main_invoke"),
-                                &main_hotkeys,
-                                self.recording_hotkey == Some(HotkeyTarget::Main),
-                                |ui| {
-                                    if ui.button(t!("settings.hotkey.record_new")).clicked() {
-                                        self.recording_hotkey = Some(HotkeyTarget::Main);
-                                        self.status =
-                                            t!("settings.hotkey.recording_main").to_string();
-                                    }
-                                    if ui.button(t!("settings.hotkey.clear_all")).clicked() {
-                                        self.main_hotkeys.clear();
-                                        self.update_hotkeys();
-                                        self.persist_preferences();
-                                    }
-                                },
-                            );
-                            let main_hotkey_items = hotkey_lines(&main_hotkeys);
-                            if !main_hotkey_items.is_empty() {
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.label(
-                                        egui::RichText::new(t!("settings.hotkey.recorded"))
-                                            .color(self.theme.muted),
-                                    );
-                                    let mut remove_hotkey = None;
-                                    for hotkey in &main_hotkey_items {
-                                        if removable_hotkey_chip(ui, hotkey, &self.theme).clicked()
-                                        {
-                                            remove_hotkey = Some(hotkey.clone());
-                                        }
-                                    }
-                                    if let Some(remove_hotkey) = remove_hotkey {
-                                        self.remove_main_hotkey(&remove_hotkey);
-                                    }
-                                });
-                            }
-                            hotkey_single_record_row(
-                                ui,
-                                t!("settings.hotkey.sequential_paste"),
-                                &sequential_hotkey,
-                                self.recording_hotkey == Some(HotkeyTarget::Sequential),
-                                || {
-                                    self.recording_hotkey = Some(HotkeyTarget::Sequential);
-                                    self.status =
-                                        t!("settings.hotkey.recording_sequential").to_string();
-                                },
-                            );
-                            hotkey_single_record_row(
-                                ui,
-                                t!("settings.hotkey.rich_paste"),
-                                &rich_paste_hotkey,
-                                self.recording_hotkey == Some(HotkeyTarget::RichPaste),
-                                || {
-                                    self.recording_hotkey = Some(HotkeyTarget::RichPaste);
-                                    self.status =
-                                        t!("settings.hotkey.recording_rich_paste").to_string();
-                                },
-                            );
-                            hotkey_single_record_row(
-                                ui,
-                                t!("settings.hotkey.search_focus"),
-                                &search_hotkey,
-                                self.recording_hotkey == Some(HotkeyTarget::Search),
-                                || {
-                                    self.recording_hotkey = Some(HotkeyTarget::Search);
-                                    self.status =
-                                        t!("settings.hotkey.recording_search").to_string();
-                                },
-                            );
-                        },
-                    );
-                    if expanded == prev {
-                        self.settings_panel_collapsed[1] = !expanded;
-                        self.persist_preferences();
-                    }
-                }
-
-                {
-                    let prev = self.settings_panel_collapsed[2];
-                    let mut expanded = !prev;
-                    let theme = self.theme.clone();
-                    macos_collapsible_group(
-                        ui,
-                        t!("settings.clipboard.title"),
-                        &mut expanded,
-                        &theme,
-                        |ui| {
-                            ui.add_enabled_ui(false, |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label(t!("settings.clipboard.persistent"));
-                                    macos_toggle(ui, &mut self.persistent, &self.theme);
-                                });
-                            });
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.clipboard.deduplicate"));
-                                    macos_toggle(ui, &mut self.deduplicate, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.clipboard.capture_files"));
-                                    macos_toggle(ui, &mut self.capture_files, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.clipboard.capture_rich_text"));
-                                    macos_toggle(ui, &mut self.capture_rich_text, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.clipboard.delete_after_paste"));
-                                    macos_toggle(ui, &mut self.delete_after_paste, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.clipboard.move_to_top_after_paste"));
-                                    macos_toggle(ui, &mut self.move_to_top_after_paste, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            let paste_options = [
-                                DropdownOption::borrowed(
-                                    "shift_insert",
-                                    t!("settings.clipboard.paste_method_shift_insert"),
-                                ),
-                                DropdownOption::borrowed("ctrl_v", "Ctrl+V"),
-                                DropdownOption::borrowed(
-                                    "type_text",
-                                    t!("settings.clipboard.paste_method_type_text"),
-                                ),
-                            ];
-                            if searchable_combo_row(
-                                ui,
-                                t!("settings.clipboard.paste_method"),
-                                &mut self.paste_method,
-                                &mut self.paste_method_search,
-                                &paste_options,
-                                t!("settings.clipboard.paste_method_search_hint"),
-                                &self.theme,
-                            ) {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.clipboard.privacy_protection"));
-                                    macos_toggle(ui, &mut self.privacy_protection, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            ui.label(
-                                egui::RichText::new(t!("settings.clipboard.clipboard_status_hint"))
-                                    .color(self.theme.muted),
-                            );
-                        },
-                    );
-                    if expanded == prev {
-                        self.settings_panel_collapsed[2] = !expanded;
-                        self.persist_preferences();
-                    }
-                }
-
-                {
-                    let prev = self.settings_panel_collapsed[3];
-                    let mut expanded = !prev;
-                    let theme = self.theme.clone();
-                    macos_collapsible_group(
-                        ui,
-                        t!("settings.appearance.title"),
-                        &mut expanded,
-                        &theme,
-                        |ui| {
-                            ui.label(t!("settings.appearance.theme_mode"));
-                            ui.horizontal(|ui| {
-                                let modes = [
-                                    (t!("settings.appearance.theme_follow_system"), "system"),
-                                    (t!("settings.appearance.theme_light"), "light"),
-                                    (t!("settings.appearance.theme_dark"), "dark"),
-                                ];
-                                for (label, value) in modes {
-                                    if filter_chip(
-                                        ui,
-                                        label.as_ref(),
-                                        self.color_mode == value,
-                                        &self.theme,
-                                    )
-                                    .clicked()
-                                    {
-                                        self.color_mode = value.to_string();
-                                        self.theme = resolve_theme(&self.color_mode);
-                                        self.configure_style(ctx);
-                                        self.persist_preferences();
-                                    }
-                                }
-                            });
-                            ui.add_space(4.0);
-                            ui.label(t!("settings.appearance.font"));
-                            let mut font_changed = false;
-                            font_changed |= font_combo_row(
-                                ui,
-                                t!("settings.appearance.primary_font"),
-                                &mut self.primary_font,
-                                &mut self.primary_font_search,
-                                &self.font_choices,
-                                AUTO_PRIMARY_FONT_LABEL,
-                                t!("settings.appearance.primary_font_search"),
-                                &self.theme,
-                            );
-                            font_changed |= font_combo_row(
-                                ui,
-                                t!("settings.appearance.fallback_font"),
-                                &mut self.fallback_font,
-                                &mut self.fallback_font_search,
-                                &self.font_choices,
-                                AUTO_FALLBACK_FONT_LABEL,
-                                t!("settings.appearance.fallback_font_search"),
-                                &self.theme,
-                            );
-                            ui.vertical(|ui| {
-                                if ui.button(t!("settings.appearance.rescan_fonts")).clicked() {
-                                    self.font_choices = discover_system_font_names();
-                                    self.status = format!(
-                                        "{}: {}",
-                                        t!("settings.appearance.rescan_fonts_done"),
-                                        self.font_choices.len()
-                                    );
-                                }
-                                ui.label(
-                                    egui::RichText::new(t!(
-                                        "settings.appearance.fallback_font_hint"
-                                    ))
-                                    .color(self.theme.muted),
-                                );
-                            });
-                            if font_changed {
-                                configure_fonts(ctx, &self.font_selection());
-                                self.persist_preferences();
-                                if let Some(message) = self.font_load_warning() {
-                                    self.status = message;
-                                }
-                            }
-                            ui.add_space(4.0);
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.appearance.show_sensitive"));
-                                    macos_toggle(ui, &mut self.show_sensitive, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.appearance.show_detail_panel"));
-                                    macos_toggle(ui, &mut self.show_detail_panel, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.appearance.show_app_border"));
-                                    macos_toggle(ui, &mut self.show_app_border, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.appearance.window_pin"));
-                                    macos_toggle(ui, &mut self.window_pinned, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.apply_window_level(ctx);
-                                self.persist_preferences();
-                            }
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.appearance.follow_mouse"));
-                                    macos_toggle(ui, &mut self.follow_mouse, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.persist_preferences();
-                            }
-                            let mut edge_docking_enabled = self.edge_docking != DockMode::Off;
-                            if ui
-                                .horizontal(|ui| {
-                                    ui.label(t!("settings.appearance.edge_docking"));
-                                    macos_toggle(ui, &mut edge_docking_enabled, &self.theme)
-                                })
-                                .inner
-                                .changed()
-                            {
-                                self.edge_docking = if edge_docking_enabled {
-                                    DockMode::Right
-                                } else {
-                                    DockMode::Off
-                                };
-                                if self.edge_docking == DockMode::Off && self.edge_hidden {
-                                    self.reveal_edge_hidden(ctx, false);
-                                }
-                                self.persist_preferences();
-                            }
-                            ui.label(
-                                egui::RichText::new(t!("settings.appearance.edge_docking_hint"))
-                                    .color(self.theme.muted),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(t!("settings.appearance.surface_opacity"));
-                            let mut opacity_f32 = self.surface_opacity as f32;
-                            if macos_range_slider(ui, &mut opacity_f32, 0.0..=100.0, &self.theme)
-                                .changed()
-                            {
-                                self.surface_opacity = opacity_f32 as u8;
-                                self.configure_style(ctx);
-                                self.persist_preferences();
-                            }
-                            ui.label(t!("settings.appearance.interaction_hint"));
-                        },
-                    );
-                    if expanded == prev {
-                        self.settings_panel_collapsed[3] = !expanded;
-                        self.persist_preferences();
-                    }
-                }
-
-                {
-                    let prev = self.settings_panel_collapsed[4];
-                    let mut expanded = !prev;
-                    let theme = self.theme.clone();
-                    macos_collapsible_group(
-                        ui,
-                        t!("settings.default_app.title"),
-                        &mut expanded,
-                        &theme,
-                        |ui| {
-                            ui.label(
-                                egui::RichText::new(t!("settings.default_app.hint"))
-                                    .color(self.theme.muted),
-                            );
-                            let mut changed = false;
-                            changed |= app_combo_row(
-                                ui,
-                                "TEXT",
-                                &mut self.default_text_app,
-                                &mut self.text_app_search,
-                                &self.text_app_choices,
-                                &self.theme,
-                            );
-                            changed |= app_combo_row(
-                                ui,
-                                "URL",
-                                &mut self.default_url_app,
-                                &mut self.url_app_search,
-                                &self.url_app_choices,
-                                &self.theme,
-                            );
-                            changed |= app_combo_row(
-                                ui,
-                                "CODE",
-                                &mut self.default_code_app,
-                                &mut self.code_app_search,
-                                &self.code_app_choices,
-                                &self.theme,
-                            );
-                            changed |= app_combo_row(
-                                ui,
-                                "FILE",
-                                &mut self.default_file_app,
-                                &mut self.file_app_search,
-                                &self.file_app_choices,
-                                &self.theme,
-                            );
-                            changed |= app_combo_row(
-                                ui,
-                                "IMAGE",
-                                &mut self.default_image_app,
-                                &mut self.image_app_search,
-                                &self.image_app_choices,
-                                &self.theme,
-                            );
-                            changed |= app_combo_row(
-                                ui,
-                                "VIDEO",
-                                &mut self.default_video_app,
-                                &mut self.video_app_search,
-                                &self.video_app_choices,
-                                &self.theme,
-                            );
-                            if ui.button(t!("settings.default_app.rescan")).clicked() {
-                                self.text_app_choices =
-                                    platform::discover_apps_for_mime("text/plain");
-                                self.url_app_choices =
-                                    platform::discover_apps_for_mime("x-scheme-handler/http");
-                                self.code_app_choices =
-                                    platform::discover_apps_for_mime("text/plain");
-                                self.file_app_choices =
-                                    platform::discover_apps_for_mime("application/octet-stream");
-                                self.image_app_choices =
-                                    platform::discover_apps_for_mime("image/png");
-                                self.video_app_choices =
-                                    platform::discover_apps_for_mime("video/mp4");
-                                self.status = t!("settings.default_app.rescan_done").to_string();
-                            }
-                            if changed {
-                                self.persist_preferences();
-                            }
-                        },
-                    );
-                    if expanded == prev {
-                        self.settings_panel_collapsed[4] = !expanded;
-                        self.persist_preferences();
-                    }
-                }
-
-                {
-                    let prev = self.settings_panel_collapsed[5];
-                    let mut expanded = !prev;
-                    let theme = self.theme.clone();
-                    macos_collapsible_group(
-                        ui,
-                        t!("settings.tags.title"),
-                        &mut expanded,
-                        &theme,
-                        |ui| {
-                            if !self.tag_manager_enabled {
-                                ui.label(
-                                    egui::RichText::new(t!("settings.tags.manager_closed_hint"))
-                                        .color(self.theme.muted),
-                                );
-                                return;
-                            }
-
-                            let available_width = (ui.available_width() - 12.0).max(220.0);
-                            let gap = ui.spacing().item_spacing.x;
-                            let sidebar_w = (available_width * 0.34).clamp(96.0, 156.0);
-                            let detail_w = (available_width - sidebar_w - gap * 2.0).max(88.0);
-
-                            ui.horizontal_top(|ui| {
-                                ui.vertical(|ui| {
-                                    ui.set_width(sidebar_w);
-                                    let bg = self.theme.glass_bg;
-                                    let accent = self.theme.accent;
-                                    egui::Frame::none()
-                                        .fill(bg)
-                                        .rounding(egui::Rounding::same(8.0))
-                                        .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
-                                        .inner_margin(6.0)
-                                        .show(ui, |ui| {
-                                            ui.set_width((sidebar_w - 12.0).max(80.0));
-                                            if ui
-                                                .add_sized(
-                                                    [ui.available_width().max(80.0), 24.0],
-                                                    egui::Button::new(
-                                                        egui::RichText::new(t!(
-                                                            "settings.tags.new_tag"
-                                                        ))
-                                                        .size(11.0),
-                                                    )
-                                                    .rounding(egui::Rounding::same(6.0)),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.show_tag_input = !self.show_tag_input;
-                                            }
-
-                                            if self.show_tag_input {
-                                                ui.horizontal(|ui| {
-                                                    let input_width =
-                                                        (ui.available_width() - 42.0).max(40.0);
-                                                    let response = ui.add_sized(
-                                                        [input_width, 22.0],
-                                                        egui::TextEdit::singleline(
-                                                            &mut self.new_tag_input,
-                                                        )
-                                                        .hint_text(t!(
-                                                            "settings.tags.tag_name_hint"
-                                                        ))
-                                                        .desired_width(input_width),
-                                                    );
-                                                    let enter = response.lost_focus()
-                                                        && ui.input(|i| {
-                                                            i.key_pressed(egui::Key::Enter)
-                                                        });
-                                                    if ui
-                                                        .add_sized(
-                                                            [38.0, 22.0],
-                                                            egui::Button::new(
-                                                                egui::RichText::new(t!(
-                                                                    "settings.tags.add_button"
-                                                                ))
-                                                                .size(10.5),
-                                                            )
-                                                            .rounding(egui::Rounding::same(4.0)),
-                                                        )
-                                                        .clicked()
-                                                        || enter
-                                                    {
-                                                        self.add_saved_tag_from_input();
-                                                        self.show_tag_input = false;
-                                                    }
-                                                });
-                                                ui.add_space(2.0);
-                                            }
-
-                                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                                if self.saved_tags.is_empty() {
-                                                    ui.label(
-                                                        egui::RichText::new(t!(
-                                                            "settings.tags.no_tags"
-                                                        ))
-                                                        .size(11.0)
-                                                        .color(self.theme.muted),
-                                                    );
-                                                } else {
-                                                    let tags = self.saved_tags.clone();
-                                                    for tag in &tags {
-                                                        let selected =
-                                                            self.selected_saved_tag.as_deref()
-                                                                == Some(tag);
-                                                        let (bg, fg, stroke) = if selected {
-                                                            (
-                                                                accent,
-                                                                egui::Color32::WHITE,
-                                                                egui::Stroke::new(1.0, accent),
-                                                            )
-                                                        } else {
-                                                            (
-                                                                egui::Color32::TRANSPARENT,
-                                                                self.theme.fg,
-                                                                egui::Stroke::NONE,
-                                                            )
-                                                        };
-                                                        let btn = egui::Button::new(
-                                                            egui::RichText::new(tag.as_str())
-                                                                .size(11.5)
-                                                                .color(fg),
-                                                        )
-                                                        .fill(bg)
-                                                        .stroke(stroke)
-                                                        .rounding(egui::Rounding::same(6.0))
-                                                        .min_size(egui::vec2(
-                                                            ui.available_width().max(80.0),
-                                                            22.0,
-                                                        ));
-                                                        if ui.add(btn).clicked() {
-                                                            if selected {
-                                                                self.selected_saved_tag = None;
-                                                            } else {
-                                                                self.load_tag_detail(tag);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            });
-                                        });
-                                });
-
-                                ui.vertical(|ui| {
-                                    ui.set_width(detail_w);
-                                    egui::Frame::none()
-                                        .fill(self.theme.data_bg)
-                                        .rounding(egui::Rounding::same(8.0))
-                                        .stroke(egui::Stroke::new(1.0, self.theme.data_border))
-                                        .inner_margin(10.0)
-                                        .show(ui, |ui| {
-                                            ui.set_width((detail_w - 20.0).max(72.0));
-                                            if let Some(ref sel) = self.selected_saved_tag.clone() {
-                                                ui.label(
-                                                    egui::RichText::new(sel.as_str())
-                                                        .size(14.0)
-                                                        .color(self.theme.fg),
-                                                );
-                                                ui.add_space(4.0);
-
-                                                let count = self
-                                                    .storage
-                                                    .count_entries_for_tag(sel)
-                                                    .unwrap_or(0);
-                                                ui.label(
-                                                    egui::RichText::new(format!(
-                                                        "{}: {}",
-                                                        t!("settings.tags.related_records"),
-                                                        count
-                                                    ))
-                                                    .size(11.5)
-                                                    .color(self.theme.muted),
-                                                );
-                                                ui.add_space(8.0);
-
-                                                ui.label(
-                                                    egui::RichText::new(t!(
-                                                        "settings.tags.tag_color"
-                                                    ))
-                                                    .size(11.0)
-                                                    .color(self.theme.muted),
-                                                );
-                                                ui.add_space(2.0);
-                                                ui.horizontal(|ui| {
-                                                    let preview_color =
-                                                        hex_to_color32(&self.tag_detail_color)
-                                                            .unwrap_or(self.theme.accent);
-                                                    let (rect, _) = ui.allocate_exact_size(
-                                                        egui::vec2(20.0, 20.0),
-                                                        egui::Sense::hover(),
-                                                    );
-                                                    ui.painter().rect_filled(
-                                                        rect,
-                                                        egui::Rounding::same(4.0),
-                                                        preview_color,
-                                                    );
-                                                    let color_response = ui.add_sized(
-                                                        [80.0, 20.0],
-                                                        egui::TextEdit::singleline(
-                                                            &mut self.tag_detail_color,
-                                                        )
-                                                        .desired_width(80.0),
-                                                    );
-                                                    if color_response.changed()
-                                                        && let Err(err) =
-                                                            self.storage.update_saved_tag_color(
-                                                                sel,
-                                                                &self.tag_detail_color,
-                                                            )
-                                                    {
-                                                        self.status = format!(
-                                                            "{}: {err}",
-                                                            t!("settings.tags.update_color_failed")
-                                                        );
-                                                    }
-                                                });
-
-                                                ui.add_space(8.0);
-                                                if ui
-                                                    .add_sized(
-                                                        [ui.available_width().max(72.0), 24.0],
-                                                        egui::Button::new(
-                                                            egui::RichText::new(t!(
-                                                                "settings.tags.add_to_current"
-                                                            ))
-                                                            .size(11.0),
-                                                        )
-                                                        .rounding(egui::Rounding::same(6.0)),
-                                                    )
-                                                    .clicked()
-                                                {
-                                                    let tag = sel.clone();
-                                                    self.add_tag_to_editor(&tag);
-                                                }
-                                                ui.add_space(2.0);
-                                                if ui
-                                                    .add_sized(
-                                                        [ui.available_width().max(72.0), 24.0],
-                                                        egui::Button::new(
-                                                            egui::RichText::new(t!(
-                                                                "settings.tags.remove_from_catalog"
-                                                            ))
-                                                            .size(11.0)
-                                                            .color(self.theme.danger),
-                                                        )
-                                                        .rounding(egui::Rounding::same(6.0)),
-                                                    )
-                                                    .clicked()
-                                                {
-                                                    let tag = sel.clone();
-                                                    self.delete_saved_tag(&tag);
-                                                    self.selected_saved_tag = None;
-                                                }
-                                            } else {
-                                                ui.label(
-                                                    egui::RichText::new(t!(
-                                                        "settings.tags.click_left_hint"
-                                                    ))
-                                                    .size(12.0)
-                                                    .color(self.theme.muted),
-                                                );
-                                            }
-                                        });
-                                });
-                            });
-                        },
-                    );
-                    if expanded == prev {
-                        self.settings_panel_collapsed[5] = !expanded;
-                        self.persist_preferences();
-                    }
-                }
-
-                {
-                    let prev = self.settings_panel_collapsed[6];
-                    let mut expanded = !prev;
-                    let theme = self.theme.clone();
-                    macos_collapsible_group(
-                        ui,
-                        t!("settings.data.title"),
-                        &mut expanded,
-                        &theme,
-                        |ui| {
-                            ui.label(t!("settings.data.current_database"));
-                            egui::Frame::none()
-                                .fill(self.theme.data_bg)
-                                .stroke(egui::Stroke::new(1.0, self.theme.data_border))
-                                .rounding(egui::Rounding::same(8.0))
-                                .inner_margin(egui::Margin::symmetric(10.0, 7.0))
-                                .show(ui, |ui| {
-                                    ui.label(
-                                        egui::RichText::new(&self.current_database_path)
-                                            .monospace()
-                                            .color(self.theme.fg),
-                                    );
-                                });
-                            ui.add_space(6.0);
-                            ui.label(t!("settings.data.restart_save_path"));
-                            egui::Frame::none()
-                                .fill(self.theme.glass_bg)
-                                .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
-                                .rounding(egui::Rounding::same(8.0))
-                                .inner_margin(egui::Margin::symmetric(10.0, 7.0))
-                                .show(ui, |ui| {
-                                    ui.label(
-                                        egui::RichText::new(&self.database_path_input)
-                                            .monospace()
-                                            .color(self.theme.muted),
-                                    );
-                                });
-                            ui.horizontal(|ui| {
-                                if ui
-                                    .add(
-                                        egui::Button::new(t!("settings.data.select_save_path"))
-                                            .rounding(egui::Rounding::same(8.0)),
-                                    )
-                                    .clicked()
-                                {
-                                    let current = PathBuf::from(self.database_path_input.trim());
-                                    match pick_database_save_dir_with_dialog(&current) {
-                                        Ok(Some(dir)) => {
-                                            let path = dir.join("clipboard.db");
-                                            match Storage::write_redirect_path(path.clone()) {
-                                                Ok(()) => {
-                                                    self.database_path_input =
-                                                        path.display().to_string();
-                                                    self.status =
-                                                        t!("settings.data.save_path_updated")
-                                                            .to_string();
-                                                }
-                                                Err(err) => {
-                                                    self.status = format!(
-                                                        "{}: {err}",
-                                                        t!("settings.data.save_path_failed")
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Ok(None) => {}
-                                        Err(err) => self.status = err,
-                                    }
-                                }
-                                if ui.button(t!("settings.data.restore_default")).clicked() {
-                                    let path = Storage::default_path();
-                                    match Storage::write_redirect_path(path.clone()) {
-                                        Ok(()) => {
-                                            self.database_path_input = path.display().to_string();
-                                            self.status = t!("settings.data.restore_default_done")
-                                                .to_string();
-                                        }
-                                        Err(err) => {
-                                            self.status = format!(
-                                                "{}: {err}",
-                                                t!("settings.data.restore_default_failed")
-                                            )
-                                        }
-                                    }
-                                }
-                            });
-                            ui.label(
-                                egui::RichText::new(t!("settings.data.db_hint"))
-                                    .color(self.theme.muted),
-                            );
-                            if ui.button(t!("history.clear_unpinned_history")).clicked() {
-                                match self.storage.clear_unpinned() {
-                                    Ok(()) => {
-                                        self.status = t!("history.cleared_unpinned").to_string();
-                                        self.refresh_entries();
-                                    }
-                                    Err(err) => {
-                                        self.status =
-                                            format!("{}: {err}", t!("history.clear_failed"))
-                                    }
-                                }
-                            }
-                        },
-                    );
-                    if expanded == prev {
-                        self.settings_panel_collapsed[6] = !expanded;
-                        self.persist_preferences();
-                    }
+                for &tab in crate::ui::settings::SettingsTab::IMPLEMENTED {
+                    crate::ui::settings::dispatch_panel(tab, ui, self, ctx);
                 }
 
                 ui.add_space(6.0);
@@ -4551,7 +3452,7 @@ impl ClipboardApp {
                     let total_width = feedback_width + button_gap + reset_width;
                     ui.add_space(((ui.available_width() - total_width) * 0.5).max(0.0));
 
-                    if settings_footer_button(
+                    if crate::ui::settings::settings_footer_button(
                         ui,
                         t!("settings.feedback"),
                         &self.theme,
@@ -4567,8 +3468,13 @@ impl ClipboardApp {
                         }
                     }
                     ui.add_space(button_gap);
-                    if settings_footer_button(ui, t!("settings.reset"), &self.theme, reset_width)
-                        .clicked()
+                    if crate::ui::settings::settings_footer_button(
+                        ui,
+                        t!("settings.reset"),
+                        &self.theme,
+                        reset_width,
+                    )
+                    .clicked()
                     {
                         let window_pinned = self.window_pinned;
                         let show_sensitive = self.show_sensitive;
@@ -4616,38 +3522,6 @@ fn consume_scroll_input(ctx: &egui::Context) {
     });
 }
 
-fn apply_settings_widget_rounding(ui: &mut egui::Ui, radius: f32) {
-    let mut style = ui.style().as_ref().clone();
-    let rounding = egui::Rounding::same(radius);
-    style.visuals.widgets.noninteractive.rounding = rounding;
-    style.visuals.widgets.inactive.rounding = rounding;
-    style.visuals.widgets.hovered.rounding = rounding;
-    style.visuals.widgets.active.rounding = rounding;
-    style.visuals.widgets.open.rounding = rounding;
-    ui.set_style(style);
-}
-
-fn settings_footer_button(
-    ui: &mut egui::Ui,
-    label: impl AsRef<str>,
-    theme: &MacosTokens,
-    width: f32,
-) -> egui::Response {
-    let label = label.as_ref();
-    ui.add(
-        egui::Button::new(
-            egui::RichText::new(label)
-                .size(14.0)
-                .strong()
-                .color(theme.fg),
-        )
-        .min_size(egui::vec2(width, 34.0))
-        .fill(theme.card)
-        .stroke(egui::Stroke::new(1.0, theme.border))
-        .rounding(egui::Rounding::same(theme.radius_input)),
-    )
-}
-
 fn hotkey_config_from_preferences(preferences: &AppPreferences) -> platform::HotkeyConfig {
     platform::HotkeyConfig {
         main_hotkeys: preferences.main_hotkeys.clone(),
@@ -4657,83 +3531,13 @@ fn hotkey_config_from_preferences(preferences: &AppPreferences) -> platform::Hot
     }
 }
 
-fn hotkey_record_row(
-    ui: &mut egui::Ui,
-    label: impl AsRef<str>,
-    value: &str,
-    recording: bool,
-    mut actions: impl FnMut(&mut egui::Ui),
-) {
-    let label = label.as_ref();
-    ui.horizontal_wrapped(|ui| {
-        ui.label(label);
-        let display = if recording {
-            t!("settings.hotkey.recording_active").to_string()
-        } else if value.trim().is_empty() {
-            t!("settings.hotkey.not_set").to_string()
-        } else {
-            value.lines().map(str::trim).collect::<Vec<_>>().join(" / ")
-        };
-        ui.monospace(display);
-        actions(ui);
-    });
-}
-
-fn hotkey_single_record_row(
-    ui: &mut egui::Ui,
-    label: impl AsRef<str>,
-    value: &str,
-    recording: bool,
-    mut start_recording: impl FnMut(),
-) {
-    hotkey_record_row(ui, label, value, recording, |ui| {
-        if ui.button(t!("common.recording")).clicked() {
-            start_recording();
-        }
-    });
-}
-
-fn hotkey_lines(value: &str) -> Vec<String> {
+pub(crate) fn hotkey_lines(value: &str) -> Vec<String> {
     value
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(ToOwned::to_owned)
         .collect()
-}
-
-fn removable_hotkey_chip(ui: &mut egui::Ui, hotkey: &str, theme: &MacosTokens) -> egui::Response {
-    let label = format!("{hotkey}  ×");
-    let font_id = egui::FontId::monospace(12.0);
-    let galley = ui
-        .painter()
-        .layout_no_wrap(label.clone(), font_id.clone(), theme.fg);
-    let size = egui::vec2((galley.size().x + 18.0).max(44.0), 24.0);
-    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
-    let fill = if response.hovered() {
-        scale_alpha(theme.danger, 0.14)
-    } else {
-        theme.input_bg
-    };
-    let stroke = if response.hovered() {
-        egui::Stroke::new(1.0, theme.danger)
-    } else {
-        egui::Stroke::new(1.0, theme.input_border)
-    };
-    ui.painter()
-        .rect(rect, egui::Rounding::same(theme.radius_input), fill, stroke);
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        label,
-        font_id,
-        if response.hovered() {
-            theme.danger
-        } else {
-            theme.fg
-        },
-    );
-    response.on_hover_text(t!("settings.hotkey.delete_tooltip"))
 }
 
 fn merge_keyboard_modifiers(modifiers: egui::Modifiers) -> platform::KeyboardModifiers {
@@ -4842,277 +3646,8 @@ fn hotkey_equal(left: &str, right: &str) -> bool {
             .collect::<Vec<_>>()
 }
 
-struct DropdownOption {
-    value: String,
-    label: String,
-}
-
-impl DropdownOption {
-    fn borrowed(value: &str, label: impl AsRef<str>) -> Self {
-        Self {
-            value: value.to_string(),
-            label: label.as_ref().to_string(),
-        }
-    }
-
-    fn owned(value: String, label: String) -> Self {
-        Self { value, label }
-    }
-}
-
-fn searchable_combo_row(
-    ui: &mut egui::Ui,
-    label: impl AsRef<str>,
-    selected: &mut String,
-    search: &mut String,
-    options: &[DropdownOption],
-    search_hint: impl AsRef<str>,
-    theme: &MacosTokens,
-) -> bool {
-    let label = label.as_ref();
-    let search_hint = search_hint.as_ref();
-    let before = selected.clone();
-    ui.vertical(|ui| {
-        ui.label(label);
-        let popup_id = ui.make_persistent_id(format!("searchable_combo_popup_{label}"));
-        let search_id = ui.make_persistent_id(format!("searchable_combo_search_{label}"));
-        let button_width = ui.available_width().clamp(120.0, 360.0);
-        let selected_label = options
-            .iter()
-            .find(|option| option.value == *selected)
-            .map(|option| option.label.as_str())
-            .unwrap_or_else(|| selected.as_str());
-        let is_open = ui.memory(|mem| mem.is_popup_open(popup_id));
-        let arrow = if is_open { "▴" } else { "▾" };
-        let fill = if is_open {
-            theme.card_hover
-        } else {
-            theme.input_bg
-        };
-        let stroke = if is_open {
-            egui::Stroke::new(1.2, theme.accent)
-        } else {
-            egui::Stroke::new(1.0, theme.input_border)
-        };
-        let (button_rect, button) =
-            ui.allocate_exact_size(egui::vec2(button_width, 34.0), egui::Sense::click());
-        ui.painter().rect(
-            button_rect,
-            egui::Rounding::same(theme.radius_input),
-            fill,
-            stroke,
-        );
-        ui.painter().text(
-            button_rect.left_center() + egui::vec2(12.0, 0.0),
-            egui::Align2::LEFT_CENTER,
-            clipped_chip_label(selected_label, 32),
-            egui::FontId::proportional(12.5),
-            theme.fg,
-        );
-        let arrow_rect = egui::Rect::from_min_max(
-            egui::pos2(button_rect.right() - 34.0, button_rect.top()),
-            button_rect.right_bottom(),
-        );
-        ui.painter().text(
-            arrow_rect.center() + egui::vec2(0.0, -0.5),
-            egui::Align2::CENTER_CENTER,
-            arrow,
-            egui::FontId::proportional(24.0),
-            if is_open { theme.accent } else { theme.muted },
-        );
-        if button.clicked() {
-            if is_open {
-                ui.memory_mut(|mem| mem.close_popup());
-            } else {
-                ui.memory_mut(|mem| mem.open_popup(popup_id));
-                ui.memory_mut(|mem| mem.data.insert_temp(search_id.with("focus"), true));
-            }
-        }
-
-        let popup_direction = combo_popup_direction(ui, button.rect);
-        let mut popup_style = ui.style().as_ref().clone();
-        popup_style.visuals.window_fill = theme.select_menu_bg;
-        popup_style.visuals.window_stroke = egui::Stroke::new(1.0, theme.select_menu_border);
-        popup_style.visuals.menu_rounding = egui::Rounding::same(theme.radius_input);
-        popup_style.spacing.menu_margin = egui::Margin::same(10.0);
-        ui.scope(|ui| {
-            ui.set_style(popup_style);
-            egui::popup::popup_above_or_below_widget(
-                ui,
-                popup_id,
-                &button,
-                popup_direction,
-                egui::popup::PopupCloseBehavior::CloseOnClickOutside,
-                |ui| {
-                    ui.set_min_width((button.rect.width() - 20.0).max(160.0));
-                    ui.set_max_width((button.rect.width() - 20.0).max(160.0));
-                    let search_response = ui.add(
-                        egui::TextEdit::singleline(search)
-                            .id(search_id)
-                            .hint_text(search_hint)
-                            .desired_width(ui.available_width().max(120.0)),
-                    );
-                    let should_focus = ui
-                        .memory_mut(|mem| mem.data.remove_temp::<bool>(search_id.with("focus")))
-                        .unwrap_or(false);
-                    if should_focus {
-                        search_response.request_focus();
-                    }
-                    ui.add_space(8.0);
-
-                    let query = search.trim().to_ascii_lowercase();
-                    let mut shown = 0usize;
-                    egui::ScrollArea::vertical()
-                        .max_height(260.0)
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| {
-                            for option in options {
-                                let haystack = format!("{} {}", option.label, option.value)
-                                    .to_ascii_lowercase();
-                                if !query.is_empty() && !haystack.contains(&query) {
-                                    continue;
-                                }
-                                if dropdown_option_row(ui, option, *selected == option.value, theme)
-                                    .clicked()
-                                {
-                                    *selected = option.value.clone();
-                                    search.clear();
-                                    ui.memory_mut(|mem| mem.close_popup());
-                                }
-                                shown += 1;
-                                if shown >= 80 {
-                                    ui.label(
-                                        egui::RichText::new(t!("search.fuzzy_hint"))
-                                            .italics()
-                                            .color(theme.muted),
-                                    );
-                                    break;
-                                }
-                            }
-                            if shown == 0 {
-                                ui.label(
-                                    egui::RichText::new(t!("search.no_match"))
-                                        .italics()
-                                        .color(theme.muted),
-                                );
-                            }
-                        });
-                },
-            );
-        });
-    });
-    *selected != before
-}
-
-fn dropdown_option_row(
-    ui: &mut egui::Ui,
-    option: &DropdownOption,
-    selected: bool,
-    theme: &MacosTokens,
-) -> egui::Response {
-    let width = ui.available_width().max(120.0);
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 28.0), egui::Sense::click());
-    let fill = if selected {
-        scale_alpha(theme.accent, 0.88)
-    } else if response.hovered() {
-        theme.card_hover
-    } else {
-        egui::Color32::TRANSPARENT
-    };
-    if fill != egui::Color32::TRANSPARENT {
-        ui.painter()
-            .rect_filled(rect, egui::Rounding::same(theme.radius_input), fill);
-    }
-    let color = if selected {
-        egui::Color32::WHITE
-    } else {
-        theme.fg
-    };
-    ui.painter().text(
-        rect.left_center() + egui::vec2(10.0, 0.0),
-        egui::Align2::LEFT_CENTER,
-        clipped_chip_label(&option.label, 38),
-        egui::FontId::proportional(12.5),
-        color,
-    );
-    if selected {
-        ui.painter().text(
-            rect.right_center() - egui::vec2(8.0, 0.0),
-            egui::Align2::RIGHT_CENTER,
-            "✓",
-            egui::FontId::proportional(12.0),
-            egui::Color32::WHITE,
-        );
-    }
-    response
-}
-
-fn combo_popup_direction(ui: &egui::Ui, button_rect: egui::Rect) -> egui::AboveOrBelow {
-    let screen = ui.ctx().input(|input| input.screen_rect());
-    let margin = 12.0;
-    let estimated_popup_height = 312.0;
-    let below_space = screen.bottom() - button_rect.bottom() - margin;
-    let above_space = button_rect.top() - screen.top() - margin;
-    if below_space < estimated_popup_height && above_space > below_space {
-        egui::AboveOrBelow::Above
-    } else {
-        egui::AboveOrBelow::Below
-    }
-}
-
 fn emoji_total_pages(count: usize) -> usize {
     count.div_ceil(EMOJI_PAGE_SIZE).max(1)
-}
-
-fn app_combo_row(
-    ui: &mut egui::Ui,
-    label: impl AsRef<str>,
-    selected: &mut String,
-    search: &mut String,
-    choices: &[platform::AppChoice],
-    theme: &MacosTokens,
-) -> bool {
-    let mut options = Vec::with_capacity(choices.len() + 1);
-    options.push(DropdownOption::borrowed(
-        "",
-        t!("settings.default_app.system_default"),
-    ));
-    options.extend(choices.iter().map(|choice| {
-        DropdownOption::owned(
-            choice.command.clone(),
-            format!("{}  ({})", choice.name, choice.command),
-        )
-    }));
-    searchable_combo_row(
-        ui,
-        label,
-        selected,
-        search,
-        &options,
-        t!("settings.default_app.search_hint"),
-        theme,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn font_combo_row(
-    ui: &mut egui::Ui,
-    label: impl AsRef<str>,
-    selected: &mut String,
-    search: &mut String,
-    choices: &[String],
-    automatic_label: &str,
-    search_hint: impl AsRef<str>,
-    theme: &MacosTokens,
-) -> bool {
-    let mut options = Vec::with_capacity(choices.len() + 1);
-    options.push(DropdownOption::borrowed(AUTO_FONT_VALUE, automatic_label));
-    options.extend(
-        choices
-            .iter()
-            .map(|choice| DropdownOption::owned(choice.clone(), choice.clone())),
-    );
-    searchable_combo_row(ui, label, selected, search, &options, search_hint, theme)
 }
 
 fn write_text_to_temp_file(content: &str, extension: &str) -> Result<PathBuf, String> {
@@ -5149,50 +3684,6 @@ fn temp_open_dir() -> Result<PathBuf, String> {
     fs::create_dir_all(&dir)
         .map_err(|err| format!("{}: {err}", t!("error.temp_dir_create_failed")))?;
     Ok(dir)
-}
-
-fn pick_database_save_dir_with_dialog(current: &Path) -> Result<Option<PathBuf>, String> {
-    let current_dir = if current.as_os_str().is_empty() {
-        Storage::default_path()
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."))
-    } else if current.is_dir() {
-        current.to_path_buf()
-    } else {
-        current
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."))
-    };
-
-    match Command::new("zenity")
-        .arg("--file-selection")
-        .arg("--directory")
-        .arg(format!("--title={}", t!("error.db_select_title")))
-        .arg(format!("--filename={}", current_dir.display()))
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
-        }
-        Ok(_) => return Ok(None),
-        Err(_) => {}
-    }
-
-    match Command::new("kdialog")
-        .arg("--getexistingdirectory")
-        .arg(current_dir.display().to_string())
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            Ok((!value.is_empty()).then(|| PathBuf::from(value)))
-        }
-        Ok(_) => Ok(None),
-        Err(_) => Err(t!("error.dialog_not_found").to_string()),
-    }
 }
 
 fn hidden_edge_target(
@@ -5654,7 +4145,7 @@ impl eframe::App for ClipboardApp {
     }
 }
 
-fn configure_fonts(ctx: &egui::Context, selection: &FontSelection) {
+pub(crate) fn configure_fonts(ctx: &egui::Context, selection: &FontSelection) {
     let mut fonts = egui::FontDefinitions::default();
     if let Some(font) = load_primary_font(selection.primary.as_str()) {
         insert_font_front(&mut fonts, font);
@@ -5733,7 +4224,7 @@ fn load_fallback_font(fallback_font: &str) -> Option<LoadedFont> {
         .or_else(|| Some(load_vendored_unifont()))
 }
 
-fn discover_system_font_names() -> Vec<String> {
+pub(crate) fn discover_system_font_names() -> Vec<String> {
     let mut db = fontdb::Database::new();
     db.load_system_fonts();
     let mut names = BTreeSet::new();
@@ -5915,7 +4406,7 @@ fn tag_chip(ui: &mut egui::Ui, tag: &str, theme: &MacosTokens) {
         });
 }
 
-fn filter_chip(
+pub(crate) fn filter_chip(
     ui: &mut egui::Ui,
     label: impl AsRef<str>,
     selected: bool,
@@ -5949,26 +4440,6 @@ fn filter_chip(
         .min_size(egui::vec2(40.0, 20.0)),
     )
     .on_hover_text(label)
-}
-
-fn hex_to_color32(hex: &str) -> Option<egui::Color32> {
-    let hex = hex.trim().strip_prefix('#').unwrap_or(hex.trim());
-    match hex.len() {
-        6 => {
-            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-            Some(egui::Color32::from_rgb(r, g, b))
-        }
-        8 => {
-            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-            let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
-            Some(egui::Color32::from_rgba_unmultiplied(r, g, b, a))
-        }
-        _ => None,
-    }
 }
 
 fn emoji_button(ui: &mut egui::Ui, emoji: &str, theme: &MacosTokens) -> egui::Response {
@@ -6347,7 +4818,7 @@ fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
         });
 }
 
-fn clipped_chip_label(label: impl AsRef<str>, max_chars: usize) -> String {
+pub(crate) fn clipped_chip_label(label: impl AsRef<str>, max_chars: usize) -> String {
     let label = label.as_ref();
     let char_count = label.chars().count();
     if char_count <= max_chars {
@@ -6714,7 +5185,7 @@ fn empty_state(
     });
 }
 
-fn resolve_theme(color_mode: &str) -> MacosTokens {
+pub(crate) fn resolve_theme(color_mode: &str) -> MacosTokens {
     match color_mode {
         "light" => MacosTokens::light(),
         "dark" => MacosTokens::dark(),
