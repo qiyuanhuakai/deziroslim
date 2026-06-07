@@ -2,6 +2,8 @@ use rust_i18n::t;
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+pub mod linux_xfixes;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -109,6 +111,8 @@ impl HotkeyUpdateHandle {
     }
 }
 
+#[cfg(target_os = "linux")]
+pub use linux::active_window_class;
 #[cfg(target_os = "linux")]
 pub use linux::current_keyboard_modifiers;
 #[cfg(target_os = "linux")]
@@ -224,5 +228,15 @@ pub fn screen_geometry() -> Option<ScreenGeometry> {
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn mouse_position() -> Option<(f32, f32)> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+pub fn active_window_class() -> Option<String> {
+    None
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+pub fn active_window_class() -> Option<String> {
     None
 }

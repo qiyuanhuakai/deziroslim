@@ -25,6 +25,7 @@ x11rb::atom_manager! {
         _NET_ACTIVE_WINDOW,
         _NET_WM_NAME,
         WM_NAME,
+        WM_CLASS,
         UTF8_STRING,
     }
 }
@@ -359,6 +360,12 @@ mod tests {
         assert_eq!(geometry.y, -120.0);
         assert_eq!(geometry.width, 1920.0);
         assert_eq!(geometry.height, 1080.0);
+    }
+
+    #[test]
+    fn active_window_class_returns_option_without_panic() {
+        // In headless CI (no DISPLAY) this returns None; in X11 it returns Some.
+        let _result = super::active_window_class();
     }
 }
 
@@ -1034,6 +1041,52 @@ fn active_window_title() -> Option<String> {
         reset_x11_connection();
     }
     result
+}
+
+/// Returns the WM_CLASS of the focused window (e.g. `"org.kde.dolphin"`).
+///
+/// Parses the second null-terminated string from the `WM_CLASS` property.
+/// Returns `None` when no X11 display is available or the property is missing.
+pub fn active_window_class() -> Option<String> {
+    let conn = x11_connection()?;
+    let screen_num = x11_screen_num()?;
+    let screen = &conn.setup().roots[screen_num];
+    let atoms = match Atoms::new(conn.as_ref()).ok()?.reply() {
+        Ok(atoms) => atoms,
+        Err(_) => {
+            reset_x11_connection();
+            return None;
+        }
+    };
+    let active_window = read_window_property(conn.as_ref(), screen.root, atoms._NET_ACTIVE_WINDOW)?;
+
+    // WM_CLASS type is STRING (Latin-1), not UTF8_STRING.
+    let reply = conn
+        .get_property(
+            false,
+            active_window,
+            atoms.WM_CLASS,
+            AtomEnum::STRING,
+            0,
+            2048,
+        )
+        .ok()?
+        .reply()
+        .ok()?;
+    let bytes = reply.value;
+    // WM_CLASS = instance_name\0class_name\0 — extract class (second string).
+    let null_pos = bytes.iter().position(|&b| b == 0)?;
+    let class_bytes = bytes.get(null_pos + 1..)?;
+    let class_end = class_bytes
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(class_bytes.len());
+    let class = std::str::from_utf8(&class_bytes[..class_end]).ok()?;
+    let class = class.trim();
+    if class.is_empty() {
+        return None;
+    }
+    Some(class.to_string())
 }
 
 fn read_window_property<C: Connection>(conn: &C, window: Window, atom: u32) -> Option<Window> {
