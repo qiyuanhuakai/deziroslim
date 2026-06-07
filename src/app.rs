@@ -4249,6 +4249,22 @@ fn page_title(ui: &mut egui::Ui, title: impl AsRef<str>, theme: &MacosTokens) ->
 }
 
 impl eframe::App for ClipboardApp {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.auto_backup_enabled {
+            let data_dir = self
+                .storage
+                .path()
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .to_path_buf();
+            let retention = self.backup_retention_count;
+            let storage = self.storage.clone();
+            std::thread::spawn(move || {
+                let _ = crate::backup::AutoBackup::new(data_dir, retention).run_backup(&storage);
+            });
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.frame_count += 1;
         self.suppress_egui_debug_overlays(ctx);

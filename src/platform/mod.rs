@@ -31,6 +31,7 @@ pub struct HotkeyConfig {
     pub sequential_hotkey: String,
     pub rich_paste_hotkey: String,
     pub search_hotkey: String,
+    pub private_mode_hotkey: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -74,6 +75,7 @@ pub enum HotkeyAction {
     SequentialPaste,
     RichPaste,
     FocusSearch,
+    TogglePrivateMode,
 }
 
 #[derive(Clone)]
