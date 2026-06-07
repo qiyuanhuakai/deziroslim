@@ -31,7 +31,9 @@ fn main() -> anyhow::Result<()> {
     let dev_mode = dev_mode_enabled();
     let minimized = minimized_start_enabled();
     let storage = Storage::open(resolve_db_path()).context(t!("error.open_db_failed"))?;
-    storage.cleanup_expired().context(t!("error.cleanup_failed"))?;
+    storage
+        .cleanup_expired()
+        .context(t!("error.cleanup_failed"))?;
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(APP_DISPLAY_NAME)

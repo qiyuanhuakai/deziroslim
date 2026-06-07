@@ -113,7 +113,9 @@ pub fn start_hotkey_listener(
         .name("x11-hotkey-listener".to_string())
         .spawn(move || {
             if let Err(err) = hotkey_loop(sender.clone(), ctx.clone(), config, update_receiver) {
-                let _ = sender.send(ClipboardEvent::Status(t!("platform.hotkey_unavailable", err => err).to_string()));
+                let _ = sender.send(ClipboardEvent::Status(
+                    t!("platform.hotkey_unavailable", err => err).to_string(),
+                ));
                 ctx.request_repaint();
             }
         })
@@ -140,21 +142,26 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
         let parent = path
             .parent()
             .ok_or_else(|| t!("platform.autostart_dir_not_found").to_string())?;
-        fs::create_dir_all(parent).map_err(|err| t!("platform.autostart_dir_create_failed", err => err).to_string())?;
-        let exe = std::env::current_exe().map_err(|err| t!("platform.autostart_exe_read_failed", err => err).to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|err| t!("platform.autostart_dir_create_failed", err => err).to_string())?;
+        let exe = std::env::current_exe()
+            .map_err(|err| t!("platform.autostart_exe_read_failed", err => err).to_string())?;
         let exec = desktop_exec_arg(&exe)?;
         let desktop = format!(
             "[Desktop Entry]\nType=Application\nName=tiez-slim\nComment=Native clipboard manager\nExec={exec}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nStartupNotify=false\nStartupWMClass=tiez-slim-linux\n",
         );
-        fs::write(&path, desktop).map_err(|err| t!("platform.autostart_write_failed", err => err).to_string())?;
+        fs::write(&path, desktop)
+            .map_err(|err| t!("platform.autostart_write_failed", err => err).to_string())?;
     } else if path.exists() {
-        fs::remove_file(&path).map_err(|err| t!("platform.autostart_delete_failed", err => err).to_string())?;
+        fs::remove_file(&path)
+            .map_err(|err| t!("platform.autostart_delete_failed", err => err).to_string())?;
     }
     Ok(())
 }
 
 fn autostart_desktop_path() -> Result<PathBuf, String> {
-    let config_dir = dirs::config_dir().ok_or_else(|| t!("platform.xdg_config_not_found").to_string())?;
+    let config_dir =
+        dirs::config_dir().ok_or_else(|| t!("platform.xdg_config_not_found").to_string())?;
     Ok(config_dir.join("autostart").join("tiez-slim-linux.desktop"))
 }
 
@@ -228,7 +235,9 @@ pub fn start_tray(
     match start_status_notifier(sender.clone(), ctx.clone()) {
         Ok(handle) => Some(TrayHandle::new(move || handle.shutdown().wait())),
         Err(err) => {
-            let _ = sender.send(ClipboardEvent::Status(t!("error.system_tray_unavailable", err => err).to_string()));
+            let _ = sender.send(ClipboardEvent::Status(
+                t!("error.system_tray_unavailable", err => err).to_string(),
+            ));
             ctx.request_repaint();
             None
         }
@@ -367,7 +376,11 @@ pub fn discover_apps_for_mime(mime: &str) -> Vec<AppChoice> {
         && let Some(choice) = desktop_entries.get(default_id)
     {
         choices.push(AppChoice {
-            name: format!("{}：{}", t!("settings.default_app.system_default"), choice.name),
+            name: format!(
+                "{}：{}",
+                t!("settings.default_app.system_default"),
+                choice.name
+            ),
             command: choice.command.clone(),
             is_default: true,
         });
@@ -513,8 +526,8 @@ fn run_simulate_paste(prefer_formatted: bool, method: PasteMethod) -> Result<(),
 }
 
 fn simulate_type_paste() -> Result<(), String> {
-    let mut clipboard =
-        arboard::Clipboard::new().map_err(|err| t!("platform.paste_read_clipboard_failed", err => err).to_string())?;
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|err| t!("platform.paste_read_clipboard_failed", err => err).to_string())?;
     let text = clipboard
         .get_text()
         .map_err(|err| t!("platform.paste_read_text_failed", err => err).to_string())?;
@@ -595,8 +608,9 @@ fn hotkey_loop(
                     ctx.request_repaint();
                 }
                 Err(err) => {
-                    let _ =
-                        sender.send(ClipboardEvent::Status(t!("platform.hotkey_global_update_failed", err => err).to_string()));
+                    let _ = sender.send(ClipboardEvent::Status(
+                        t!("platform.hotkey_global_update_failed", err => err).to_string(),
+                    ));
                     ctx.request_repaint();
                 }
             }
@@ -678,7 +692,10 @@ fn grab_hotkey<C: Connection>(
             )
             .map_err(|err| err.to_string())?
             .check()
-            .map_err(|err| t!("platform.hotkey_registered_failed", label => hotkey.label, err => err).to_string())?;
+            .map_err(|err| {
+                t!("platform.hotkey_registered_failed", label => hotkey.label, err => err)
+                    .to_string()
+            })?;
         }
         if let Some(button) = hotkey.button {
             conn.grab_button(
@@ -694,7 +711,10 @@ fn grab_hotkey<C: Connection>(
             )
             .map_err(|err| err.to_string())?
             .check()
-            .map_err(|err| t!("platform.hotkey_registered_failed", label => hotkey.label, err => err).to_string())?;
+            .map_err(|err| {
+                t!("platform.hotkey_registered_failed", label => hotkey.label, err => err)
+                    .to_string()
+            })?;
         }
     }
     Ok(())
@@ -774,9 +794,10 @@ fn parse_hotkey<C: Connection>(
         }
     }
     let key = key.ok_or_else(|| t!("platform.hotkey_missing_key", combo => combo).to_string())?;
-    let keysym = key_to_keysym(&key).ok_or_else(|| t!("platform.hotkey_unsupported_key", key => key).to_string())?;
-    let keycode =
-        keysym_to_keycode(conn, keysym)?.ok_or_else(|| t!("platform.hotkey_keycode_not_found", key => key).to_string())?;
+    let keysym = key_to_keysym(&key)
+        .ok_or_else(|| t!("platform.hotkey_unsupported_key", key => key).to_string())?;
+    let keycode = keysym_to_keycode(conn, keysym)?
+        .ok_or_else(|| t!("platform.hotkey_keycode_not_found", key => key).to_string())?;
     Ok(Some(GrabbedHotkey {
         keycode: Some(keycode),
         button: None,

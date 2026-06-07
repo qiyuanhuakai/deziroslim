@@ -46,21 +46,33 @@ impl Storage {
         let Some(parent) = path.parent() else {
             anyhow::bail!("{}", t!("storage_error.db_path_required"));
         };
-        std::fs::create_dir_all(parent)
-            .with_context(|| t!("storage_error.create_db_dir_failed", path = parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| {
+            t!(
+                "storage_error.create_db_dir_failed",
+                path = parent.display()
+            )
+        })?;
         let config_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(APP_DATA_DIR);
-        std::fs::create_dir_all(&config_dir)
-            .with_context(|| t!("storage_error.create_config_dir_failed", path = config_dir.display()))?;
+        std::fs::create_dir_all(&config_dir).with_context(|| {
+            t!(
+                "storage_error.create_config_dir_failed",
+                path = config_dir.display()
+            )
+        })?;
         std::fs::write(config_dir.join("datapath.txt"), path.display().to_string())
             .context(t!("storage_error.save_path_config_failed"))
     }
 
     pub fn open(path: PathBuf) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| t!("storage_error.create_data_dir_failed", path = parent.display()))?;
+            std::fs::create_dir_all(parent).with_context(|| {
+                t!(
+                    "storage_error.create_data_dir_failed",
+                    path = parent.display()
+                )
+            })?;
         }
         let conn = Connection::open(&path).context(t!("storage_error.connect_sqlite_failed"))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;

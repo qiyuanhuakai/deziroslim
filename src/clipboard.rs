@@ -1,9 +1,9 @@
 use crate::model::{ClipboardEntry, ClipboardKind};
 use crate::platform;
 use arboard::Clipboard;
-use rust_i18n::t;
 use crossbeam_channel::Sender;
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
+use rust_i18n::t;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::io::Cursor;
@@ -33,7 +33,8 @@ pub fn start_watcher(sender: Sender<ClipboardEvent>) {
 }
 
 pub fn set_text(content: &str) -> Result<(), String> {
-    let mut clipboard = Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
+    let mut clipboard =
+        Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
     clipboard
         .set_text(content.to_string())
         .map_err(|err| t!("clipboard.error.write_text_failed", err = err).to_string())
@@ -187,7 +188,8 @@ fn string_fingerprint(value: &str) -> String {
 }
 
 fn set_html(text: &str, html: &str) -> Result<(), String> {
-    let mut clipboard = Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
+    let mut clipboard =
+        Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
     clipboard
         .set_html(html.to_string(), Some(text.to_string()))
         .map_err(|err| t!("clipboard.error.write_rich_failed", err = err).to_string())
@@ -205,7 +207,8 @@ pub fn set_file_list(content: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     let _ = set_file_list_with_xclip(&paths);
 
-    let mut clipboard = Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
+    let mut clipboard =
+        Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
     clipboard
         .set()
         .file_list(&paths)
@@ -319,13 +322,14 @@ fn set_image_from_data_url(content: &str) -> Result<(), String> {
         .split_once(',')
         .map(|(_, value)| value)
         .unwrap_or(content);
-    let bytes =
-        decode_base64(payload.trim()).map_err(|err| t!("clipboard.error.image_parse_failed", err = err).to_string())?;
+    let bytes = decode_base64(payload.trim())
+        .map_err(|err| t!("clipboard.error.image_parse_failed", err = err).to_string())?;
     let rgba = image::load_from_memory(&bytes)
         .map_err(|err| t!("clipboard.error.image_read_failed", err = err).to_string())?
         .to_rgba8();
     let (width, height) = rgba.dimensions();
-    let mut clipboard = Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
+    let mut clipboard =
+        Clipboard::new().map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
     clipboard
         .set_image(arboard::ImageData {
             width: width as usize,

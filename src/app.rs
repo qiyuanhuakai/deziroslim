@@ -288,9 +288,9 @@ const SYMBOL_GROUPS: &[(&str, &[&str])] = &[
         "Punctuation",
         &[
             "。", "、", "「", "」", "『", "』", "《", "》", "〈", "〉", "〔", "〕", "【", "】",
-            "〖", "〗", "〘", "〙", "〚", "〛", "〝", "〞", "\u{201c}", "\u{201d}", "\u{2018}", "\u{2019}", "‚", "„", "‹", "›",
-            "«", "»", "¿", "¡", "‽", "⁂", "⁇", "⁈", "⁉", "⸮", "﹁", "﹂", "﹃", "﹄", "﹏", "﹋",
-            "﹌",
+            "〖", "〗", "〘", "〙", "〚", "〛", "〝", "〞", "\u{201c}", "\u{201d}", "\u{2018}",
+            "\u{2019}", "‚", "„", "‹", "›", "«", "»", "¿", "¡", "‽", "⁂", "⁇", "⁈", "⁉", "⸮", "﹁",
+            "﹂", "﹃", "﹄", "﹏", "﹋", "﹌",
         ],
     ),
     (
@@ -915,7 +915,10 @@ impl ClipboardApp {
                                 }
                                 Err(err) => {
                                     self.error_count += 1;
-                                    self.status = format!("{}: {err}", t!("status.capture_rich_fallback_failed"));
+                                    self.status = format!(
+                                        "{}: {err}",
+                                        t!("status.capture_rich_fallback_failed")
+                                    );
                                 }
                             }
                         }
@@ -1002,7 +1005,12 @@ impl ClipboardApp {
     fn paste_file_favorite(&mut self, ctx: &egui::Context, path: &str) {
         self.last_activity = Instant::now();
         match clipboard::set_file_list(path) {
-            Ok(()) => self.schedule_pending_paste(ctx, None, true, t!("status.clipboard_written_favorite")),
+            Ok(()) => self.schedule_pending_paste(
+                ctx,
+                None,
+                true,
+                t!("status.clipboard_written_favorite"),
+            ),
             Err(err) => self.status = err,
         }
     }
@@ -1113,9 +1121,7 @@ impl ClipboardApp {
                         changed = true;
                     }
                 }
-                if changed
-                    && let Err(err) = self.persist_emoji_favorites()
-                {
+                if changed && let Err(err) = self.persist_emoji_favorites() {
                     self.status = err;
                 }
             }
@@ -1897,7 +1903,11 @@ impl ClipboardApp {
             && self.fallback_font != VENDORED_UNIFONT_LABEL
             && load_system_font_family(&self.fallback_font).is_none()
         {
-            return Some(format!("{}: {}", t!("status.font_fallback_not_found"), self.fallback_font));
+            return Some(format!(
+                "{}: {}",
+                t!("status.font_fallback_not_found"),
+                self.fallback_font
+            ));
         }
         None
     }
@@ -2141,7 +2151,10 @@ impl ClipboardApp {
 
     fn apply_recorded_hotkey(&mut self, target: HotkeyTarget, recorded: String) {
         if let Err(err) = platform::validate_hotkey(&recorded) {
-            self.status = format!("{}: {recorded} ({err})", t!("settings.hotkey.validate_failed"));
+            self.status = format!(
+                "{}: {recorded} ({err})",
+                t!("settings.hotkey.validate_failed")
+            );
             return;
         }
         match target {
@@ -2315,7 +2328,8 @@ impl ClipboardApp {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     if self.current_page != AppPage::Clipboard
-                        && toolbar_button(ui, "‹", t!("tooltip.back_to_clipboard"), &self.theme).clicked()
+                        && toolbar_button(ui, "‹", t!("tooltip.back_to_clipboard"), &self.theme)
+                            .clicked()
                     {
                         self.current_page = AppPage::Clipboard;
                     }
@@ -2367,43 +2381,53 @@ impl ClipboardApp {
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if toolbar_button(ui, "×", t!("tooltip.minimize"), &self.theme).clicked()
-                        {
+                        if toolbar_button(ui, "×", t!("tooltip.minimize"), &self.theme).clicked() {
                             self.close_or_hide_window(ctx);
                         }
                         if self.current_page == AppPage::Clipboard {
-                            if toolbar_button(ui, "⚙", t!("tooltip.settings"), &self.theme).clicked() {
+                            if toolbar_button(ui, "⚙", t!("tooltip.settings"), &self.theme)
+                                .clicked()
+                            {
                                 self.current_page = AppPage::Settings;
                             }
                             if self.emoji_panel_enabled
-                                && toolbar_button(ui, "☺", t!("tooltip.emoji"), &self.theme).clicked()
+                                && toolbar_button(ui, "☺", t!("tooltip.emoji"), &self.theme)
+                                    .clicked()
                             {
                                 self.current_page = AppPage::Emoji;
                             }
                             if self.symbol_panel_enabled
-                                && toolbar_button(ui, "∑", t!("tooltip.symbol"), &self.theme).clicked()
+                                && toolbar_button(ui, "∑", t!("tooltip.symbol"), &self.theme)
+                                    .clicked()
                             {
                                 self.current_page = AppPage::Symbol;
                             }
-                            if toolbar_button(ui, "⌫", t!("tooltip.clear_unpinned"), &self.theme).clicked() {
+                            if toolbar_button(ui, "⌫", t!("tooltip.clear_unpinned"), &self.theme)
+                                .clicked()
+                            {
                                 match self.storage.clear_unpinned() {
                                     Ok(()) => {
                                         self.status = t!("history.cleared_unpinned").to_string();
                                         self.refresh_entries();
                                     }
-                                    Err(err) => self.status = format!("{}: {err}", t!("history.clear_failed")),
+                                    Err(err) => {
+                                        self.status =
+                                            format!("{}: {err}", t!("history.clear_failed"))
+                                    }
                                 }
                             }
                         }
                         let pin_label = if self.window_pinned { "📍" } else { "📌" };
-                        if toolbar_button(ui, pin_label, t!("tooltip.pin_toggle"), &self.theme).clicked()
+                        if toolbar_button(ui, pin_label, t!("tooltip.pin_toggle"), &self.theme)
+                            .clicked()
                         {
                             self.window_pinned = !self.window_pinned;
                             self.apply_window_level(ctx);
                             self.persist_preferences();
                         }
                         if self.dev_mode
-                            && toolbar_button(ui, "DEV", t!("tooltip.dev_tools"), &self.theme).clicked()
+                            && toolbar_button(ui, "DEV", t!("tooltip.dev_tools"), &self.theme)
+                                .clicked()
                         {
                             self.show_dev_panel = !self.show_dev_panel;
                         }
@@ -2439,7 +2463,13 @@ impl ClipboardApp {
                                     self.refresh_entries();
                                 }
                                 if !self.query.is_empty()
-                                    && toolbar_button(ui, &t!("search.clear"), t!("search.clear_tooltip"), &self.theme).clicked()
+                                    && toolbar_button(
+                                        ui,
+                                        &t!("search.clear"),
+                                        t!("search.clear_tooltip"),
+                                        &self.theme,
+                                    )
+                                    .clicked()
                                 {
                                     self.query.clear();
                                     self.refresh_entries();
@@ -2536,10 +2566,7 @@ impl ClipboardApp {
                     },
                 )
             } else {
-                (
-                    t!("history.empty_title"),
-                    t!("history.empty_description"),
-                )
+                (t!("history.empty_title"), t!("history.empty_description"))
             };
             empty_state(ui, &title, &description, &self.theme);
             return;
@@ -3046,7 +3073,12 @@ impl ClipboardApp {
             return;
         };
         let Some(entry) = self.get_full_entry(summary.id) else {
-            empty_state(ui, t!("detail.load_failed"), t!("detail.load_failed_hint"), &self.theme);
+            empty_state(
+                ui,
+                t!("detail.load_failed"),
+                t!("detail.load_failed_hint"),
+                &self.theme,
+            );
             return;
         };
 
@@ -3138,10 +3170,7 @@ impl ClipboardApp {
                     .max_height(ui.available_height())
                     .show(ui, |ui| {
                         if content_is_masked {
-                            ui.colored_label(
-                                self.theme.muted,
-                                t!("detail.sensitive_hidden"),
-                            );
+                            ui.colored_label(self.theme.muted, t!("detail.sensitive_hidden"));
                             ui.separator();
                         }
                         if content_is_masked {
@@ -3185,7 +3214,8 @@ impl ClipboardApp {
                     .min(EMOJI_GROUPS.len().saturating_sub(1));
                 ui.horizontal_wrapped(|ui| {
                     for (index, group) in EMOJI_GROUPS.iter().enumerate() {
-                        let label = format!("{} ({})", localized_group_name(group), group.emojis.len());
+                        let label =
+                            format!("{} ({})", localized_group_name(group), group.emojis.len());
                         if filter_chip(ui, &label, self.emoji_group_index == index, &self.theme)
                             .clicked()
                         {
@@ -3203,17 +3233,21 @@ impl ClipboardApp {
                 let page_end = (page_start + EMOJI_PAGE_SIZE).min(group.emojis.len());
                 ui.horizontal_wrapped(|ui| {
                     ui.label(
-                        egui::RichText::new(t!("emoji.page_info")
-                            .replace("{name}", localized_group_name(group))
-                            .replace("{count}", &group.emojis.len().to_string())
-                            .replace("{current}", &(self.emoji_page + 1).to_string())
-                            .replace("{total}", &total_pages.to_string())
+                        egui::RichText::new(
+                            t!("emoji.page_info")
+                                .replace("{name}", localized_group_name(group))
+                                .replace("{count}", &group.emojis.len().to_string())
+                                .replace("{current}", &(self.emoji_page + 1).to_string())
+                                .replace("{total}", &total_pages.to_string()),
                         )
                         .size(14.0)
                         .strong(),
                     );
                     if ui
-                        .add_enabled(self.emoji_page > 0, egui::Button::new(t!("emoji.prev_page")))
+                        .add_enabled(
+                            self.emoji_page > 0,
+                            egui::Button::new(t!("emoji.prev_page")),
+                        )
                         .clicked()
                     {
                         self.emoji_page = self.emoji_page.saturating_sub(1);
@@ -3229,11 +3263,12 @@ impl ClipboardApp {
                     }
                 });
                 ui.label(
-                    egui::RichText::new(t!("emoji.group_source_hint")
-                        .replace("{source}", group.source_name)
-                        .replace("{total}", &ALL_TWEMOJI_EMOJIS.len().to_string())
+                    egui::RichText::new(
+                        t!("emoji.group_source_hint")
+                            .replace("{source}", group.source_name)
+                            .replace("{total}", &ALL_TWEMOJI_EMOJIS.len().to_string()),
                     )
-                        .color(self.theme.muted),
+                    .color(self.theme.muted),
                 );
                 ui.add_space(8.0);
                 egui::ScrollArea::vertical()
@@ -3263,8 +3298,7 @@ impl ClipboardApp {
                         }
                     }
                     ui.label(
-                        egui::RichText::new(t!("emoji.favorite_hint"))
-                            .color(self.theme.muted),
+                        egui::RichText::new(t!("emoji.favorite_hint")).color(self.theme.muted),
                     );
                 });
                 ui.add_space(8.0);
@@ -3277,8 +3311,7 @@ impl ClipboardApp {
                         .inner_margin(egui::Margin::same(12.0))
                         .show(ui, |ui| {
                             ui.label(
-                                egui::RichText::new(t!("emoji.drop_hint"))
-                                    .color(self.theme.accent),
+                                egui::RichText::new(t!("emoji.drop_hint")).color(self.theme.accent),
                             );
                         });
                     ui.add_space(8.0);
@@ -3316,7 +3349,11 @@ impl ClipboardApp {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 for (group, symbols) in SYMBOL_GROUPS {
-                    ui.label(egui::RichText::new(localized_symbol_group_name(group)).size(14.0).strong());
+                    ui.label(
+                        egui::RichText::new(localized_symbol_group_name(group))
+                            .size(14.0)
+                            .strong(),
+                    );
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {
                         for symbol in *symbols {
@@ -3350,12 +3387,24 @@ impl ClipboardApp {
                     ui.label(t!("status.dev_panel.cpu_collecting"));
                 }
                 ui.label(format!("Frame：{}", self.frame_count));
-                ui.label(t!("status.dev_panel.displayed_entries", count = self.entries.len()));
-                ui.label(t!("status.dev_panel.total_events", count = self.event_count));
-                ui.label(t!("status.dev_panel.saved_success", count = self.saved_count));
+                ui.label(t!(
+                    "status.dev_panel.displayed_entries",
+                    count = self.entries.len()
+                ));
+                ui.label(t!(
+                    "status.dev_panel.total_events",
+                    count = self.event_count
+                ));
+                ui.label(t!(
+                    "status.dev_panel.saved_success",
+                    count = self.saved_count
+                ));
                 ui.label(t!("status.dev_panel.error_count", count = self.error_count));
                 ui.label(t!("status.dev_panel.current_search", query = self.query));
-                let id_str = self.selected_id.map(|id| id.to_string()).unwrap_or_else(|| "—".to_string());
+                let id_str = self
+                    .selected_id
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "—".to_string());
                 ui.label(t!("status.dev_panel.selected_id", id = id_str));
                 ui.separator();
                 ui.collapsing(t!("status.dev_panel.debug_overlay"), |ui| {
@@ -3387,824 +3436,1162 @@ impl ClipboardApp {
             .max_width(700.0)
             .show(ui, |ui| {
                 apply_settings_widget_rounding(ui, self.theme.radius_input);
-            ui.label(egui::RichText::new(t!("settings.auto_save_hint")).color(self.theme.muted));
-            ui.add_space(8.0);
+                ui.label(
+                    egui::RichText::new(t!("settings.auto_save_hint")).color(self.theme.muted),
+                );
+                ui.add_space(8.0);
 
-        {
-            let prev = self.settings_panel_collapsed[0];
-            let mut expanded = !prev;
-            let theme = self.theme.clone();
-            macos_collapsible_group(ui, t!("settings.general.title"), &mut expanded, &theme, |ui| {
-                let lang_options = [
-                        DropdownOption::borrowed("zh-CN", t!("settings.general.language_option_zh_cn")),
-                        DropdownOption::borrowed("en-US", t!("settings.general.language_option_en_us")),
-                        DropdownOption::borrowed("follow-system", t!("settings.general.language_option_follow_system")),
-                    ];
-                    if searchable_combo_row(
+                {
+                    let prev = self.settings_panel_collapsed[0];
+                    let mut expanded = !prev;
+                    let theme = self.theme.clone();
+                    macos_collapsible_group(
                         ui,
-                        t!("settings.general.language"),
-                        &mut self.language,
-                        &mut self.language_search,
-                        &lang_options,
-                        "",
-                        &self.theme,
-                    ) {
-                        // 关键修复: "follow-system" 必须存储原始值,不要 resolve 成具体 locale
-                        let new_value = self.language.clone();
-                        if new_value == "follow-system" {
-                            let detected = crate::i18n::detect_system_locale();
-                            crate::i18n::set_app_locale(&detected);
-                            self.language = "follow-system".to_string();
-                        } else {
-                            crate::i18n::set_app_locale(&new_value);
-                            self.language = new_value;
-                        }
-                        self.persist_preferences();
-                    }
-                ui.label(
-                    egui::RichText::new(t!("settings.general.language_desc"))
-                        .color(self.theme.muted),
-                );
-                ui.label(
-                    egui::RichText::new(t!("settings.general.language_restart_notice"))
-                        .color(self.theme.muted),
-                );
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.emoji_entry"));
-                    macos_toggle(ui, &mut self.emoji_panel_enabled, &self.theme)
-                }).inner.changed() {
-                    if !self.emoji_panel_enabled && self.current_page == AppPage::Emoji {
-                        self.current_page = AppPage::Clipboard;
-                    }
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.symbol_entry"));
-                    macos_toggle(ui, &mut self.symbol_panel_enabled, &self.theme)
-                }).inner.changed() {
-                    if !self.symbol_panel_enabled && self.current_page == AppPage::Symbol {
-                        self.current_page = AppPage::Clipboard;
-                    }
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.autostart"));
-                    macos_toggle(ui, &mut self.autostart_enabled, &self.theme)
-                }).inner.changed() {
-                    match platform::set_autostart(self.autostart_enabled) {
-                        Ok(()) => {
-                            self.status = if self.autostart_enabled {
-                                t!("settings.general.autostart_enabled").to_string()
-                            } else {
-                                t!("settings.general.autostart_disabled").to_string()
-                            };
-                            self.persist_preferences();
-                        }
-                        Err(err) => {
-                            self.autostart_enabled = !self.autostart_enabled;
-                            self.status = format!("{}: {err}", t!("settings.general.autostart_failed"));
-                        }
-                    }
-                }
-                ui.label(
-                    egui::RichText::new(t!("settings.general.autostart_hint"))
-                        .color(self.theme.muted),
-                );
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.tag_manager"));
-                    macos_toggle(ui, &mut self.tag_manager_enabled, &self.theme)
-                }).inner.changed() {
-                    if !self.tag_manager_enabled {
-                        self.tag_filter = None;
-                        self.new_tag_input.clear();
-                        self.tag_editor.clear();
-                        self.refresh_entries();
-                    }
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.always_show_search"));
-                    macos_toggle(ui, &mut self.show_search_box, &self.theme)
-                }).inner.changed() {
-                    self.search_box_revealed = self.show_search_box;
-                    self.persist_preferences();
-                }
-                ui.label(
-                    egui::RichText::new(
-                        t!("settings.general.always_show_search_hint"),
-                    )
-                        .color(self.theme.muted),
-                );
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.compact_mode"));
-                    macos_toggle(ui, &mut self.compact_rows, &self.theme)
-                }).inner.changed()
-                {
-                    self.persist_preferences();
-                }
-                ui.label(
-                    egui::RichText::new(t!("settings.general.compact_mode_hint"))
-                        .color(self.theme.muted),
-                );
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.arrow_key_selection"));
-                    macos_toggle(ui, &mut self.arrow_key_selection, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.hide_tray_icon"));
-                    macos_toggle(ui, &mut self.hide_tray_icon, &self.theme)
-                }).inner.changed() {
-                    self.apply_tray_visibility(ctx);
-                    self.persist_preferences();
-                }
-                let can_close_to_tray = !self.hide_tray_icon && self.tray_handle.is_some();
-                if ui.add_enabled_ui(can_close_to_tray, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(t!("settings.general.close_to_tray"));
-                        macos_toggle(ui, &mut self.close_to_tray, &self.theme)
-                    }).inner
-                }).inner.changed()
-                {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.general.sound"));
-                    macos_toggle(ui, &mut self.sound_enabled, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                    if self.sound_enabled {
-                        self.play_sound(SoundEffect::Copy);
-                    }
-                }
-                if self.sound_enabled {
-                    let mut volume = self.sound_volume as f32;
-                    if ui.horizontal(|ui| {
-                        ui.label(t!("settings.general.sound_volume"));
-                        let changed = macos_range_slider(ui, &mut volume, 0.0..=100.0, &self.theme).changed();
-                        ui.label(egui::RichText::new(format!("{}%", volume.round() as u8)).color(self.theme.muted));
-                        changed
-                    }).inner {
-                        self.sound_volume = volume.round().clamp(0.0, 100.0) as u8;
-                        self.persist_preferences();
-                    }
-                    if ui.horizontal(|ui| {
-                        ui.label(t!("settings.general.paste_sound"));
-                        macos_toggle(ui, &mut self.paste_sound_enabled, &self.theme)
-                    }).inner.changed() {
-                        self.persist_preferences();
-                    }
-                }
-            });
-            if expanded == prev {
-                self.settings_panel_collapsed[0] = !expanded;
-                self.persist_preferences();
-            }
-        }
-
-        {
-            let prev = self.settings_panel_collapsed[1];
-            let mut expanded = !prev;
-            let theme = self.theme.clone();
-            macos_collapsible_group(ui, t!("settings.hotkey.title"), &mut expanded, &theme, |ui| {
-                ui.label(egui::RichText::new(t!("settings.hotkey.hint")).color(self.theme.muted));
-                let main_hotkeys = self.main_hotkeys.clone();
-                let sequential_hotkey = self.sequential_hotkey.clone();
-                let rich_paste_hotkey = self.rich_paste_hotkey.clone();
-                let search_hotkey = self.search_hotkey.clone();
-                hotkey_record_row(ui, t!("settings.hotkey.main_invoke"), &main_hotkeys, self.recording_hotkey == Some(HotkeyTarget::Main), |ui| {
-                    if ui.button(t!("settings.hotkey.record_new")).clicked() {
-                        self.recording_hotkey = Some(HotkeyTarget::Main);
-                        self.status = t!("settings.hotkey.recording_main").to_string();
-                    }
-                    if ui.button(t!("settings.hotkey.clear_all")).clicked() {
-                        self.main_hotkeys.clear();
-                        self.update_hotkeys();
-                        self.persist_preferences();
-                    }
-                });
-                let main_hotkey_items = hotkey_lines(&main_hotkeys);
-                if !main_hotkey_items.is_empty() {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new(t!("settings.hotkey.recorded")).color(self.theme.muted));
-                        let mut remove_hotkey = None;
-                        for hotkey in &main_hotkey_items {
-                            if removable_hotkey_chip(ui, hotkey, &self.theme).clicked() {
-                                remove_hotkey = Some(hotkey.clone());
+                        t!("settings.general.title"),
+                        &mut expanded,
+                        &theme,
+                        |ui| {
+                            let lang_options = [
+                                DropdownOption::borrowed(
+                                    "zh-CN",
+                                    t!("settings.general.language_option_zh_cn"),
+                                ),
+                                DropdownOption::borrowed(
+                                    "en-US",
+                                    t!("settings.general.language_option_en_us"),
+                                ),
+                                DropdownOption::borrowed(
+                                    "follow-system",
+                                    t!("settings.general.language_option_follow_system"),
+                                ),
+                            ];
+                            if searchable_combo_row(
+                                ui,
+                                t!("settings.general.language"),
+                                &mut self.language,
+                                &mut self.language_search,
+                                &lang_options,
+                                "",
+                                &self.theme,
+                            ) {
+                                // 关键修复: "follow-system" 必须存储原始值,不要 resolve 成具体 locale
+                                let new_value = self.language.clone();
+                                if new_value == "follow-system" {
+                                    let detected = crate::i18n::detect_system_locale();
+                                    crate::i18n::set_app_locale(&detected);
+                                    self.language = "follow-system".to_string();
+                                } else {
+                                    crate::i18n::set_app_locale(&new_value);
+                                    self.language = new_value;
+                                }
+                                self.persist_preferences();
                             }
-                        }
-                        if let Some(remove_hotkey) = remove_hotkey {
-                            self.remove_main_hotkey(&remove_hotkey);
-                        }
-                    });
-                }
-                hotkey_single_record_row(ui, t!("settings.hotkey.sequential_paste"), &sequential_hotkey, self.recording_hotkey == Some(HotkeyTarget::Sequential), || {
-                    self.recording_hotkey = Some(HotkeyTarget::Sequential);
-                    self.status = t!("settings.hotkey.recording_sequential").to_string();
-                });
-                hotkey_single_record_row(ui, t!("settings.hotkey.rich_paste"), &rich_paste_hotkey, self.recording_hotkey == Some(HotkeyTarget::RichPaste), || {
-                    self.recording_hotkey = Some(HotkeyTarget::RichPaste);
-                    self.status = t!("settings.hotkey.recording_rich_paste").to_string();
-                });
-                hotkey_single_record_row(ui, t!("settings.hotkey.search_focus"), &search_hotkey, self.recording_hotkey == Some(HotkeyTarget::Search), || {
-                    self.recording_hotkey = Some(HotkeyTarget::Search);
-                    self.status = t!("settings.hotkey.recording_search").to_string();
-                });
-            });
-            if expanded == prev {
-                self.settings_panel_collapsed[1] = !expanded;
-                self.persist_preferences();
-            }
-        }
-
-        {
-            let prev = self.settings_panel_collapsed[2];
-            let mut expanded = !prev;
-            let theme = self.theme.clone();
-            macos_collapsible_group(ui, t!("settings.clipboard.title"), &mut expanded, &theme, |ui| {
-                ui.add_enabled_ui(false, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(t!("settings.clipboard.persistent"));
-                        macos_toggle(ui, &mut self.persistent, &self.theme);
-                    });
-                });
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.clipboard.deduplicate"));
-                    macos_toggle(ui, &mut self.deduplicate, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.clipboard.capture_files"));
-                    macos_toggle(ui, &mut self.capture_files, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.clipboard.capture_rich_text"));
-                    macos_toggle(ui, &mut self.capture_rich_text, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.clipboard.delete_after_paste"));
-                    macos_toggle(ui, &mut self.delete_after_paste, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.clipboard.move_to_top_after_paste"));
-                    macos_toggle(ui, &mut self.move_to_top_after_paste, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                let paste_options = [
-                    DropdownOption::borrowed(
-                        "shift_insert",
-                        t!("settings.clipboard.paste_method_shift_insert"),
-                    ),
-                    DropdownOption::borrowed("ctrl_v", "Ctrl+V"),
-                    DropdownOption::borrowed("type_text", t!("settings.clipboard.paste_method_type_text")),
-                ];
-                if searchable_combo_row(
-                    ui,
-                    t!("settings.clipboard.paste_method"),
-                    &mut self.paste_method,
-                    &mut self.paste_method_search,
-                    &paste_options,
-                    t!("settings.clipboard.paste_method_search_hint"),
-                    &self.theme,
-                ) {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.clipboard.privacy_protection"));
-                    macos_toggle(ui, &mut self.privacy_protection, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                ui.label(egui::RichText::new(t!("settings.clipboard.clipboard_status_hint") ).color(self.theme.muted));
-            });
-            if expanded == prev {
-                self.settings_panel_collapsed[2] = !expanded;
-                self.persist_preferences();
-            }
-        }
-
-        {
-            let prev = self.settings_panel_collapsed[3];
-            let mut expanded = !prev;
-            let theme = self.theme.clone();
-            macos_collapsible_group(ui, t!("settings.appearance.title"), &mut expanded, &theme, |ui| {
-                ui.label(t!("settings.appearance.theme_mode"));
-                ui.horizontal(|ui| {
-                    let modes = [(t!("settings.appearance.theme_follow_system"), "system"), (t!("settings.appearance.theme_light"), "light"), (t!("settings.appearance.theme_dark"), "dark")];
-                    for (label, value) in modes {
-                        if filter_chip(ui, label.as_ref(), self.color_mode == value, &self.theme).clicked() {
-                            self.color_mode = value.to_string();
-                            self.theme = resolve_theme(&self.color_mode);
-                            self.configure_style(ctx);
-                            self.persist_preferences();
-                        }
-                    }
-                });
-                ui.add_space(4.0);
-                ui.label(t!("settings.appearance.font"));
-                let mut font_changed = false;
-                font_changed |= font_combo_row(
-                    ui,
-                    t!("settings.appearance.primary_font"),
-                    &mut self.primary_font,
-                    &mut self.primary_font_search,
-                    &self.font_choices,
-                    AUTO_PRIMARY_FONT_LABEL,
-                    t!("settings.appearance.primary_font_search"),
-                    &self.theme,
-                );
-                font_changed |= font_combo_row(
-                    ui,
-                    t!("settings.appearance.fallback_font"),
-                    &mut self.fallback_font,
-                    &mut self.fallback_font_search,
-                    &self.font_choices,
-                    AUTO_FALLBACK_FONT_LABEL,
-                    t!("settings.appearance.fallback_font_search"),
-                    &self.theme,
-                );
-                ui.vertical(|ui| {
-                    if ui.button(t!("settings.appearance.rescan_fonts")).clicked() {
-                        self.font_choices = discover_system_font_names();
-                        self.status = format!("{}: {}", t!("settings.appearance.rescan_fonts_done"), self.font_choices.len());
-                    }
-                    ui.label(
-                        egui::RichText::new(t!("settings.appearance.fallback_font_hint"))
-                            .color(self.theme.muted),
-                    );
-                });
-                if font_changed {
-                    configure_fonts(ctx, &self.font_selection());
-                    self.persist_preferences();
-                    if let Some(message) = self.font_load_warning() {
-                        self.status = message;
-                    }
-                }
-                ui.add_space(4.0);
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.appearance.show_sensitive"));
-                    macos_toggle(ui, &mut self.show_sensitive, &self.theme)
-                }).inner.changed()
-                {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.appearance.show_detail_panel"));
-                    macos_toggle(ui, &mut self.show_detail_panel, &self.theme)
-                }).inner.changed()
-                {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.appearance.show_app_border"));
-                    macos_toggle(ui, &mut self.show_app_border, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.appearance.window_pin"));
-                    macos_toggle(ui, &mut self.window_pinned, &self.theme)
-                }).inner.changed() {
-                    self.apply_window_level(ctx);
-                    self.persist_preferences();
-                }
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.appearance.follow_mouse"));
-                    macos_toggle(ui, &mut self.follow_mouse, &self.theme)
-                }).inner.changed() {
-                    self.persist_preferences();
-                }
-                let mut edge_docking_enabled = self.edge_docking != DockMode::Off;
-                if ui.horizontal(|ui| {
-                    ui.label(t!("settings.appearance.edge_docking"));
-                    macos_toggle(ui, &mut edge_docking_enabled, &self.theme)
-                }).inner.changed() {
-                    self.edge_docking = if edge_docking_enabled {
-                        DockMode::Right
-                    } else {
-                        DockMode::Off
-                    };
-                    if self.edge_docking == DockMode::Off && self.edge_hidden {
-                        self.reveal_edge_hidden(ctx, false);
-                    }
-                    self.persist_preferences();
-                }
-                ui.label(egui::RichText::new(t!("settings.appearance.edge_docking_hint") ).color(self.theme.muted));
-                ui.add_space(4.0);
-                ui.label(t!("settings.appearance.surface_opacity"));
-                let mut opacity_f32 = self.surface_opacity as f32;
-                if macos_range_slider(ui, &mut opacity_f32, 0.0..=100.0, &self.theme).changed() {
-                    self.surface_opacity = opacity_f32 as u8;
-                    self.configure_style(ctx);
-                    self.persist_preferences();
-                }
-                ui.label(t!("settings.appearance.interaction_hint"));
-            });
-            if expanded == prev {
-                self.settings_panel_collapsed[3] = !expanded;
-                self.persist_preferences();
-            }
-        }
-
-        {
-            let prev = self.settings_panel_collapsed[4];
-            let mut expanded = !prev;
-            let theme = self.theme.clone();
-            macos_collapsible_group(ui, t!("settings.default_app.title"), &mut expanded, &theme, |ui| {
-                ui.label(egui::RichText::new(t!("settings.default_app.hint")).color(self.theme.muted));
-                let mut changed = false;
-                changed |= app_combo_row(ui, "TEXT", &mut self.default_text_app, &mut self.text_app_search, &self.text_app_choices, &self.theme);
-                changed |= app_combo_row(ui, "URL", &mut self.default_url_app, &mut self.url_app_search, &self.url_app_choices, &self.theme);
-                changed |= app_combo_row(ui, "CODE", &mut self.default_code_app, &mut self.code_app_search, &self.code_app_choices, &self.theme);
-                changed |= app_combo_row(ui, "FILE", &mut self.default_file_app, &mut self.file_app_search, &self.file_app_choices, &self.theme);
-                changed |= app_combo_row(ui, "IMAGE", &mut self.default_image_app, &mut self.image_app_search, &self.image_app_choices, &self.theme);
-                changed |= app_combo_row(ui, "VIDEO", &mut self.default_video_app, &mut self.video_app_search, &self.video_app_choices, &self.theme);
-                if ui.button(t!("settings.default_app.rescan")).clicked() {
-                    self.text_app_choices = platform::discover_apps_for_mime("text/plain");
-                    self.url_app_choices = platform::discover_apps_for_mime("x-scheme-handler/http");
-                    self.code_app_choices = platform::discover_apps_for_mime("text/plain");
-                    self.file_app_choices = platform::discover_apps_for_mime("application/octet-stream");
-                    self.image_app_choices = platform::discover_apps_for_mime("image/png");
-                    self.video_app_choices = platform::discover_apps_for_mime("video/mp4");
-                    self.status = t!("settings.default_app.rescan_done").to_string();
-                }
-                if changed {
-                    self.persist_preferences();
-                }
-            });
-            if expanded == prev {
-                self.settings_panel_collapsed[4] = !expanded;
-                self.persist_preferences();
-            }
-        }
-
-        {
-            let prev = self.settings_panel_collapsed[5];
-            let mut expanded = !prev;
-            let theme = self.theme.clone();
-            macos_collapsible_group(ui, t!("settings.tags.title"), &mut expanded, &theme, |ui| {
-                if !self.tag_manager_enabled {
-                    ui.label(egui::RichText::new(t!("settings.tags.manager_closed_hint")).color(self.theme.muted));
-                    return;
-                }
-
-                let available_width = (ui.available_width() - 12.0).max(220.0);
-                let gap = ui.spacing().item_spacing.x;
-                let sidebar_w = (available_width * 0.34).clamp(96.0, 156.0);
-                let detail_w = (available_width - sidebar_w - gap * 2.0).max(88.0);
-
-                ui.horizontal_top(|ui| {
-                    ui.vertical(|ui| {
-                        ui.set_width(sidebar_w);
-                        let bg = self.theme.glass_bg;
-                        let accent = self.theme.accent;
-                        egui::Frame::none()
-                            .fill(bg)
-                            .rounding(egui::Rounding::same(8.0))
-                            .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
-                            .inner_margin(6.0)
-                            .show(ui, |ui| {
-                                ui.set_width((sidebar_w - 12.0).max(80.0));
+                            ui.label(
+                                egui::RichText::new(t!("settings.general.language_desc"))
+                                    .color(self.theme.muted),
+                            );
+                            ui.label(
+                                egui::RichText::new(t!("settings.general.language_restart_notice"))
+                                    .color(self.theme.muted),
+                            );
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.emoji_entry"));
+                                    macos_toggle(ui, &mut self.emoji_panel_enabled, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                if !self.emoji_panel_enabled && self.current_page == AppPage::Emoji
+                                {
+                                    self.current_page = AppPage::Clipboard;
+                                }
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.symbol_entry"));
+                                    macos_toggle(ui, &mut self.symbol_panel_enabled, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                if !self.symbol_panel_enabled
+                                    && self.current_page == AppPage::Symbol
+                                {
+                                    self.current_page = AppPage::Clipboard;
+                                }
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.autostart"));
+                                    macos_toggle(ui, &mut self.autostart_enabled, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                match platform::set_autostart(self.autostart_enabled) {
+                                    Ok(()) => {
+                                        self.status = if self.autostart_enabled {
+                                            t!("settings.general.autostart_enabled").to_string()
+                                        } else {
+                                            t!("settings.general.autostart_disabled").to_string()
+                                        };
+                                        self.persist_preferences();
+                                    }
+                                    Err(err) => {
+                                        self.autostart_enabled = !self.autostart_enabled;
+                                        self.status = format!(
+                                            "{}: {err}",
+                                            t!("settings.general.autostart_failed")
+                                        );
+                                    }
+                                }
+                            }
+                            ui.label(
+                                egui::RichText::new(t!("settings.general.autostart_hint"))
+                                    .color(self.theme.muted),
+                            );
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.tag_manager"));
+                                    macos_toggle(ui, &mut self.tag_manager_enabled, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                if !self.tag_manager_enabled {
+                                    self.tag_filter = None;
+                                    self.new_tag_input.clear();
+                                    self.tag_editor.clear();
+                                    self.refresh_entries();
+                                }
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.always_show_search"));
+                                    macos_toggle(ui, &mut self.show_search_box, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.search_box_revealed = self.show_search_box;
+                                self.persist_preferences();
+                            }
+                            ui.label(
+                                egui::RichText::new(t!("settings.general.always_show_search_hint"))
+                                    .color(self.theme.muted),
+                            );
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.compact_mode"));
+                                    macos_toggle(ui, &mut self.compact_rows, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            ui.label(
+                                egui::RichText::new(t!("settings.general.compact_mode_hint"))
+                                    .color(self.theme.muted),
+                            );
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.arrow_key_selection"));
+                                    macos_toggle(ui, &mut self.arrow_key_selection, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.hide_tray_icon"));
+                                    macos_toggle(ui, &mut self.hide_tray_icon, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.apply_tray_visibility(ctx);
+                                self.persist_preferences();
+                            }
+                            let can_close_to_tray =
+                                !self.hide_tray_icon && self.tray_handle.is_some();
+                            if ui
+                                .add_enabled_ui(can_close_to_tray, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("settings.general.close_to_tray"));
+                                        macos_toggle(ui, &mut self.close_to_tray, &self.theme)
+                                    })
+                                    .inner
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.general.sound"));
+                                    macos_toggle(ui, &mut self.sound_enabled, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                                if self.sound_enabled {
+                                    self.play_sound(SoundEffect::Copy);
+                                }
+                            }
+                            if self.sound_enabled {
+                                let mut volume = self.sound_volume as f32;
                                 if ui
-                                    .add_sized(
-                                        [ui.available_width().max(80.0), 24.0],
-                                        egui::Button::new(
-                                            egui::RichText::new(t!("settings.tags.new_tag")).size(11.0),
+                                    .horizontal(|ui| {
+                                        ui.label(t!("settings.general.sound_volume"));
+                                        let changed = macos_range_slider(
+                                            ui,
+                                            &mut volume,
+                                            0.0..=100.0,
+                                            &self.theme,
                                         )
-                                        .rounding(egui::Rounding::same(6.0)),
+                                        .changed();
+                                        ui.label(
+                                            egui::RichText::new(format!(
+                                                "{}%",
+                                                volume.round() as u8
+                                            ))
+                                            .color(self.theme.muted),
+                                        );
+                                        changed
+                                    })
+                                    .inner
+                                {
+                                    self.sound_volume = volume.round().clamp(0.0, 100.0) as u8;
+                                    self.persist_preferences();
+                                }
+                                if ui
+                                    .horizontal(|ui| {
+                                        ui.label(t!("settings.general.paste_sound"));
+                                        macos_toggle(ui, &mut self.paste_sound_enabled, &self.theme)
+                                    })
+                                    .inner
+                                    .changed()
+                                {
+                                    self.persist_preferences();
+                                }
+                            }
+                        },
+                    );
+                    if expanded == prev {
+                        self.settings_panel_collapsed[0] = !expanded;
+                        self.persist_preferences();
+                    }
+                }
+
+                {
+                    let prev = self.settings_panel_collapsed[1];
+                    let mut expanded = !prev;
+                    let theme = self.theme.clone();
+                    macos_collapsible_group(
+                        ui,
+                        t!("settings.hotkey.title"),
+                        &mut expanded,
+                        &theme,
+                        |ui| {
+                            ui.label(
+                                egui::RichText::new(t!("settings.hotkey.hint"))
+                                    .color(self.theme.muted),
+                            );
+                            let main_hotkeys = self.main_hotkeys.clone();
+                            let sequential_hotkey = self.sequential_hotkey.clone();
+                            let rich_paste_hotkey = self.rich_paste_hotkey.clone();
+                            let search_hotkey = self.search_hotkey.clone();
+                            hotkey_record_row(
+                                ui,
+                                t!("settings.hotkey.main_invoke"),
+                                &main_hotkeys,
+                                self.recording_hotkey == Some(HotkeyTarget::Main),
+                                |ui| {
+                                    if ui.button(t!("settings.hotkey.record_new")).clicked() {
+                                        self.recording_hotkey = Some(HotkeyTarget::Main);
+                                        self.status =
+                                            t!("settings.hotkey.recording_main").to_string();
+                                    }
+                                    if ui.button(t!("settings.hotkey.clear_all")).clicked() {
+                                        self.main_hotkeys.clear();
+                                        self.update_hotkeys();
+                                        self.persist_preferences();
+                                    }
+                                },
+                            );
+                            let main_hotkey_items = hotkey_lines(&main_hotkeys);
+                            if !main_hotkey_items.is_empty() {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(t!("settings.hotkey.recorded"))
+                                            .color(self.theme.muted),
+                                    );
+                                    let mut remove_hotkey = None;
+                                    for hotkey in &main_hotkey_items {
+                                        if removable_hotkey_chip(ui, hotkey, &self.theme).clicked()
+                                        {
+                                            remove_hotkey = Some(hotkey.clone());
+                                        }
+                                    }
+                                    if let Some(remove_hotkey) = remove_hotkey {
+                                        self.remove_main_hotkey(&remove_hotkey);
+                                    }
+                                });
+                            }
+                            hotkey_single_record_row(
+                                ui,
+                                t!("settings.hotkey.sequential_paste"),
+                                &sequential_hotkey,
+                                self.recording_hotkey == Some(HotkeyTarget::Sequential),
+                                || {
+                                    self.recording_hotkey = Some(HotkeyTarget::Sequential);
+                                    self.status =
+                                        t!("settings.hotkey.recording_sequential").to_string();
+                                },
+                            );
+                            hotkey_single_record_row(
+                                ui,
+                                t!("settings.hotkey.rich_paste"),
+                                &rich_paste_hotkey,
+                                self.recording_hotkey == Some(HotkeyTarget::RichPaste),
+                                || {
+                                    self.recording_hotkey = Some(HotkeyTarget::RichPaste);
+                                    self.status =
+                                        t!("settings.hotkey.recording_rich_paste").to_string();
+                                },
+                            );
+                            hotkey_single_record_row(
+                                ui,
+                                t!("settings.hotkey.search_focus"),
+                                &search_hotkey,
+                                self.recording_hotkey == Some(HotkeyTarget::Search),
+                                || {
+                                    self.recording_hotkey = Some(HotkeyTarget::Search);
+                                    self.status =
+                                        t!("settings.hotkey.recording_search").to_string();
+                                },
+                            );
+                        },
+                    );
+                    if expanded == prev {
+                        self.settings_panel_collapsed[1] = !expanded;
+                        self.persist_preferences();
+                    }
+                }
+
+                {
+                    let prev = self.settings_panel_collapsed[2];
+                    let mut expanded = !prev;
+                    let theme = self.theme.clone();
+                    macos_collapsible_group(
+                        ui,
+                        t!("settings.clipboard.title"),
+                        &mut expanded,
+                        &theme,
+                        |ui| {
+                            ui.add_enabled_ui(false, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(t!("settings.clipboard.persistent"));
+                                    macos_toggle(ui, &mut self.persistent, &self.theme);
+                                });
+                            });
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.clipboard.deduplicate"));
+                                    macos_toggle(ui, &mut self.deduplicate, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.clipboard.capture_files"));
+                                    macos_toggle(ui, &mut self.capture_files, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.clipboard.capture_rich_text"));
+                                    macos_toggle(ui, &mut self.capture_rich_text, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.clipboard.delete_after_paste"));
+                                    macos_toggle(ui, &mut self.delete_after_paste, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.clipboard.move_to_top_after_paste"));
+                                    macos_toggle(ui, &mut self.move_to_top_after_paste, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            let paste_options = [
+                                DropdownOption::borrowed(
+                                    "shift_insert",
+                                    t!("settings.clipboard.paste_method_shift_insert"),
+                                ),
+                                DropdownOption::borrowed("ctrl_v", "Ctrl+V"),
+                                DropdownOption::borrowed(
+                                    "type_text",
+                                    t!("settings.clipboard.paste_method_type_text"),
+                                ),
+                            ];
+                            if searchable_combo_row(
+                                ui,
+                                t!("settings.clipboard.paste_method"),
+                                &mut self.paste_method,
+                                &mut self.paste_method_search,
+                                &paste_options,
+                                t!("settings.clipboard.paste_method_search_hint"),
+                                &self.theme,
+                            ) {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.clipboard.privacy_protection"));
+                                    macos_toggle(ui, &mut self.privacy_protection, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            ui.label(
+                                egui::RichText::new(t!("settings.clipboard.clipboard_status_hint"))
+                                    .color(self.theme.muted),
+                            );
+                        },
+                    );
+                    if expanded == prev {
+                        self.settings_panel_collapsed[2] = !expanded;
+                        self.persist_preferences();
+                    }
+                }
+
+                {
+                    let prev = self.settings_panel_collapsed[3];
+                    let mut expanded = !prev;
+                    let theme = self.theme.clone();
+                    macos_collapsible_group(
+                        ui,
+                        t!("settings.appearance.title"),
+                        &mut expanded,
+                        &theme,
+                        |ui| {
+                            ui.label(t!("settings.appearance.theme_mode"));
+                            ui.horizontal(|ui| {
+                                let modes = [
+                                    (t!("settings.appearance.theme_follow_system"), "system"),
+                                    (t!("settings.appearance.theme_light"), "light"),
+                                    (t!("settings.appearance.theme_dark"), "dark"),
+                                ];
+                                for (label, value) in modes {
+                                    if filter_chip(
+                                        ui,
+                                        label.as_ref(),
+                                        self.color_mode == value,
+                                        &self.theme,
+                                    )
+                                    .clicked()
+                                    {
+                                        self.color_mode = value.to_string();
+                                        self.theme = resolve_theme(&self.color_mode);
+                                        self.configure_style(ctx);
+                                        self.persist_preferences();
+                                    }
+                                }
+                            });
+                            ui.add_space(4.0);
+                            ui.label(t!("settings.appearance.font"));
+                            let mut font_changed = false;
+                            font_changed |= font_combo_row(
+                                ui,
+                                t!("settings.appearance.primary_font"),
+                                &mut self.primary_font,
+                                &mut self.primary_font_search,
+                                &self.font_choices,
+                                AUTO_PRIMARY_FONT_LABEL,
+                                t!("settings.appearance.primary_font_search"),
+                                &self.theme,
+                            );
+                            font_changed |= font_combo_row(
+                                ui,
+                                t!("settings.appearance.fallback_font"),
+                                &mut self.fallback_font,
+                                &mut self.fallback_font_search,
+                                &self.font_choices,
+                                AUTO_FALLBACK_FONT_LABEL,
+                                t!("settings.appearance.fallback_font_search"),
+                                &self.theme,
+                            );
+                            ui.vertical(|ui| {
+                                if ui.button(t!("settings.appearance.rescan_fonts")).clicked() {
+                                    self.font_choices = discover_system_font_names();
+                                    self.status = format!(
+                                        "{}: {}",
+                                        t!("settings.appearance.rescan_fonts_done"),
+                                        self.font_choices.len()
+                                    );
+                                }
+                                ui.label(
+                                    egui::RichText::new(t!(
+                                        "settings.appearance.fallback_font_hint"
+                                    ))
+                                    .color(self.theme.muted),
+                                );
+                            });
+                            if font_changed {
+                                configure_fonts(ctx, &self.font_selection());
+                                self.persist_preferences();
+                                if let Some(message) = self.font_load_warning() {
+                                    self.status = message;
+                                }
+                            }
+                            ui.add_space(4.0);
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.appearance.show_sensitive"));
+                                    macos_toggle(ui, &mut self.show_sensitive, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.appearance.show_detail_panel"));
+                                    macos_toggle(ui, &mut self.show_detail_panel, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.appearance.show_app_border"));
+                                    macos_toggle(ui, &mut self.show_app_border, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.appearance.window_pin"));
+                                    macos_toggle(ui, &mut self.window_pinned, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.apply_window_level(ctx);
+                                self.persist_preferences();
+                            }
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.appearance.follow_mouse"));
+                                    macos_toggle(ui, &mut self.follow_mouse, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.persist_preferences();
+                            }
+                            let mut edge_docking_enabled = self.edge_docking != DockMode::Off;
+                            if ui
+                                .horizontal(|ui| {
+                                    ui.label(t!("settings.appearance.edge_docking"));
+                                    macos_toggle(ui, &mut edge_docking_enabled, &self.theme)
+                                })
+                                .inner
+                                .changed()
+                            {
+                                self.edge_docking = if edge_docking_enabled {
+                                    DockMode::Right
+                                } else {
+                                    DockMode::Off
+                                };
+                                if self.edge_docking == DockMode::Off && self.edge_hidden {
+                                    self.reveal_edge_hidden(ctx, false);
+                                }
+                                self.persist_preferences();
+                            }
+                            ui.label(
+                                egui::RichText::new(t!("settings.appearance.edge_docking_hint"))
+                                    .color(self.theme.muted),
+                            );
+                            ui.add_space(4.0);
+                            ui.label(t!("settings.appearance.surface_opacity"));
+                            let mut opacity_f32 = self.surface_opacity as f32;
+                            if macos_range_slider(ui, &mut opacity_f32, 0.0..=100.0, &self.theme)
+                                .changed()
+                            {
+                                self.surface_opacity = opacity_f32 as u8;
+                                self.configure_style(ctx);
+                                self.persist_preferences();
+                            }
+                            ui.label(t!("settings.appearance.interaction_hint"));
+                        },
+                    );
+                    if expanded == prev {
+                        self.settings_panel_collapsed[3] = !expanded;
+                        self.persist_preferences();
+                    }
+                }
+
+                {
+                    let prev = self.settings_panel_collapsed[4];
+                    let mut expanded = !prev;
+                    let theme = self.theme.clone();
+                    macos_collapsible_group(
+                        ui,
+                        t!("settings.default_app.title"),
+                        &mut expanded,
+                        &theme,
+                        |ui| {
+                            ui.label(
+                                egui::RichText::new(t!("settings.default_app.hint"))
+                                    .color(self.theme.muted),
+                            );
+                            let mut changed = false;
+                            changed |= app_combo_row(
+                                ui,
+                                "TEXT",
+                                &mut self.default_text_app,
+                                &mut self.text_app_search,
+                                &self.text_app_choices,
+                                &self.theme,
+                            );
+                            changed |= app_combo_row(
+                                ui,
+                                "URL",
+                                &mut self.default_url_app,
+                                &mut self.url_app_search,
+                                &self.url_app_choices,
+                                &self.theme,
+                            );
+                            changed |= app_combo_row(
+                                ui,
+                                "CODE",
+                                &mut self.default_code_app,
+                                &mut self.code_app_search,
+                                &self.code_app_choices,
+                                &self.theme,
+                            );
+                            changed |= app_combo_row(
+                                ui,
+                                "FILE",
+                                &mut self.default_file_app,
+                                &mut self.file_app_search,
+                                &self.file_app_choices,
+                                &self.theme,
+                            );
+                            changed |= app_combo_row(
+                                ui,
+                                "IMAGE",
+                                &mut self.default_image_app,
+                                &mut self.image_app_search,
+                                &self.image_app_choices,
+                                &self.theme,
+                            );
+                            changed |= app_combo_row(
+                                ui,
+                                "VIDEO",
+                                &mut self.default_video_app,
+                                &mut self.video_app_search,
+                                &self.video_app_choices,
+                                &self.theme,
+                            );
+                            if ui.button(t!("settings.default_app.rescan")).clicked() {
+                                self.text_app_choices =
+                                    platform::discover_apps_for_mime("text/plain");
+                                self.url_app_choices =
+                                    platform::discover_apps_for_mime("x-scheme-handler/http");
+                                self.code_app_choices =
+                                    platform::discover_apps_for_mime("text/plain");
+                                self.file_app_choices =
+                                    platform::discover_apps_for_mime("application/octet-stream");
+                                self.image_app_choices =
+                                    platform::discover_apps_for_mime("image/png");
+                                self.video_app_choices =
+                                    platform::discover_apps_for_mime("video/mp4");
+                                self.status = t!("settings.default_app.rescan_done").to_string();
+                            }
+                            if changed {
+                                self.persist_preferences();
+                            }
+                        },
+                    );
+                    if expanded == prev {
+                        self.settings_panel_collapsed[4] = !expanded;
+                        self.persist_preferences();
+                    }
+                }
+
+                {
+                    let prev = self.settings_panel_collapsed[5];
+                    let mut expanded = !prev;
+                    let theme = self.theme.clone();
+                    macos_collapsible_group(
+                        ui,
+                        t!("settings.tags.title"),
+                        &mut expanded,
+                        &theme,
+                        |ui| {
+                            if !self.tag_manager_enabled {
+                                ui.label(
+                                    egui::RichText::new(t!("settings.tags.manager_closed_hint"))
+                                        .color(self.theme.muted),
+                                );
+                                return;
+                            }
+
+                            let available_width = (ui.available_width() - 12.0).max(220.0);
+                            let gap = ui.spacing().item_spacing.x;
+                            let sidebar_w = (available_width * 0.34).clamp(96.0, 156.0);
+                            let detail_w = (available_width - sidebar_w - gap * 2.0).max(88.0);
+
+                            ui.horizontal_top(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.set_width(sidebar_w);
+                                    let bg = self.theme.glass_bg;
+                                    let accent = self.theme.accent;
+                                    egui::Frame::none()
+                                        .fill(bg)
+                                        .rounding(egui::Rounding::same(8.0))
+                                        .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
+                                        .inner_margin(6.0)
+                                        .show(ui, |ui| {
+                                            ui.set_width((sidebar_w - 12.0).max(80.0));
+                                            if ui
+                                                .add_sized(
+                                                    [ui.available_width().max(80.0), 24.0],
+                                                    egui::Button::new(
+                                                        egui::RichText::new(t!(
+                                                            "settings.tags.new_tag"
+                                                        ))
+                                                        .size(11.0),
+                                                    )
+                                                    .rounding(egui::Rounding::same(6.0)),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.show_tag_input = !self.show_tag_input;
+                                            }
+
+                                            if self.show_tag_input {
+                                                ui.horizontal(|ui| {
+                                                    let input_width =
+                                                        (ui.available_width() - 42.0).max(40.0);
+                                                    let response = ui.add_sized(
+                                                        [input_width, 22.0],
+                                                        egui::TextEdit::singleline(
+                                                            &mut self.new_tag_input,
+                                                        )
+                                                        .hint_text(t!(
+                                                            "settings.tags.tag_name_hint"
+                                                        ))
+                                                        .desired_width(input_width),
+                                                    );
+                                                    let enter = response.lost_focus()
+                                                        && ui.input(|i| {
+                                                            i.key_pressed(egui::Key::Enter)
+                                                        });
+                                                    if ui
+                                                        .add_sized(
+                                                            [38.0, 22.0],
+                                                            egui::Button::new(
+                                                                egui::RichText::new(t!(
+                                                                    "settings.tags.add_button"
+                                                                ))
+                                                                .size(10.5),
+                                                            )
+                                                            .rounding(egui::Rounding::same(4.0)),
+                                                        )
+                                                        .clicked()
+                                                        || enter
+                                                    {
+                                                        self.add_saved_tag_from_input();
+                                                        self.show_tag_input = false;
+                                                    }
+                                                });
+                                                ui.add_space(2.0);
+                                            }
+
+                                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                                if self.saved_tags.is_empty() {
+                                                    ui.label(
+                                                        egui::RichText::new(t!(
+                                                            "settings.tags.no_tags"
+                                                        ))
+                                                        .size(11.0)
+                                                        .color(self.theme.muted),
+                                                    );
+                                                } else {
+                                                    let tags = self.saved_tags.clone();
+                                                    for tag in &tags {
+                                                        let selected =
+                                                            self.selected_saved_tag.as_deref()
+                                                                == Some(tag);
+                                                        let (bg, fg, stroke) = if selected {
+                                                            (
+                                                                accent,
+                                                                egui::Color32::WHITE,
+                                                                egui::Stroke::new(1.0, accent),
+                                                            )
+                                                        } else {
+                                                            (
+                                                                egui::Color32::TRANSPARENT,
+                                                                self.theme.fg,
+                                                                egui::Stroke::NONE,
+                                                            )
+                                                        };
+                                                        let btn = egui::Button::new(
+                                                            egui::RichText::new(tag.as_str())
+                                                                .size(11.5)
+                                                                .color(fg),
+                                                        )
+                                                        .fill(bg)
+                                                        .stroke(stroke)
+                                                        .rounding(egui::Rounding::same(6.0))
+                                                        .min_size(egui::vec2(
+                                                            ui.available_width().max(80.0),
+                                                            22.0,
+                                                        ));
+                                                        if ui.add(btn).clicked() {
+                                                            if selected {
+                                                                self.selected_saved_tag = None;
+                                                            } else {
+                                                                self.load_tag_detail(tag);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                        });
+                                });
+
+                                ui.vertical(|ui| {
+                                    ui.set_width(detail_w);
+                                    egui::Frame::none()
+                                        .fill(self.theme.data_bg)
+                                        .rounding(egui::Rounding::same(8.0))
+                                        .stroke(egui::Stroke::new(1.0, self.theme.data_border))
+                                        .inner_margin(10.0)
+                                        .show(ui, |ui| {
+                                            ui.set_width((detail_w - 20.0).max(72.0));
+                                            if let Some(ref sel) = self.selected_saved_tag.clone() {
+                                                ui.label(
+                                                    egui::RichText::new(sel.as_str())
+                                                        .size(14.0)
+                                                        .color(self.theme.fg),
+                                                );
+                                                ui.add_space(4.0);
+
+                                                let count = self
+                                                    .storage
+                                                    .count_entries_for_tag(sel)
+                                                    .unwrap_or(0);
+                                                ui.label(
+                                                    egui::RichText::new(format!(
+                                                        "{}: {}",
+                                                        t!("settings.tags.related_records"),
+                                                        count
+                                                    ))
+                                                    .size(11.5)
+                                                    .color(self.theme.muted),
+                                                );
+                                                ui.add_space(8.0);
+
+                                                ui.label(
+                                                    egui::RichText::new(t!(
+                                                        "settings.tags.tag_color"
+                                                    ))
+                                                    .size(11.0)
+                                                    .color(self.theme.muted),
+                                                );
+                                                ui.add_space(2.0);
+                                                ui.horizontal(|ui| {
+                                                    let preview_color =
+                                                        hex_to_color32(&self.tag_detail_color)
+                                                            .unwrap_or(self.theme.accent);
+                                                    let (rect, _) = ui.allocate_exact_size(
+                                                        egui::vec2(20.0, 20.0),
+                                                        egui::Sense::hover(),
+                                                    );
+                                                    ui.painter().rect_filled(
+                                                        rect,
+                                                        egui::Rounding::same(4.0),
+                                                        preview_color,
+                                                    );
+                                                    let color_response = ui.add_sized(
+                                                        [80.0, 20.0],
+                                                        egui::TextEdit::singleline(
+                                                            &mut self.tag_detail_color,
+                                                        )
+                                                        .desired_width(80.0),
+                                                    );
+                                                    if color_response.changed()
+                                                        && let Err(err) =
+                                                            self.storage.update_saved_tag_color(
+                                                                sel,
+                                                                &self.tag_detail_color,
+                                                            )
+                                                    {
+                                                        self.status = format!(
+                                                            "{}: {err}",
+                                                            t!("settings.tags.update_color_failed")
+                                                        );
+                                                    }
+                                                });
+
+                                                ui.add_space(8.0);
+                                                if ui
+                                                    .add_sized(
+                                                        [ui.available_width().max(72.0), 24.0],
+                                                        egui::Button::new(
+                                                            egui::RichText::new(t!(
+                                                                "settings.tags.add_to_current"
+                                                            ))
+                                                            .size(11.0),
+                                                        )
+                                                        .rounding(egui::Rounding::same(6.0)),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    let tag = sel.clone();
+                                                    self.add_tag_to_editor(&tag);
+                                                }
+                                                ui.add_space(2.0);
+                                                if ui
+                                                    .add_sized(
+                                                        [ui.available_width().max(72.0), 24.0],
+                                                        egui::Button::new(
+                                                            egui::RichText::new(t!(
+                                                                "settings.tags.remove_from_catalog"
+                                                            ))
+                                                            .size(11.0)
+                                                            .color(self.theme.danger),
+                                                        )
+                                                        .rounding(egui::Rounding::same(6.0)),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    let tag = sel.clone();
+                                                    self.delete_saved_tag(&tag);
+                                                    self.selected_saved_tag = None;
+                                                }
+                                            } else {
+                                                ui.label(
+                                                    egui::RichText::new(t!(
+                                                        "settings.tags.click_left_hint"
+                                                    ))
+                                                    .size(12.0)
+                                                    .color(self.theme.muted),
+                                                );
+                                            }
+                                        });
+                                });
+                            });
+                        },
+                    );
+                    if expanded == prev {
+                        self.settings_panel_collapsed[5] = !expanded;
+                        self.persist_preferences();
+                    }
+                }
+
+                {
+                    let prev = self.settings_panel_collapsed[6];
+                    let mut expanded = !prev;
+                    let theme = self.theme.clone();
+                    macos_collapsible_group(
+                        ui,
+                        t!("settings.data.title"),
+                        &mut expanded,
+                        &theme,
+                        |ui| {
+                            ui.label(t!("settings.data.current_database"));
+                            egui::Frame::none()
+                                .fill(self.theme.data_bg)
+                                .stroke(egui::Stroke::new(1.0, self.theme.data_border))
+                                .rounding(egui::Rounding::same(8.0))
+                                .inner_margin(egui::Margin::symmetric(10.0, 7.0))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        egui::RichText::new(&self.current_database_path)
+                                            .monospace()
+                                            .color(self.theme.fg),
+                                    );
+                                });
+                            ui.add_space(6.0);
+                            ui.label(t!("settings.data.restart_save_path"));
+                            egui::Frame::none()
+                                .fill(self.theme.glass_bg)
+                                .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
+                                .rounding(egui::Rounding::same(8.0))
+                                .inner_margin(egui::Margin::symmetric(10.0, 7.0))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        egui::RichText::new(&self.database_path_input)
+                                            .monospace()
+                                            .color(self.theme.muted),
+                                    );
+                                });
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .add(
+                                        egui::Button::new(t!("settings.data.select_save_path"))
+                                            .rounding(egui::Rounding::same(8.0)),
                                     )
                                     .clicked()
                                 {
-                                    self.show_tag_input = !self.show_tag_input;
-                                }
-
-                                if self.show_tag_input {
-                                    ui.horizontal(|ui| {
-                                        let input_width = (ui.available_width() - 42.0).max(40.0);
-                                        let response = ui.add_sized(
-                                            [input_width, 22.0],
-                                            egui::TextEdit::singleline(
-                                                &mut self.new_tag_input,
-                                            )
-                                            .hint_text(t!("settings.tags.tag_name_hint"))
-                                            .desired_width(input_width),
-                                        );
-                                        let enter = response.lost_focus()
-                                            && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                                        if ui
-                                            .add_sized(
-                                                [38.0, 22.0],
-                                                egui::Button::new(
-                                                    egui::RichText::new(t!("settings.tags.add_button")).size(10.5),
-                                                )
-                                                .rounding(egui::Rounding::same(4.0)),
-                                            )
-                                            .clicked()
-                                            || enter
-                                        {
-                                            self.add_saved_tag_from_input();
-                                            self.show_tag_input = false;
-                                        }
-                                    });
-                                    ui.add_space(2.0);
-                                }
-
-                                egui::ScrollArea::vertical().show(ui, |ui| {
-                                        if self.saved_tags.is_empty() {
-                                            ui.label(
-                                                egui::RichText::new(t!("settings.tags.no_tags"))
-                                                    .size(11.0)
-                                                    .color(self.theme.muted),
-                                            );
-                                        } else {
-                                            let tags = self.saved_tags.clone();
-                                            for tag in &tags {
-                                                let selected =
-                                                    self.selected_saved_tag.as_deref()
-                                                        == Some(tag);
-                                                let (bg, fg, stroke) = if selected {
-                                                    (
-                                                        accent,
-                                                        egui::Color32::WHITE,
-                                                        egui::Stroke::new(1.0, accent),
+                                    let current = PathBuf::from(self.database_path_input.trim());
+                                    match pick_database_save_dir_with_dialog(&current) {
+                                        Ok(Some(dir)) => {
+                                            let path = dir.join("clipboard.db");
+                                            match Storage::write_redirect_path(path.clone()) {
+                                                Ok(()) => {
+                                                    self.database_path_input =
+                                                        path.display().to_string();
+                                                    self.status =
+                                                        t!("settings.data.save_path_updated")
+                                                            .to_string();
+                                                }
+                                                Err(err) => {
+                                                    self.status = format!(
+                                                        "{}: {err}",
+                                                        t!("settings.data.save_path_failed")
                                                     )
-                                                } else {
-                                                    (
-                                                        egui::Color32::TRANSPARENT,
-                                                        self.theme.fg,
-                                                        egui::Stroke::NONE,
-                                                    )
-                                                };
-                                                let btn = egui::Button::new(
-                                                    egui::RichText::new(tag.as_str())
-                                                        .size(11.5)
-                                                        .color(fg),
-                                                )
-                                                .fill(bg)
-                                                .stroke(stroke)
-                                                .rounding(egui::Rounding::same(6.0))
-                                                .min_size(egui::vec2(
-                                                    ui.available_width().max(80.0),
-                                                    22.0,
-                                                ));
-                                                if ui.add(btn).clicked() {
-                                                    if selected {
-                                                        self.selected_saved_tag = None;
-                                                    } else {
-                                                        self.load_tag_detail(tag);
-                                                    }
                                                 }
                                             }
                                         }
-                                    });
-                            });
-                    });
-
-                    ui.vertical(|ui| {
-                        ui.set_width(detail_w);
-                        egui::Frame::none()
-                            .fill(self.theme.data_bg)
-                            .rounding(egui::Rounding::same(8.0))
-                            .stroke(egui::Stroke::new(1.0, self.theme.data_border))
-                            .inner_margin(10.0)
-                            .show(ui, |ui| {
-                                ui.set_width((detail_w - 20.0).max(72.0));
-                                if let Some(ref sel) = self.selected_saved_tag.clone() {
-                                    ui.label(
-                                        egui::RichText::new(sel.as_str())
-                                            .size(14.0)
-                                            .color(self.theme.fg),
-                                    );
-                                    ui.add_space(4.0);
-
-                                    let count = self
-                                        .storage
-                                        .count_entries_for_tag(sel)
-                                        .unwrap_or(0);
-                                    ui.label(
-                                        egui::RichText::new(format!(
-                                            "{}: {}",
-                                            t!("settings.tags.related_records"),
-                                            count
-                                        ))
-                                        .size(11.5)
-                                        .color(self.theme.muted),
-                                    );
-                                    ui.add_space(8.0);
-
-                                    ui.label(
-                                        egui::RichText::new(t!("settings.tags.tag_color"))
-                                            .size(11.0)
-                                            .color(self.theme.muted),
-                                    );
-                                    ui.add_space(2.0);
-                                    ui.horizontal(|ui| {
-                                        let preview_color =
-                                            hex_to_color32(&self.tag_detail_color)
-                                                .unwrap_or(self.theme.accent);
-                                        let (rect, _) = ui.allocate_exact_size(
-                                            egui::vec2(20.0, 20.0),
-                                            egui::Sense::hover(),
-                                        );
-                                        ui.painter().rect_filled(
-                                            rect,
-                                            egui::Rounding::same(4.0),
-                                            preview_color,
-                                        );
-                                        let color_response = ui.add_sized(
-                                            [80.0, 20.0],
-                                            egui::TextEdit::singleline(
-                                            &mut self.tag_detail_color,
-                                        )
-                                        .desired_width(80.0),
-                                        );
-                                        if color_response.changed()
-                                            && let Err(err) = self
-                                                .storage
-                                                .update_saved_tag_color(
-                                                    sel,
-                                                    &self.tag_detail_color,
-                                                )
-                                        {
-                                            self.status =
-                                                format!("{}: {err}", t!("settings.tags.update_color_failed"));
+                                        Ok(None) => {}
+                                        Err(err) => self.status = err,
+                                    }
+                                }
+                                if ui.button(t!("settings.data.restore_default")).clicked() {
+                                    let path = Storage::default_path();
+                                    match Storage::write_redirect_path(path.clone()) {
+                                        Ok(()) => {
+                                            self.database_path_input = path.display().to_string();
+                                            self.status = t!("settings.data.restore_default_done")
+                                                .to_string();
                                         }
-                                    });
-
-                                    ui.add_space(8.0);
-                                    if ui
-                                        .add_sized(
-                                            [ui.available_width().max(72.0), 24.0],
-                                            egui::Button::new(
-                                                egui::RichText::new(t!("settings.tags.add_to_current"))
-                                                    .size(11.0),
+                                        Err(err) => {
+                                            self.status = format!(
+                                                "{}: {err}",
+                                                t!("settings.data.restore_default_failed")
                                             )
-                                            .rounding(egui::Rounding::same(6.0)),
-                                        )
-                                        .clicked()
-                                    {
-                                        let tag = sel.clone();
-                                        self.add_tag_to_editor(&tag);
+                                        }
                                     }
-                                    ui.add_space(2.0);
-                                    if ui
-                                        .add_sized(
-                                            [ui.available_width().max(72.0), 24.0],
-                                            egui::Button::new(
-                                                egui::RichText::new(t!("settings.tags.remove_from_catalog"))
-                                                    .size(11.0)
-                                                    .color(self.theme.danger),
-                                            )
-                                            .rounding(egui::Rounding::same(6.0)),
-                                        )
-                                        .clicked()
-                                    {
-                                        let tag = sel.clone();
-                                        self.delete_saved_tag(&tag);
-                                        self.selected_saved_tag = None;
-                                    }
-                                } else {
-                                    ui.label(
-                                        egui::RichText::new(t!("settings.tags.click_left_hint"))
-                                            .size(12.0)
-                                            .color(self.theme.muted),
-                                    );
                                 }
                             });
-                    });
-                });
-            });
-            if expanded == prev {
-                self.settings_panel_collapsed[5] = !expanded;
-                self.persist_preferences();
-            }
-        }
+                            ui.label(
+                                egui::RichText::new(t!("settings.data.db_hint"))
+                                    .color(self.theme.muted),
+                            );
+                            if ui.button(t!("history.clear_unpinned_history")).clicked() {
+                                match self.storage.clear_unpinned() {
+                                    Ok(()) => {
+                                        self.status = t!("history.cleared_unpinned").to_string();
+                                        self.refresh_entries();
+                                    }
+                                    Err(err) => {
+                                        self.status =
+                                            format!("{}: {err}", t!("history.clear_failed"))
+                                    }
+                                }
+                            }
+                        },
+                    );
+                    if expanded == prev {
+                        self.settings_panel_collapsed[6] = !expanded;
+                        self.persist_preferences();
+                    }
+                }
 
-        {
-            let prev = self.settings_panel_collapsed[6];
-            let mut expanded = !prev;
-            let theme = self.theme.clone();
-            macos_collapsible_group(ui, t!("settings.data.title"), &mut expanded, &theme, |ui| {
-                ui.label(t!("settings.data.current_database"));
-                egui::Frame::none()
-                    .fill(self.theme.data_bg)
-                    .stroke(egui::Stroke::new(1.0, self.theme.data_border))
-                    .rounding(egui::Rounding::same(8.0))
-                    .inner_margin(egui::Margin::symmetric(10.0, 7.0))
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(&self.current_database_path)
-                                .monospace()
-                                .color(self.theme.fg),
-                        );
-                    });
                 ui.add_space(6.0);
-                ui.label(t!("settings.data.restart_save_path"));
-                egui::Frame::none()
-                    .fill(self.theme.glass_bg)
-                    .stroke(egui::Stroke::new(1.0, self.theme.glass_border))
-                    .rounding(egui::Rounding::same(8.0))
-                    .inner_margin(egui::Margin::symmetric(10.0, 7.0))
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(&self.database_path_input)
-                                .monospace()
-                                .color(self.theme.muted),
-                        );
-                    });
                 ui.horizontal(|ui| {
-                    if ui
-                        .add(egui::Button::new(t!("settings.data.select_save_path")).rounding(egui::Rounding::same(8.0)))
+                    let button_gap = 10.0;
+                    let feedback_width = 112.0;
+                    let reset_width = 150.0;
+                    let total_width = feedback_width + button_gap + reset_width;
+                    ui.add_space(((ui.available_width() - total_width) * 0.5).max(0.0));
+
+                    if settings_footer_button(
+                        ui,
+                        t!("settings.feedback"),
+                        &self.theme,
+                        feedback_width,
+                    )
+                    .clicked()
+                    {
+                        match open::that(APP_REPO_URL) {
+                            Ok(()) => self.status = t!("settings.feedback_opened").to_string(),
+                            Err(err) => {
+                                self.status = format!("{}: {err}", t!("settings.feedback_failed"))
+                            }
+                        }
+                    }
+                    ui.add_space(button_gap);
+                    if settings_footer_button(ui, t!("settings.reset"), &self.theme, reset_width)
                         .clicked()
                     {
-                        let current = PathBuf::from(self.database_path_input.trim());
-                        match pick_database_save_dir_with_dialog(&current) {
-                            Ok(Some(dir)) => {
-                                let path = dir.join("clipboard.db");
-                                match Storage::write_redirect_path(path.clone()) {
-                                    Ok(()) => {
-                                        self.database_path_input = path.display().to_string();
-                                        self.status = t!("settings.data.save_path_updated").to_string();
-                                    }
-                                    Err(err) => self.status = format!("{}: {err}", t!("settings.data.save_path_failed")),
-                                }
-                            }
-                            Ok(None) => {}
-                            Err(err) => self.status = err,
-                        }
-                    }
-                    if ui.button(t!("settings.data.restore_default")).clicked() {
-                        let path = Storage::default_path();
-                        match Storage::write_redirect_path(path.clone()) {
-                            Ok(()) => {
-                                self.database_path_input = path.display().to_string();
-                                self.status = t!("settings.data.restore_default_done").to_string();
-                            }
-                            Err(err) => self.status = format!("{}: {err}", t!("settings.data.restore_default_failed")),
-                        }
+                        let window_pinned = self.window_pinned;
+                        let show_sensitive = self.show_sensitive;
+                        let preferences = AppPreferences {
+                            window_pinned,
+                            show_sensitive,
+                            ..AppPreferences::default()
+                        };
+                        self.apply_preferences(preferences, ctx);
                     }
                 });
-                ui.label(egui::RichText::new(t!("settings.data.db_hint") ).color(self.theme.muted));
-                if ui.button(t!("history.clear_unpinned_history")).clicked() {
-                    match self.storage.clear_unpinned() {
-                        Ok(()) => {
-                            self.status = t!("history.cleared_unpinned").to_string();
-                            self.refresh_entries();
-                        }
-                        Err(err) => self.status = format!("{}: {err}", t!("history.clear_failed")),
-                    }
-                }
-            });
-            if expanded == prev {
-                self.settings_panel_collapsed[6] = !expanded;
-                self.persist_preferences();
-            }
-        }
-
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                let button_gap = 10.0;
-                let feedback_width = 112.0;
-                let reset_width = 150.0;
-                let total_width = feedback_width + button_gap + reset_width;
-                ui.add_space(((ui.available_width() - total_width) * 0.5).max(0.0));
-
-                if settings_footer_button(ui, t!("settings.feedback"), &self.theme, feedback_width).clicked() {
-                    match open::that(APP_REPO_URL) {
-                        Ok(()) => self.status = t!("settings.feedback_opened").to_string(),
-                        Err(err) => self.status = format!("{}: {err}", t!("settings.feedback_failed")),
-                    }
-                }
-                ui.add_space(button_gap);
-                if settings_footer_button(ui, t!("settings.reset"), &self.theme, reset_width).clicked() {
-                    let window_pinned = self.window_pinned;
-                    let show_sensitive = self.show_sensitive;
-                    let preferences = AppPreferences {
-                        window_pinned,
-                        show_sensitive,
-                        ..AppPreferences::default()
-                    };
-                    self.apply_preferences(preferences, ctx);
-                }
-            });
-            ui.add_space(6.0);
-            ui.vertical_centered(|ui| {
-                ui.label(
-                    egui::RichText::new(format!("{APP_DISPLAY_NAME} v{}", env!("CARGO_PKG_VERSION")))
+                ui.add_space(6.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{APP_DISPLAY_NAME} v{}",
+                            env!("CARGO_PKG_VERSION")
+                        ))
                         .size(15.0)
                         .strong(),
-                );
+                    );
+                });
             });
-        });
     }
 }
 
@@ -4686,14 +5073,25 @@ fn app_combo_row(
     theme: &MacosTokens,
 ) -> bool {
     let mut options = Vec::with_capacity(choices.len() + 1);
-    options.push(DropdownOption::borrowed("", t!("settings.default_app.system_default")));
+    options.push(DropdownOption::borrowed(
+        "",
+        t!("settings.default_app.system_default"),
+    ));
     options.extend(choices.iter().map(|choice| {
         DropdownOption::owned(
             choice.command.clone(),
             format!("{}  ({})", choice.name, choice.command),
         )
     }));
-    searchable_combo_row(ui, label, selected, search, &options, t!("settings.default_app.search_hint"), theme)
+    searchable_combo_row(
+        ui,
+        label,
+        selected,
+        search,
+        &options,
+        t!("settings.default_app.search_hint"),
+        theme,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4724,7 +5122,8 @@ fn write_text_to_temp_file(content: &str, extension: &str) -> Result<PathBuf, St
         timestamp_millis(),
         extension
     ));
-    fs::write(&path, content).map_err(|err| format!("{}: {err}", t!("error.temp_file_write_failed")))?;
+    fs::write(&path, content)
+        .map_err(|err| format!("{}: {err}", t!("error.temp_file_write_failed")))?;
     Ok(path)
 }
 
@@ -4739,14 +5138,16 @@ fn write_data_url_to_temp_file(content: &str, extension: &str) -> Result<PathBuf
         timestamp_millis(),
         extension
     ));
-    fs::write(&path, bytes).map_err(|err| format!("{}: {err}", t!("error.temp_image_write_failed")))?;
+    fs::write(&path, bytes)
+        .map_err(|err| format!("{}: {err}", t!("error.temp_image_write_failed")))?;
     Ok(path)
 }
 
 fn temp_open_dir() -> Result<PathBuf, String> {
     let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
     let dir = base.join(APP_ID).join("open");
-    fs::create_dir_all(&dir).map_err(|err| format!("{}: {err}", t!("error.temp_dir_create_failed")))?;
+    fs::create_dir_all(&dir)
+        .map_err(|err| format!("{}: {err}", t!("error.temp_dir_create_failed")))?;
     Ok(dir)
 }
 
@@ -4988,14 +5389,16 @@ fn save_emoji_favorite_file(source: &Path, dir: &Path) -> Result<PathBuf, String
     if !is_supported_emoji_favorite_file(source) {
         return Err(t!("emoji.file_not_supported").to_string());
     }
-    let metadata = fs::metadata(source).map_err(|err| format!("{}: {err}", t!("emoji.file_read_failed")))?;
+    let metadata =
+        fs::metadata(source).map_err(|err| format!("{}: {err}", t!("emoji.file_read_failed")))?;
     if !metadata.is_file() {
         return Err(t!("emoji.file_must_be_file").to_string());
     }
     if metadata.len() > EMOJI_FAVORITE_MAX_BYTES {
         return Err(t!("emoji.file_too_large").to_string());
     }
-    let bytes = fs::read(source).map_err(|err| format!("{}: {err}", t!("emoji.file_read_failed")))?;
+    let bytes =
+        fs::read(source).map_err(|err| format!("{}: {err}", t!("emoji.file_read_failed")))?;
     let ext = source
         .extension()
         .and_then(|ext| ext.to_str())
@@ -5031,7 +5434,8 @@ fn save_emoji_favorite_bytes_with_ext(
     fs::create_dir_all(dir).map_err(|err| format!("{}: {err}", t!("emoji.dir_create_failed")))?;
     let target = dir.join(format!("fav_{digest}.{ext}"));
     if !target.exists() {
-        fs::write(&target, bytes).map_err(|err| format!("{}: {err}", t!("emoji.save_favorite_failed")))?;
+        fs::write(&target, bytes)
+            .map_err(|err| format!("{}: {err}", t!("emoji.save_favorite_failed")))?;
     }
     Ok(target)
 }
@@ -5082,7 +5486,8 @@ fn remove_managed_emoji_favorite_file(path: &str, dir: &Path) -> Result<(), Stri
         return Ok(());
     };
     if canonical.starts_with(managed_dir) {
-        fs::remove_file(canonical).map_err(|err| format!("{}: {err}", t!("emoji.delete_failed")))?;
+        fs::remove_file(canonical)
+            .map_err(|err| format!("{}: {err}", t!("emoji.delete_failed")))?;
     }
     Ok(())
 }
@@ -6294,7 +6699,12 @@ fn muted(ui: &mut egui::Ui, text: impl AsRef<str>, theme: &MacosTokens) {
     ui.label(egui::RichText::new(text).color(theme.muted));
 }
 
-fn empty_state(ui: &mut egui::Ui, title: impl AsRef<str>, body: impl AsRef<str>, theme: &MacosTokens) {
+fn empty_state(
+    ui: &mut egui::Ui,
+    title: impl AsRef<str>,
+    body: impl AsRef<str>,
+    theme: &MacosTokens,
+) {
     let title = title.as_ref();
     let body = body.as_ref();
     ui.vertical_centered_justified(|ui| {
@@ -6353,7 +6763,7 @@ mod tests {
         is_supported_emoji_favorite_file, list_emoji_favorite_files,
         remove_managed_emoji_favorite_file, save_emoji_favorite_bytes, save_emoji_favorite_file,
     };
-use crate::emoji_data::{ALL_TWEMOJI_EMOJIS, EMOJI_GROUPS};
+    use crate::emoji_data::{ALL_TWEMOJI_EMOJIS, EMOJI_GROUPS};
     use std::collections::BTreeSet;
     use std::fs;
     use std::path::PathBuf;
@@ -6516,8 +6926,8 @@ use crate::emoji_data::{ALL_TWEMOJI_EMOJIS, EMOJI_GROUPS};
     #[test]
     fn test_app_preferences_backward_compat() {
         let old_json = r#"{"show_sensitive":false}"#;
-        let prefs: super::AppPreferences =
-            serde_json::from_str(old_json).expect("old preferences without language must deserialize");
+        let prefs: super::AppPreferences = serde_json::from_str(old_json)
+            .expect("old preferences without language must deserialize");
         assert_eq!(prefs.language, "follow-system");
     }
 
