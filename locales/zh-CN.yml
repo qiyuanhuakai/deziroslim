@@ -245,6 +245,8 @@ settings:
     add_failed: "添加排除规则失败: %{err}"
     remove_success: "已移除排除规则"
     remove_failed: "移除排除规则失败: %{err}"
+    whitelist_mode: "白名单模式"
+    whitelist_mode_notice: "白名单模式将在 v1.1 实现"
 
   private_mode:
     title: "隐私模式"

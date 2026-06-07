@@ -231,6 +231,8 @@ settings:
     add_failed: "Failed to add exclusion rule: %{err}"
     remove_success: "Exclusion rule removed"
     remove_failed: "Failed to remove exclusion rule: %{err}"
+    whitelist_mode: "Whitelist mode"
+    whitelist_mode_notice: "Whitelist mode will be implemented in v1.1"
 
   private_mode:
     title: "Private Mode"

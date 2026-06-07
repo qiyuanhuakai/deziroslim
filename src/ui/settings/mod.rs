@@ -3,6 +3,7 @@ pub mod clipboard;
 pub mod data;
 pub mod default_apps;
 pub mod general;
+pub mod privacy;
 pub mod shortcuts;
 pub mod tags;
 
@@ -43,6 +44,7 @@ impl SettingsTab {
         SettingsTab::DefaultApps,
         SettingsTab::Tags,
         SettingsTab::Data,
+        SettingsTab::Privacy,
     ];
 }
 
@@ -61,6 +63,7 @@ pub fn dispatch_panel(
         SettingsTab::DefaultApps => default_apps::draw_default_apps_panel(ui, app, ctx),
         SettingsTab::Tags => tags::draw_tags_panel(ui, app, ctx),
         SettingsTab::Data => data::draw_data_panel(ui, app, ctx),
+        SettingsTab::Privacy => privacy::draw_privacy_panel(ui, app, ctx),
         _ => {
             ui.label("此面板将在后续 Phase 实现");
         }
@@ -531,8 +534,8 @@ mod tests {
     fn test_dispatch_panel_implemented_count() {
         assert_eq!(
             SettingsTab::IMPLEMENTED.len(),
-            7,
-            "Expected 7 implemented panels"
+            8,
+            "Expected 8 implemented panels"
         );
     }
 

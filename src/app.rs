@@ -407,6 +407,10 @@ struct AppPreferences {
     #[serde(default = "default_private_mode_hotkey")]
     private_mode_hotkey: String,
 
+    // #3 白名单模式 (v1.1 deferred stub)
+    #[serde(default)]
+    exclusion_mode: crate::blacklist::ExclusionMode,
+
     // #5 备份
     #[serde(default = "default_auto_backup_enabled")]
     auto_backup_enabled: bool,
@@ -453,7 +457,7 @@ fn default_privacy_protection_kinds() -> Vec<String> {
 }
 
 fn default_settings_panel_collapsed() -> Vec<bool> {
-    vec![false; 7]
+    vec![false; 8]
 }
 
 fn default_color_mode() -> String {
@@ -562,6 +566,7 @@ impl Default for AppPreferences {
             app_exclusion_list: Vec::new(),
             private_mode: false,
             private_mode_hotkey: "Ctrl+Alt+P".to_string(),
+            exclusion_mode: crate::blacklist::ExclusionMode::default(),
             auto_backup_enabled: true,
             backup_retention_count: 10,
             last_backup_at: None,
@@ -689,6 +694,7 @@ pub struct ClipboardApp {
     pub(crate) app_exclusion_list: Vec<String>,
     pub(crate) private_mode: bool,
     pub(crate) private_mode_hotkey: String,
+    pub(crate) exclusion_mode: crate::blacklist::ExclusionMode,
     pub(crate) auto_backup_enabled: bool,
     pub(crate) backup_retention_count: i32,
     pub(crate) last_backup_at: Option<i64>,
@@ -732,7 +738,7 @@ impl ClipboardApp {
         let preferences = load_preferences(&storage);
         configure_fonts(&cc.egui_ctx, &preferences.font_selection());
         let (sender, events) = bounded(EVENT_CHANNEL_CAPACITY);
-        clipboard::start_watcher(sender.clone());
+        clipboard::start_watcher(sender.clone(), preferences.app_exclusion_list.clone());
         let hotkey_handle = platform::start_hotkey_listener(
             sender.clone(),
             cc.egui_ctx.clone(),
@@ -863,6 +869,7 @@ impl ClipboardApp {
             app_exclusion_list: preferences.app_exclusion_list,
             private_mode: preferences.private_mode,
             private_mode_hotkey: preferences.private_mode_hotkey,
+            exclusion_mode: preferences.exclusion_mode,
             auto_backup_enabled: preferences.auto_backup_enabled,
             backup_retention_count: preferences.backup_retention_count,
             last_backup_at: preferences.last_backup_at,
@@ -2006,6 +2013,7 @@ impl ClipboardApp {
             app_exclusion_list: self.app_exclusion_list.clone(),
             private_mode: self.private_mode,
             private_mode_hotkey: self.private_mode_hotkey.clone(),
+            exclusion_mode: self.exclusion_mode,
             auto_backup_enabled: self.auto_backup_enabled,
             backup_retention_count: self.backup_retention_count,
             last_backup_at: self.last_backup_at,
@@ -2137,6 +2145,7 @@ impl ClipboardApp {
         self.app_exclusion_list = preferences.app_exclusion_list;
         self.private_mode = preferences.private_mode;
         self.private_mode_hotkey = preferences.private_mode_hotkey;
+        self.exclusion_mode = preferences.exclusion_mode;
         self.auto_backup_enabled = preferences.auto_backup_enabled;
         self.backup_retention_count = preferences.backup_retention_count;
         self.last_backup_at = preferences.last_backup_at;
