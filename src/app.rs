@@ -768,6 +768,18 @@ impl ClipboardApp {
             force_quit: false,
             theme: resolve_theme(&preferences.color_mode),
         };
+        // Apply locale at startup so rust_i18n knows the active locale.
+        // Without this, the library stays at its default ("en") and t!() returns English.
+        {
+            let initial_locale = if app.language == "follow-system" {
+                crate::i18n::detect_system_locale()
+            } else {
+                app.language.clone()
+            };
+            crate::i18n::set_app_locale(&initial_locale);
+        }
+        #[cfg(feature = "log-miss-tr")]
+        crate::i18n::log_locale_info();
         app.configure_style(&cc.egui_ctx);
         app.refresh_entries();
         app
