@@ -8,6 +8,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 
 pub mod actions;
 pub mod app;
+pub mod backup;
 pub mod blacklist;
 pub mod clipboard;
 pub mod emoji_data;

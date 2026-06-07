@@ -26,6 +26,17 @@ fn main() -> anyhow::Result<()> {
         .cleanup_expired()
         .context(rust_i18n::t!("error.cleanup_failed"))?;
 
+    let data_dir = storage
+        .path()
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .to_path_buf();
+    let backup_storage = storage.clone();
+    let _ = ctrlc::set_handler(move || {
+        let _ = backup::AutoBackup::new(data_dir.clone(), 10).run_backup(&backup_storage);
+        std::process::exit(0);
+    });
+
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(APP_DISPLAY_NAME)
         .with_inner_size([480.0, 680.0])
