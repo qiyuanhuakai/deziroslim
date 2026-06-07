@@ -219,6 +219,7 @@ pub fn start_tray(
     _sender: crossbeam_channel::Sender<crate::clipboard::ClipboardEvent>,
     _ctx: egui::Context,
     _enabled: bool,
+    _private_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Option<TrayHandle> {
     None
 }

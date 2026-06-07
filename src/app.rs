@@ -5,6 +5,7 @@ use crate::platform;
 use crate::sound::{self, SoundEffect};
 use crate::storage::Storage;
 use crate::ui::MacosTokens;
+use crate::ui::hotkey::HotkeyManager;
 use crate::ui::widgets::macos_toggle;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use eframe::egui;
@@ -19,6 +20,8 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const APP_DISPLAY_NAME: &str = "tiez-slim";
@@ -776,6 +779,7 @@ impl ClipboardApp {
             sender.clone(),
             cc.egui_ctx.clone(),
             !preferences.hide_tray_icon,
+            Arc::clone(&private_mode_flag),
         );
         let hotkey_manager = build_initial_hotkey_manager(&preferences);
         let saved_tags = storage.saved_tags().unwrap_or_default();
@@ -1129,6 +1133,8 @@ impl ClipboardApp {
                 ClipboardEvent::OpenSettings => self.open_settings_from_tray(ctx),
                 ClipboardEvent::TogglePrivateMode => {
                     self.private_mode = !self.private_mode;
+                    self.private_mode_flag
+                        .store(self.private_mode, Ordering::Release);
                     self.persist_preferences();
                     self.status = if self.private_mode {
                         t!("settings.private_mode.toggle_on").to_string()
@@ -1492,7 +1498,7 @@ impl ClipboardApp {
             }
             self.status = t!("error.system_tray_hidden").to_string();
         } else if self.tray_handle.is_none() {
-            self.tray_handle = platform::start_tray(self.event_sender.clone(), ctx.clone(), true);
+            self.tray_handle = platform::start_tray(self.event_sender.clone(), ctx.clone(), true, self.private_mode_flag.clone());
             self.status = if self.tray_handle.is_some() {
                 t!("error.system_tray_enabled").to_string()
             } else {
@@ -2196,6 +2202,8 @@ impl ClipboardApp {
         self.surface_opacity = preferences.surface_opacity;
         self.app_exclusion_list = preferences.app_exclusion_list;
         self.private_mode = preferences.private_mode;
+        self.private_mode_flag
+            .store(self.private_mode, Ordering::Release);
         self.private_mode_hotkey = preferences.private_mode_hotkey;
         self.exclusion_mode = preferences.exclusion_mode;
         self.auto_backup_enabled = preferences.auto_backup_enabled;

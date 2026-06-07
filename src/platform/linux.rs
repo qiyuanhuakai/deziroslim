@@ -229,6 +229,7 @@ pub fn start_tray(
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
     enabled: bool,
+    _private_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Option<TrayHandle> {
     if !enabled {
         return None;

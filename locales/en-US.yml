@@ -257,6 +257,7 @@ settings:
     toggle_on: "Private mode enabled"
     toggle_off: "Private mode disabled"
     indicator_tooltip: "Private mode is on; clipboard is not recorded"
+    active_indicator: "(Private mode — recording paused)"
     temporary_disable: "Temporarily disable (this paste is still recorded)"
     temporary_enabled: "Private mode temporarily disabled"
 

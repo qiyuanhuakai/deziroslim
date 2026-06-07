@@ -29,10 +29,10 @@ pub enum ClipboardEvent {
     Error(String),
 }
 
-pub fn start_watcher(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>) {
+pub fn start_watcher(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>, private_mode: Arc<AtomicBool>) {
     thread::Builder::new()
         .name("clipboard-watcher".to_string())
-        .spawn(move || watch_loop(sender, exclusion_patterns))
+        .spawn(move || watch_loop(sender, exclusion_patterns, private_mode))
         .expect("spawn clipboard watcher");
 }
 
@@ -65,7 +65,7 @@ pub fn set_entry(entry: &ClipboardEntry, paste_with_format: bool) -> Result<(), 
     }
 }
 
-fn watch_loop(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>) {
+fn watch_loop(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>, private_mode: Arc<AtomicBool>) {
     let blacklist = AppBlacklist::new(exclusion_patterns);
     let mut last_seen = String::new();
     let mut last_image_fingerprint = String::new();
@@ -88,6 +88,14 @@ fn watch_loop(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>) {
         }
         let mut handled = false;
         if let Some(clipboard) = clipboard.as_mut() {
+            // Private mode short-circuits all capture paths: while the
+            // user has it on, we never even probe the clipboard (the
+            // probes below are skipped to avoid producing fingerprints
+            // the user does not want captured, and to save CPU).
+            if private_mode.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(700));
+                continue;
+            }
             if let Some(active_class) = platform::active_window_class()
                 && blacklist.is_match(&active_class)
             {

@@ -271,6 +271,7 @@ settings:
     toggle_on: "已开启隐私模式"
     toggle_off: "已关闭隐私模式"
     indicator_tooltip: "隐私模式已开启，剪贴板不记录"
+    active_indicator: "（私有模式 - 暂停记录）"
     temporary_disable: "临时禁用（本次粘贴仍记录）"
     temporary_enabled: "已临时禁用隐私模式"
 
