@@ -30,11 +30,11 @@ pub fn draw_privacy_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui
         },
     );
     let collapsed_ref = app.settings_panel_collapsed.get_mut(PRIVACY_PANEL_INDEX);
-    if let Some(collapsed) = collapsed_ref {
-        if expanded == *collapsed {
-            *collapsed = !expanded;
-            app.persist_preferences();
-        }
+    if let Some(collapsed) = collapsed_ref
+        && expanded == *collapsed
+    {
+        *collapsed = !expanded;
+        app.persist_preferences();
     }
 }
 
@@ -155,13 +155,11 @@ fn draw_exclusion_list(ui: &mut egui::Ui, app: &mut ClipboardApp) {
     if ui
         .button(t!("settings.exclusion_list.current_window"))
         .clicked()
+        && let Some(wm_class) = platform::active_window_class()
+        && !app.app_exclusion_list.contains(&wm_class)
     {
-        if let Some(wm_class) = platform::active_window_class() {
-            if !app.app_exclusion_list.contains(&wm_class) {
-                app.app_exclusion_list.push(wm_class);
-                app.persist_preferences();
-            }
-        }
+        app.app_exclusion_list.push(wm_class);
+        app.persist_preferences();
     }
 }
 

@@ -64,13 +64,13 @@ impl HotkeyManager {
             }
         }
 
-        if let Some(existing) = self.combo_index.get(&combo) {
-            if existing != name {
-                return Err(HotkeyError::ComboConflict {
-                    combo,
-                    existing_name: existing.clone(),
-                });
-            }
+        if let Some(existing) = self.combo_index.get(&combo)
+            && existing != name
+        {
+            return Err(HotkeyError::ComboConflict {
+                combo,
+                existing_name: existing.clone(),
+            });
         }
 
         self.combo_index.insert(combo.clone(), name.to_string());
@@ -85,10 +85,10 @@ impl HotkeyManager {
     }
 
     pub fn unregister(&mut self, name: &str) {
-        if let Some(entry) = self.registered.remove(name) {
-            if !entry.combo.is_empty() {
-                self.combo_index.remove(&entry.combo);
-            }
+        if let Some(entry) = self.registered.remove(name)
+            && !entry.combo.is_empty()
+        {
+            self.combo_index.remove(&entry.combo);
         }
     }
 

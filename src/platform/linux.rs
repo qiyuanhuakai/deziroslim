@@ -12,6 +12,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::Duration;
 use x11rb::connection::Connection;
@@ -229,12 +231,12 @@ pub fn start_tray(
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
     enabled: bool,
-    _private_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    private_mode: Arc<AtomicBool>,
 ) -> Option<TrayHandle> {
     if !enabled {
         return None;
     }
-    match start_status_notifier(sender.clone(), ctx.clone()) {
+    match start_status_notifier(sender.clone(), ctx.clone(), private_mode) {
         Ok(handle) => Some(TrayHandle::new(move || handle.shutdown().wait())),
         Err(err) => {
             let _ = sender.send(ClipboardEvent::Status(
@@ -903,10 +905,15 @@ fn keysym_to_keycode<C: Connection>(conn: &C, keysym: u32) -> Result<Option<Keyc
 fn start_status_notifier(
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
+    private_mode: Arc<AtomicBool>,
 ) -> Result<ksni::blocking::Handle<TiezSlimLinuxTray>, String> {
     use ksni::blocking::TrayMethods;
 
-    let tray = TiezSlimLinuxTray { sender, ctx };
+    let tray = TiezSlimLinuxTray {
+        sender,
+        ctx,
+        private_mode,
+    };
     tray.assume_sni_available(true)
         .spawn()
         .map_err(|err| err.to_string())
@@ -915,6 +922,10 @@ fn start_status_notifier(
 struct TiezSlimLinuxTray {
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
+    /// Shared flag toggled from the UI thread. The ksni daemon polls
+    /// `icon_pixmap` whenever the SNI host re-queries; we consult
+    /// this flag to choose the red-dot variant when private mode is on.
+    private_mode: Arc<AtomicBool>,
 }
 
 impl ksni::Tray for TiezSlimLinuxTray {
@@ -935,7 +946,11 @@ impl ksni::Tray for TiezSlimLinuxTray {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        vec![tray_icon_pixmap()]
+        if self.private_mode.load(std::sync::atomic::Ordering::Acquire) {
+            vec![tray_icon_pixmap_private()]
+        } else {
+            vec![tray_icon_pixmap()]
+        }
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
@@ -979,8 +994,21 @@ impl ksni::Tray for TiezSlimLinuxTray {
 }
 
 fn tray_icon_pixmap() -> ksni::Icon {
+    tray_icon_pixmap_with_private(false)
+}
+
+fn tray_icon_pixmap_private() -> ksni::Icon {
+    tray_icon_pixmap_with_private(true)
+}
+
+fn tray_icon_pixmap_with_private(private: bool) -> ksni::Icon {
     let width = 32;
     let height = 32;
+    // Red dot bounds in the top-right corner when private mode is on.
+    // Centre at (25, 7), radius 5 — covers pixels 20..=30, 2..=12.
+    let dot_center_x = 25.0_f32;
+    let dot_center_y = 7.0_f32;
+    let dot_radius_sq = 5.0_f32 * 5.0_f32;
     let mut data = Vec::with_capacity(width * height * 4);
     for y in 0..height {
         for x in 0..width {
@@ -994,7 +1022,14 @@ fn tray_icon_pixmap() -> ksni::Icon {
                 || (y == 20 && (12..=19).contains(&x))
                 || ((18..=23).contains(&x) && (11..=16).contains(&y) && x + y >= 33);
             let on_slim = y == 26 && (10..=21).contains(&x);
-            let (a, r, g, b) = if on_mark {
+            let on_dot = private && {
+                let dx = x as f32 - dot_center_x;
+                let dy = y as f32 - dot_center_y;
+                dx * dx + dy * dy <= dot_radius_sq
+            };
+            let (a, r, g, b) = if on_dot {
+                (255, 220, 38, 38)
+            } else if on_mark {
                 (255, navy.0, navy.1, navy.2)
             } else if on_slim {
                 (255, accent.0, accent.1, accent.2)

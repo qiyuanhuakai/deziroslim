@@ -10,8 +10,8 @@ use std::borrow::Cow;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -29,7 +29,11 @@ pub enum ClipboardEvent {
     Error(String),
 }
 
-pub fn start_watcher(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>, private_mode: Arc<AtomicBool>) {
+pub fn start_watcher(
+    sender: Sender<ClipboardEvent>,
+    exclusion_patterns: Vec<String>,
+    private_mode: Arc<AtomicBool>,
+) {
     thread::Builder::new()
         .name("clipboard-watcher".to_string())
         .spawn(move || watch_loop(sender, exclusion_patterns, private_mode))
@@ -65,7 +69,11 @@ pub fn set_entry(entry: &ClipboardEntry, paste_with_format: bool) -> Result<(), 
     }
 }
 
-fn watch_loop(sender: Sender<ClipboardEvent>, exclusion_patterns: Vec<String>, private_mode: Arc<AtomicBool>) {
+fn watch_loop(
+    sender: Sender<ClipboardEvent>,
+    exclusion_patterns: Vec<String>,
+    private_mode: Arc<AtomicBool>,
+) {
     let blacklist = AppBlacklist::new(exclusion_patterns);
     let mut last_seen = String::new();
     let mut last_image_fingerprint = String::new();

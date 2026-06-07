@@ -20,8 +20,8 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 const APP_DISPLAY_NAME: &str = "tiez-slim";
@@ -1498,7 +1498,12 @@ impl ClipboardApp {
             }
             self.status = t!("error.system_tray_hidden").to_string();
         } else if self.tray_handle.is_none() {
-            self.tray_handle = platform::start_tray(self.event_sender.clone(), ctx.clone(), true, self.private_mode_flag.clone());
+            self.tray_handle = platform::start_tray(
+                self.event_sender.clone(),
+                ctx.clone(),
+                true,
+                self.private_mode_flag.clone(),
+            );
             self.status = if self.tray_handle.is_some() {
                 t!("error.system_tray_enabled").to_string()
             } else {
@@ -3759,12 +3764,8 @@ fn hotkey_config_from_preferences(preferences: &AppPreferences) -> platform::Hot
 /// exclusively through the X11 listener's `HotkeyConfig`.
 fn build_initial_hotkey_manager(preferences: &AppPreferences) -> HotkeyManager {
     let mut mgr = HotkeyManager::new();
-    if let Err(err) =
-        mgr.register("private_mode_toggle", &preferences.private_mode_hotkey)
-    {
-        eprintln!(
-            "[tiez-slim] hotkey conflict while registering private-mode toggle: {err}"
-        );
+    if let Err(err) = mgr.register("private_mode_toggle", &preferences.private_mode_hotkey) {
+        eprintln!("[tiez-slim] hotkey conflict while registering private-mode toggle: {err}");
     }
     mgr
 }
