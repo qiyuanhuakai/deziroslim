@@ -252,7 +252,9 @@ mod tests {
     use crate::storage::Storage;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
     static DB_COUNTER: AtomicU64 = AtomicU64::new(0);
+
     fn temp_storage() -> Storage {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -265,6 +267,7 @@ mod tests {
         ));
         Storage::open(path).expect("open temp db")
     }
+
     fn temp_json_path() -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -276,37 +279,61 @@ mod tests {
             std::process::id()
         ))
     }
+
     #[test]
     fn roundtrip_export_import_preserves_entry_count() {
         let storage = temp_storage();
         for (content, app) in &[
             ("hello world", "app1"),
             ("https://example.com", "app2"),
-            ("let x = 1;", "app3"),
+            ("let x = 1; const Y = 2;", "app3"),
+            ("call me at 13812345678", "app4"),
+            ("plain text entry", "app5"),
         ] {
             let entry = ClipboardEntry::captured_text(content.to_string(), app.to_string())
                 .expect("valid entry");
             storage.save_entry(&entry).expect("save");
         }
+        let all = storage.list("").expect("list");
+        let hello_id = all.iter().find(|e| e.content == "hello world").unwrap().id;
+        storage
+            .set_tags(hello_id, &["work".to_string()])
+            .expect("tag");
+
         let path = temp_json_path();
         let exported = storage
             .export_to(&path, ExportScope::All, false)
             .expect("export");
-        assert_eq!(exported, 3);
+        assert_eq!(exported, 5);
+        assert!(
+            std::fs::metadata(&path).unwrap().len() < 10 * 1024 * 1024,
+            "export file too large"
+        );
+
         let storage2 = temp_storage();
         let stats = storage2
             .import_from(&path, ImportMode::Merge)
             .expect("import");
-        assert_eq!(stats.entries_added, 3);
+        assert_eq!(stats.entries_added, 5);
         assert_eq!(stats.entries_skipped, 0);
+
+        let imported = storage2.list("").expect("list after import");
+        assert_eq!(imported.len(), 5);
+        let tagged = imported
+            .iter()
+            .find(|e| e.content == "hello world")
+            .unwrap();
+        assert!(tagged.tags.contains(&"work".to_string()));
         let _ = std::fs::remove_file(&path);
     }
+
     #[test]
-    fn merge_mode_skips_duplicates() {
+    fn merge_mode_skips_duplicate_entries() {
         let storage = temp_storage();
         let entry = ClipboardEntry::captured_text("duplicate me".to_string(), "app".to_string())
             .expect("valid entry");
         storage.save_entry(&entry).expect("save");
+
         let path = temp_json_path();
         storage
             .export_to(&path, ExportScope::All, false)
@@ -316,6 +343,153 @@ mod tests {
             .expect("import");
         assert_eq!(stats.entries_added, 0);
         assert_eq!(stats.entries_skipped, 1);
+
+        let entries = storage.list("").expect("list");
+        assert_eq!(entries.len(), 1);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn corrupt_json_import_fails_safely() {
+        let storage = temp_storage();
+        let entry = ClipboardEntry::captured_text("existing".to_string(), "app".to_string())
+            .expect("valid entry");
+        storage.save_entry(&entry).expect("save");
+
+        let path = temp_json_path();
+        std::fs::write(&path, "{invalid json content").expect("write corrupt file");
+
+        let result = storage.import_from(&path, ImportMode::Merge);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("parse") || err_msg.contains("Failed to parse"),
+            "error should mention parsing: {err_msg}"
+        );
+
+        let entries = storage.list("").expect("list after failed import");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].content, "existing");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn unknown_schema_version_rejected() {
+        let storage = temp_storage();
+        let path = temp_json_path();
+
+        let bundle = serde_json::json!({
+            "schema_version": 99,
+            "exported_at": 0,
+            "app_version": "0.0.0",
+            "encryption_version": 0,
+            "settings": {},
+            "tags": [],
+            "entries": [],
+            "actions": [],
+            "snippets": [],
+            "emoji_favorites": []
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&bundle).unwrap()).expect("write");
+
+        let result = storage.import_from(&path, ImportMode::Merge);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("newer than supported"),
+            "should mention version mismatch: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("99"),
+            "should mention the actual version: {err_msg}"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn sensitive_entries_export_with_content() {
+        let storage = temp_storage();
+        let entry = ClipboardEntry::captured_text("13812345678".to_string(), "app".to_string())
+            .expect("valid entry");
+        storage.save_entry(&entry).expect("save");
+
+        let path = temp_json_path();
+        storage
+            .export_to(&path, ExportScope::All, false)
+            .expect("export");
+
+        let raw = std::fs::read_to_string(&path).expect("read json");
+        let bundle: ExportBundle = serde_json::from_str(&raw).expect("parse");
+        assert_eq!(bundle.entries.len(), 1);
+        assert_eq!(bundle.entries[0].content, "13812345678");
+        assert_eq!(bundle.encryption_version, 0);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn settings_only_scope_excludes_entries() {
+        let storage = temp_storage();
+        let entry = ClipboardEntry::captured_text("some text".to_string(), "app".to_string())
+            .expect("valid entry");
+        storage.save_entry(&entry).expect("save");
+        storage
+            .set_setting("test.key", "test.value")
+            .expect("set setting");
+
+        let path = temp_json_path();
+        let count = storage
+            .export_to(&path, ExportScope::SettingsOnly, false)
+            .expect("export");
+        assert_eq!(count, 0);
+
+        let raw = std::fs::read_to_string(&path).expect("read");
+        let bundle: ExportBundle = serde_json::from_str(&raw).expect("parse");
+        assert!(bundle.entries.is_empty());
+        assert_eq!(bundle.settings["test.key"], "test.value");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn replace_mode_clears_before_import() {
+        let storage = temp_storage();
+        let old = ClipboardEntry::captured_text("old data".to_string(), "app".to_string())
+            .expect("valid entry");
+        storage.save_entry(&old).expect("save old");
+
+        let storage2 = temp_storage();
+        let new = ClipboardEntry::captured_text("new data".to_string(), "app".to_string())
+            .expect("valid entry");
+        storage2.save_entry(&new).expect("save new");
+        let path = temp_json_path();
+        storage2
+            .export_to(&path, ExportScope::All, false)
+            .expect("export");
+
+        let stats = storage
+            .import_from(&path, ImportMode::Replace)
+            .expect("import");
+        assert_eq!(stats.entries_added, 1);
+
+        let entries = storage.list("").expect("list");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].content, "new data");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn export_bundle_has_correct_metadata() {
+        let storage = temp_storage();
+        let path = temp_json_path();
+        storage
+            .export_to(&path, ExportScope::All, false)
+            .expect("export");
+
+        let raw = std::fs::read_to_string(&path).expect("read");
+        let bundle: ExportBundle = serde_json::from_str(&raw).expect("parse");
+        assert_eq!(bundle.schema_version, EXPORT_SCHEMA_VERSION);
+        assert_eq!(bundle.app_version, env!("CARGO_PKG_VERSION"));
+        assert!(bundle.exported_at > 0);
+        assert_eq!(bundle.encryption_version, 0);
         let _ = std::fs::remove_file(&path);
     }
 }
