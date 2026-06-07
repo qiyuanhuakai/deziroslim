@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(APP_DISPLAY_NAME)
-        .with_inner_size([380.0, 680.0])
+        .with_inner_size([480.0, 680.0])
         .with_min_inner_size([320.0, 400.0])
         .with_position(initial_window_position())
         .with_transparent(true)
@@ -68,7 +68,7 @@ fn initial_window_position() -> egui::Pos2 {
         height: 800.0,
     });
     egui::pos2(
-        screen.x + ((screen.width - 380.0) / 2.0).max(8.0),
+        screen.x + ((screen.width - 480.0) / 2.0).max(8.0),
         screen.y + ((screen.height - 680.0) / 2.0).max(8.0),
     )
 }

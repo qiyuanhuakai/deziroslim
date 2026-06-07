@@ -26,7 +26,7 @@ const PREFERENCES_KEY: &str = "ui.tiez_slim_linux";
 const LEGACY_PREFERENCES_KEY: &str = "ui.native_tiez";
 const EMOJI_FAVORITES_KEY: &str = "app.emoji_favorites";
 const HISTORY_MAX_WIDTH: f32 = 560.0;
-const DEFAULT_WINDOW_SIZE: egui::Vec2 = egui::vec2(380.0, 680.0);
+const DEFAULT_WINDOW_SIZE: egui::Vec2 = egui::vec2(480.0, 680.0);
 const MIN_NORMAL_WINDOW_SIZE: egui::Vec2 = egui::vec2(320.0, 400.0);
 const RESIZE_HIT_SIZE: f32 = 8.0;
 const CARD_ACTION_WIDTH: f32 = 92.0;
@@ -1617,9 +1617,7 @@ impl ClipboardApp {
             height: 800.0,
         });
         let screen = logical_screen_geometry(screen, ctx.pixels_per_point().max(1.0));
-        let restore_size = self
-            .edge_restore_size
-            .unwrap_or_else(|| egui::vec2(380.0, 680.0));
+        let restore_size = self.edge_restore_size.unwrap_or(DEFAULT_WINDOW_SIZE);
         let pos = self.edge_restore_pos.unwrap_or_else(|| {
             visible_position_for_dock(self.current_edge_dock, restore_size, screen)
         });
