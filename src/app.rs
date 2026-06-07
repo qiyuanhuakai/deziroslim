@@ -591,6 +591,7 @@ impl AppPreferences {
     }
 }
 
+#[allow(dead_code)]
 pub struct ClipboardApp {
     pub(crate) storage: Storage,
     event_sender: Sender<ClipboardEvent>,
@@ -692,12 +693,23 @@ pub struct ClipboardApp {
     pub(crate) fallback_font: String,
     pub(crate) language: String,
     pub(crate) app_exclusion_list: Vec<String>,
+    pub(crate) new_exclusion_input: String,
     pub(crate) private_mode: bool,
     pub(crate) private_mode_hotkey: String,
     pub(crate) exclusion_mode: crate::blacklist::ExclusionMode,
     pub(crate) auto_backup_enabled: bool,
     pub(crate) backup_retention_count: i32,
     pub(crate) last_backup_at: Option<i64>,
+    pub(crate) export_scope: String,
+    pub(crate) import_mode: String,
+    pub(crate) show_import_preview: bool,
+    pub(crate) import_preview_path: String,
+    pub(crate) import_preview_schema: u32,
+    pub(crate) import_preview_entries: usize,
+    pub(crate) import_preview_time: String,
+    pub(crate) import_preview_has_settings: bool,
+    pub(crate) show_error_modal: bool,
+    pub(crate) error_modal_message: String,
     pub(crate) primary_selection_enabled: bool,
     pub(crate) primary_degraded: bool,
     pub(crate) search_mode: String,
@@ -863,9 +875,20 @@ impl ClipboardApp {
             dev_mode,
             show_dev_panel: false,
             color_mode: preferences.color_mode.clone(),
+            export_scope: "all".to_string(),
+            import_mode: "merge".to_string(),
+            show_import_preview: false,
+            import_preview_path: String::new(),
+            import_preview_schema: 0,
+            import_preview_entries: 0,
+            import_preview_time: String::new(),
+            import_preview_has_settings: false,
+            show_error_modal: false,
+            error_modal_message: String::new(),
             primary_font: preferences.primary_font.clone(),
             fallback_font: preferences.fallback_font.clone(),
             language: preferences.language.clone(),
+            new_exclusion_input: String::new(),
             app_exclusion_list: preferences.app_exclusion_list,
             private_mode: preferences.private_mode,
             private_mode_hotkey: preferences.private_mode_hotkey,
@@ -1085,6 +1108,15 @@ impl ClipboardApp {
                 ClipboardEvent::PasteLatestRich => self.paste_latest_rich(ctx),
                 ClipboardEvent::SequentialPaste => self.sequential_paste(ctx),
                 ClipboardEvent::OpenSettings => self.open_settings_from_tray(ctx),
+                ClipboardEvent::TogglePrivateMode => {
+                    self.private_mode = !self.private_mode;
+                    self.persist_preferences();
+                    self.status = if self.private_mode {
+                        t!("settings.private_mode.toggle_on").to_string()
+                    } else {
+                        t!("settings.private_mode.toggle_off").to_string()
+                    };
+                }
                 ClipboardEvent::Quit => {
                     self.force_quit = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
