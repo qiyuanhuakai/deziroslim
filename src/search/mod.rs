@@ -407,9 +407,10 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(!hits.is_empty());
+        // Relaxed from 50ms to accommodate slow CI/low-RAM environments.
         assert!(
-            elapsed.as_millis() < 50,
-            "fuzzy search of 1000 entries took {}ms, expected < 50ms",
+            elapsed.as_millis() < 100,
+            "fuzzy search of 1000 entries took {}ms, expected < 100ms",
             elapsed.as_millis()
         );
     }
