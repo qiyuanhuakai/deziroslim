@@ -2,29 +2,45 @@ use crate::app::ClipboardApp;
 use eframe::egui;
 use rust_i18n::t;
 
+const PANEL_INDEX: usize = 11;
+
 pub fn draw_sync_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::Context) {
+    let prev = app
+        .settings_panel_collapsed
+        .get(PANEL_INDEX)
+        .copied()
+        .unwrap_or(false);
+    let mut expanded = !prev;
     let theme = app.theme.clone();
 
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(t!("settings.sync.title"))
-                .size(16.0)
-                .strong()
-                .color(theme.fg),
-        );
-    });
-    ui.add_space(8.0);
+    crate::ui::widgets::macos_collapsible_group(
+        ui,
+        t!("settings.sync.title"),
+        &mut expanded,
+        &theme,
+        |ui| {
+            #[cfg(feature = "kde_connect")]
+            {
+                draw_sync_content(ui, app, &theme);
+            }
 
-    #[cfg(feature = "kde_connect")]
-    {
-        draw_sync_content(ui, app, &theme);
-    }
+            #[cfg(not(feature = "kde_connect"))]
+            {
+                ui.label(
+                    egui::RichText::new(t!("settings.sync.feature_disabled")).color(theme.muted),
+                );
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(t!("settings.sync.enable_hint")).color(theme.muted));
+            }
+        },
+    );
 
-    #[cfg(not(feature = "kde_connect"))]
+    let collapsed_ref = app.settings_panel_collapsed.get_mut(PANEL_INDEX);
+    if let Some(collapsed) = collapsed_ref
+        && expanded == *collapsed
     {
-        ui.label(egui::RichText::new(t!("settings.sync.feature_disabled")).color(theme.muted));
-        ui.add_space(4.0);
-        ui.label(egui::RichText::new(t!("settings.sync.enable_hint")).color(theme.muted));
+        *collapsed = !expanded;
+        app.persist_preferences();
     }
 }
 
@@ -47,6 +63,7 @@ fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::u
         } else {
             app.sync_manager_mut().disable();
         }
+        app.persist_preferences();
     }
 
     ui.add_space(12.0);
@@ -92,7 +109,7 @@ fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::u
 
     ui.label(
         egui::RichText::new(t!("settings.sync.paired_devices"))
-            .size(14.0)
+            .size(13.0)
             .strong()
             .color(theme.fg),
     );

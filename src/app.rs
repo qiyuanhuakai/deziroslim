@@ -476,7 +476,7 @@ fn default_privacy_protection_kinds() -> Vec<String> {
 }
 
 fn default_settings_panel_collapsed() -> Vec<bool> {
-    vec![false; 11]
+    vec![false; 12]
 }
 
 fn default_color_mode() -> String {
