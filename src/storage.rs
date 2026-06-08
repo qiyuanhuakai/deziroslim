@@ -1,24 +1,31 @@
 use crate::actions::{Action, ActionKind};
+use crate::encryption::SecureStore;
 use crate::model::{
     ClipboardEntry, ClipboardEntrySummary, ClipboardKind, MAX_ENTRIES, RETENTION_DAYS,
     SelectionSource,
 };
 use anyhow::{Context, Result};
 use chrono::{Duration, Local};
+use lru::LruCache;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use rust_i18n::t;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 const APP_DATA_DIR: &str = "tiez-slim-linux";
 const LEGACY_DATA_DIR: &str = "myclipboard";
+const ENCRYPTED_PREFIX: &str = "enc:v1:";
+const DECRYPTED_CACHE_CAP: usize = 256;
 
 #[derive(Clone)]
 pub struct Storage {
     conn: Arc<Mutex<Connection>>,
     path: PathBuf,
+    encryptor: Option<Arc<dyn SecureStore + Send + Sync>>,
+    decrypted_cache: Arc<Mutex<LruCache<i64, String>>>,
 }
 
 impl Storage {
@@ -86,6 +93,10 @@ impl Storage {
         let storage = Self {
             conn: Arc::new(Mutex::new(conn)),
             path,
+            encryptor: None,
+            decrypted_cache: Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(DECRYPTED_CACHE_CAP).unwrap(),
+            ))),
         };
         storage.migrate()?;
         Ok(storage)
@@ -93,6 +104,61 @@ impl Storage {
 
     pub fn path(&self) -> &PathBuf {
         &self.path
+    }
+
+    pub fn set_encryptor(&mut self, encryptor: Arc<dyn SecureStore + Send + Sync>) {
+        self.encryptor = Some(encryptor);
+    }
+
+    pub fn has_encryptor(&self) -> bool {
+        self.encryptor.is_some()
+    }
+
+    pub fn clear_decrypted_cache(&self) {
+        if let Ok(mut cache) = self.decrypted_cache.lock() {
+            cache.clear();
+        }
+    }
+
+    pub fn encrypt_sensitive_content(&self, content: &str, is_sensitive: bool) -> Result<String> {
+        if !is_sensitive {
+            return Ok(content.to_string());
+        }
+        let Some(ref enc) = self.encryptor else {
+            return Ok(content.to_string());
+        };
+        if content.starts_with(ENCRYPTED_PREFIX) {
+            return Ok(content.to_string());
+        }
+        let ct = enc.encrypt(content.as_bytes())?;
+        String::from_utf8(ct).context("encrypted content is not valid UTF-8")
+    }
+
+    pub fn decrypt_content(&self, id: i64, raw: &str) -> String {
+        if !raw.starts_with(ENCRYPTED_PREFIX) {
+            return raw.to_string();
+        }
+        {
+            let Ok(mut cache) = self.decrypted_cache.lock() else {
+                return raw.to_string();
+            };
+            if let Some(cached) = cache.get(&id) {
+                return cached.clone();
+            }
+        }
+        let Some(ref enc) = self.encryptor else {
+            return raw.to_string();
+        };
+        let Ok(decrypted) = enc.decrypt(raw.as_bytes()) else {
+            return raw.to_string();
+        };
+        let Ok(text) = String::from_utf8(decrypted) else {
+            return raw.to_string();
+        };
+        if let Ok(mut cache) = self.decrypted_cache.lock() {
+            cache.put(id, text.clone());
+        }
+        text
     }
 
     pub(crate) fn conn(&self) -> &std::sync::Mutex<rusqlite::Connection> {
@@ -243,6 +309,7 @@ impl Storage {
         };
         let hash = content_hash(entry.kind.as_str(), entry.source.as_str(), &hash_input);
         let sensitive = entry.is_sensitive() as i64;
+        let stored_content = self.encrypt_sensitive_content(&entry.content, entry.is_sensitive())?;
         let mut conn = self.conn.lock().expect("storage mutex poisoned");
         let tx = conn.transaction()?;
 
@@ -261,14 +328,15 @@ impl Storage {
             tx.execute(
                 "UPDATE clipboard_history
                  SET timestamp = ?1, source_app = ?2, preview = ?3, content_type = ?4,
-                     html_content = ?5, source_app_path = ?6, is_external = ?7, sensitive = ?8,
-                     source = ?9
-                 WHERE id = ?10",
+                     content = ?5, html_content = ?6, source_app_path = ?7, is_external = ?8,
+                     sensitive = ?9, source = ?10
+                 WHERE id = ?11",
                 params![
                     entry.timestamp,
                     entry.source_app,
                     entry.preview,
                     entry.kind.as_str(),
+                    stored_content,
                     entry.html_content,
                     entry.source_app_path,
                     entry.is_external as i64,
@@ -286,7 +354,7 @@ impl Storage {
                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     entry.kind.as_str(),
-                    entry.content,
+                    stored_content,
                     entry.html_content,
                     entry.source_app,
                     entry.source_app_path,
@@ -330,17 +398,20 @@ impl Storage {
              WHERE {where_sql}
              ORDER BY h.is_pinned DESC, h.pinned_order ASC, h.timestamp DESC LIMIT 300"
         );
-        let mut stmt = conn.prepare(&sql)?;
-        let mut entries = stmt
-            .query_map(params_from_iter(values.iter()), row_to_entry)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut entries = {
+            let mut stmt = conn.prepare(&sql)?;
+            stmt.query_map(params_from_iter(values.iter()), row_to_entry)?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
 
         let ids: Vec<i64> = entries.iter().map(|e| e.id).collect();
         let tags_by_id = fetch_tags_batch(&conn, &ids)?;
+        drop(conn);
         for entry in &mut entries {
             if let Some(tags) = tags_by_id.get(&entry.id) {
                 entry.tags = tags.clone();
             }
+            entry.content = self.decrypt_content(entry.id, &entry.content);
         }
         Ok(entries)
     }
@@ -399,16 +470,20 @@ impl Storage {
 
     pub fn get_entry(&self, id: i64) -> Result<Option<ClipboardEntry>> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
-        let mut stmt = conn.prepare(
-            "SELECT id, content_type, content, html_content, source_app, source_app_path,
-                timestamp, preview, is_pinned, use_count, is_external, pinned_order, source
-             FROM clipboard_history WHERE id = ?1",
-        )?;
-        let mut entry = match stmt.query_row(params![id], row_to_entry).optional()? {
-            Some(entry) => entry,
-            None => return Ok(None),
+        let mut entry = {
+            let mut stmt = conn.prepare(
+                "SELECT id, content_type, content, html_content, source_app, source_app_path,
+                    timestamp, preview, is_pinned, use_count, is_external, pinned_order, source
+                 FROM clipboard_history WHERE id = ?1",
+            )?;
+            match stmt.query_row(params![id], row_to_entry).optional()? {
+                Some(entry) => entry,
+                None => return Ok(None),
+            }
         };
         let tags_by_id = fetch_tags_batch(&conn, &[entry.id])?;
+        drop(conn);
+        entry.content = self.decrypt_content(entry.id, &entry.content);
         if let Some(tags) = tags_by_id.get(&entry.id) {
             entry.tags = tags.clone();
         }
@@ -474,7 +549,7 @@ impl Storage {
             )?;
         }
         // Recompute cached sensitive so UI masking tracks the tag set.
-        let (content, content_type): (String, String) = tx
+        let (raw_content, content_type): (String, String) = tx
             .query_row(
                 "SELECT content, content_type FROM clipboard_history WHERE id = ?1",
                 params![id],
@@ -482,6 +557,7 @@ impl Storage {
             )
             .optional()?
             .unwrap_or_default();
+        let content = self.decrypt_content(id, &raw_content);
         let kind = ClipboardKind::from(content_type.as_str());
         let tagged_sensitive = tags.iter().any(|tag| {
             let tag = tag.to_ascii_lowercase();
