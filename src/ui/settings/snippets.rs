@@ -91,9 +91,7 @@ fn draw_snippet_list(ui: &mut egui::Ui, app: &mut ClipboardApp) {
                                 );
                                 let preview: String = snippet.template.chars().take(60).collect();
                                 ui.label(
-                                    egui::RichText::new(preview)
-                                        .size(11.0)
-                                        .color(theme.muted),
+                                    egui::RichText::new(preview).size(11.0).color(theme.muted),
                                 );
                             });
                             ui.with_layout(
@@ -140,18 +138,16 @@ fn draw_snippet_buttons(ui: &mut egui::Ui, app: &mut ClipboardApp) {
             app.snippet_editor_open = true;
         }
 
-        if app.snippet_editing_id.is_some() {
-            if settings_footer_button(ui, t!("settings.snippets.delete"), &theme, 80.0).clicked()
-                && let Some(id) = app.snippet_editing_id
-            {
-                if let Err(err) = app.storage.delete_snippet(id) {
-                    app.status =
-                        format!("{}: {err}", t!("settings.snippets.delete_failed"));
-                } else {
-                    app.snippets = app.storage.load_snippets().unwrap_or_default();
-                    app.snippet_editor_open = false;
-                    app.snippet_editing_id = None;
-                }
+        if app.snippet_editing_id.is_some()
+            && settings_footer_button(ui, t!("settings.snippets.delete"), &theme, 80.0).clicked()
+            && let Some(id) = app.snippet_editing_id
+        {
+            if let Err(err) = app.storage.delete_snippet(id) {
+                app.status = format!("{}: {err}", t!("settings.snippets.delete_failed"));
+            } else {
+                app.snippets = app.storage.load_snippets().unwrap_or_default();
+                app.snippet_editor_open = false;
+                app.snippet_editing_id = None;
             }
         }
     });
@@ -192,9 +188,7 @@ fn draw_snippet_editor(ui: &mut egui::Ui, app: &mut ClipboardApp) {
     });
 
     ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(t!("settings.snippets.field_description")).color(theme.fg),
-        );
+        ui.label(egui::RichText::new(t!("settings.snippets.field_description")).color(theme.fg));
         ui.add(
             egui::TextEdit::singleline(&mut app.snippet_edit_description)
                 .desired_width(ui.available_width())
@@ -239,8 +233,7 @@ fn draw_snippet_editor(ui: &mut egui::Ui, app: &mut ClipboardApp) {
                     app.snippet_editing_id = None;
                 }
                 Err(err) => {
-                    app.status =
-                        format!("{}: {err}", t!("settings.snippets.save_failed"));
+                    app.status = format!("{}: {err}", t!("settings.snippets.save_failed"));
                 }
             }
         }

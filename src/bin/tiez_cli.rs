@@ -125,14 +125,10 @@ fn main() {
     let socket_path = IpcServer::socket_path_default();
 
     let exit_code = match cli.command {
-        SubCommand::List {
-            limit,
-            type_,
-            tag,
-        } => cmd_list(&socket_path, limit, type_, tag, cli.json),
-        SubCommand::Search { query, mode: _ } => {
-            cmd_search(&socket_path, &query, cli.json)
+        SubCommand::List { limit, type_, tag } => {
+            cmd_list(&socket_path, limit, type_, tag, cli.json)
         }
+        SubCommand::Search { query, mode: _ } => cmd_search(&socket_path, &query, cli.json),
         SubCommand::Paste { id, rich } => cmd_paste(&socket_path, id, rich, cli.json),
         SubCommand::Pin { id, unpin } => cmd_pin(&socket_path, id, unpin),
         SubCommand::Tag { id, tag } => cmd_tag(&socket_path, id, &tag),
@@ -193,10 +189,10 @@ fn cmd_list(
     let data = resp.data.unwrap_or_default();
     if json_output {
         let mut entries: serde_json::Value = data;
-        if let Some(n) = limit {
-            if let Some(arr) = entries.as_array_mut() {
-                arr.truncate(n);
-            }
+        if let Some(n) = limit
+            && let Some(arr) = entries.as_array_mut()
+        {
+            arr.truncate(n);
         }
         println!(
             "{}",
@@ -393,12 +389,18 @@ fn cmd_status(socket_path: &std::path::Path, json_output: bool) -> i32 {
         println!("  {}: [{tags}]", t!("history.tag_label"));
 
         if let Some(sync) = data.get("sync") {
-            let enabled = sync.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+            let enabled = sync
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let device_id = sync
                 .get("device_id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("—");
-            let state = sync.get("state").and_then(|v| v.as_str()).unwrap_or("disabled");
+            let state = sync
+                .get("state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("disabled");
             println!("  Sync (KDE Connect):");
             println!("    enabled: {enabled}");
             println!("    device_id: {device_id}");
@@ -467,8 +469,10 @@ fn cmd_snippet(socket_path: &std::path::Path, sub: SnippetCmd, json_output: bool
                     let template = s.get("template").and_then(|v| v.as_str()).unwrap_or("");
                     let uses = s.get("use_count").and_then(|v| v.as_i64()).unwrap_or(0);
                     let preview: String = template.chars().take(50).collect();
-                    println!("  [{id}] {name} — {preview} ({uses}{uses_label})",
-                        uses_label = t!("cli.snippet_uses"));
+                    println!(
+                        "  [{id}] {name} — {preview} ({uses}{uses_label})",
+                        uses_label = t!("cli.snippet_uses")
+                    );
                 }
             }
             0
@@ -597,11 +601,7 @@ fn handle_ipc_response_error(resp: &IpcResponse) -> i32 {
         };
         eprintln!("{msg}");
         // Server codes >= 100 indicate unknown command → CLI exit 4
-        if code >= 100 {
-            4
-        } else {
-            code
-        }
+        if code >= 100 { 4 } else { code }
     } else {
         eprintln!("{}", t!("cli.error_io", err = "unknown error"));
         1
@@ -656,14 +656,13 @@ fn write_to_clipboard(content: &str) -> Result<(), String> {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
-    if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn() {
-        if let Some(stdin) = child.stdin.as_mut() {
-            if stdin.write_all(content.as_bytes()).is_ok() {
-                drop(child.stdin.take());
-                if child.wait().map(|s| s.success()).unwrap_or(false) {
-                    return Ok(());
-                }
-            }
+    if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn()
+        && let Some(stdin) = child.stdin.as_mut()
+        && stdin.write_all(content.as_bytes()).is_ok()
+    {
+        drop(child.stdin.take());
+        if child.wait().map(|s| s.success()).unwrap_or(false) {
+            return Ok(());
         }
     }
 
@@ -671,19 +670,16 @@ fn write_to_clipboard(content: &str) -> Result<(), String> {
         .args(["-selection", "clipboard"])
         .stdin(Stdio::piped())
         .spawn()
+        && let Some(stdin) = child.stdin.as_mut()
+        && stdin.write_all(content.as_bytes()).is_ok()
     {
-        if let Some(stdin) = child.stdin.as_mut() {
-            if stdin.write_all(content.as_bytes()).is_ok() {
-                drop(child.stdin.take());
-                if child.wait().map(|s| s.success()).unwrap_or(false) {
-                    return Ok(());
-                }
-            }
+        drop(child.stdin.take());
+        if child.wait().map(|s| s.success()).unwrap_or(false) {
+            return Ok(());
         }
     }
 
-    let mut cb =
-        arboard::Clipboard::new().map_err(|e| format!("clipboard not available: {e}"))?;
+    let mut cb = arboard::Clipboard::new().map_err(|e| format!("clipboard not available: {e}"))?;
     cb.set_text(content.to_owned())
         .map_err(|e| format!("failed to set clipboard: {e}"))?;
     Ok(())
@@ -916,7 +912,9 @@ mod tests {
     fn help_shows_all_subcommands() {
         let err = Cli::try_parse_from(["tiez-cli", "--help"]).unwrap_err();
         let help = err.to_string();
-        for sub in &["list", "search", "paste", "pin", "tag", "delete", "status", "add"] {
+        for sub in &[
+            "list", "search", "paste", "pin", "tag", "delete", "status", "add",
+        ] {
             assert!(help.contains(sub), "help missing subcommand: {sub}");
         }
     }

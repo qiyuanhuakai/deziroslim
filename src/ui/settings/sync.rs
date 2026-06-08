@@ -22,15 +22,9 @@ pub fn draw_sync_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
 
     #[cfg(not(feature = "kde_connect"))]
     {
-        ui.label(
-            egui::RichText::new(t!("settings.sync.feature_disabled"))
-                .color(theme.muted),
-        );
+        ui.label(egui::RichText::new(t!("settings.sync.feature_disabled")).color(theme.muted));
         ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(t!("settings.sync.enable_hint"))
-                .color(theme.muted),
-        );
+        ui.label(egui::RichText::new(t!("settings.sync.enable_hint")).color(theme.muted));
     }
 }
 
@@ -71,10 +65,7 @@ fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::u
         }
     };
     ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(t!("settings.sync.status"))
-                .color(theme.muted),
-        );
+        ui.label(egui::RichText::new(t!("settings.sync.status")).color(theme.muted));
         ui.label(egui::RichText::new(state_label.to_string()).color(theme.fg));
     });
 
@@ -82,23 +73,13 @@ fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::u
 
     let device_id = app.sync_manager().device_id().to_string();
     ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(t!("settings.sync.device_id"))
-                .color(theme.muted),
-        );
+        ui.label(egui::RichText::new(t!("settings.sync.device_id")).color(theme.muted));
         ui.monospace(&device_id);
     });
 
     ui.add_space(12.0);
 
-    if settings_footer_button(
-        ui,
-        t!("settings.sync.show_qr"),
-        theme,
-        160.0,
-    )
-    .clicked()
-    {
+    if settings_footer_button(ui, t!("settings.sync.show_qr"), theme, 160.0).clicked() {
         app.show_sync_qr = !app.show_sync_qr;
     }
 
@@ -119,23 +100,15 @@ fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::u
 
     let devices = app.sync_manager().discovered_devices().to_vec();
     if devices.is_empty() {
-        ui.label(
-            egui::RichText::new(t!("settings.sync.no_devices"))
-                .color(theme.muted),
-        );
+        ui.label(egui::RichText::new(t!("settings.sync.no_devices")).color(theme.muted));
     } else {
         for dev in &devices {
             ui.horizontal(|ui| {
                 let status_icon = if dev.paired { "\u{2705}" } else { "\u{26aa}" };
                 ui.label(status_icon);
-                ui.label(
-                    egui::RichText::new(&dev.name).color(theme.fg),
-                );
+                ui.label(egui::RichText::new(&dev.name).color(theme.fg));
                 if dev.paired {
-                    ui.label(
-                        egui::RichText::new(t!("settings.sync.paired"))
-                            .color(theme.accent),
-                    );
+                    ui.label(egui::RichText::new(t!("settings.sync.paired")).color(theme.accent));
                 }
             });
         }
@@ -159,10 +132,7 @@ fn draw_qr_code(ui: &mut egui::Ui, device_id: &str, theme: &crate::ui::MacosToke
             );
         }
         Err(e) => {
-            ui.label(
-                egui::RichText::new(format!("QR error: {e}"))
-                    .color(theme.danger),
-            );
+            ui.label(egui::RichText::new(format!("QR error: {e}")).color(theme.danger));
         }
     }
 }

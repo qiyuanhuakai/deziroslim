@@ -57,28 +57,12 @@ enum SyncCmd {
 #[cfg(feature = "kde_connect")]
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
-    DeviceDiscovered {
-        id: String,
-        name: String,
-    },
-    DeviceConnected {
-        id: String,
-        name: String,
-    },
-    PairRequested {
-        id: String,
-        name: String,
-    },
-    PairComplete {
-        id: String,
-    },
-    PairFailed {
-        id: String,
-        reason: String,
-    },
-    ClipboardReceived {
-        content: String,
-    },
+    DeviceDiscovered { id: String, name: String },
+    DeviceConnected { id: String, name: String },
+    PairRequested { id: String, name: String },
+    PairComplete { id: String },
+    PairFailed { id: String, reason: String },
+    ClipboardReceived { content: String },
     Error(String),
 }
 
@@ -224,9 +208,7 @@ impl SyncManager {
                         .find(|d| d.id == id)
                         .map(|d| d.name.clone())
                         .unwrap_or_else(|| id.clone());
-                    self.state = SyncState::Connected {
-                        device_name: name,
-                    };
+                    self.state = SyncState::Connected { device_name: name };
                 }
                 SyncEvent::PairFailed { id: _, reason } => {
                     self.state = SyncState::Error(reason);
@@ -371,10 +353,7 @@ impl SyncEchoGuard {
     pub fn should_suppress(&self, content: &str) -> bool {
         let hash = content_hash(content);
         let state = self.inner.lock().expect("sync echo guard poisoned");
-        state.0 == hash
-            && state
-                .1
-                .is_some_and(|at| at.elapsed() < SYNC_ECHO_WINDOW)
+        state.0 == hash && state.1.is_some_and(|at| at.elapsed() < SYNC_ECHO_WINDOW)
     }
 }
 
@@ -411,7 +390,10 @@ impl TiezClipboardPlugin {
 impl kdeconnect_proto::plugin::Plugin for TiezClipboardPlugin {
     fn supported_incoming_packets(&self) -> Vec<kdeconnect_proto::packet::NetworkPacketType> {
         use kdeconnect_proto::packet::NetworkPacketType;
-        vec![NetworkPacketType::Clipboard, NetworkPacketType::ClipboardConnect]
+        vec![
+            NetworkPacketType::Clipboard,
+            NetworkPacketType::ClipboardConnect,
+        ]
     }
 
     fn supported_outgoing_packets(&self) -> Vec<kdeconnect_proto::packet::NetworkPacketType> {
@@ -528,7 +510,9 @@ fn generate_tls_certificate(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8
         .status()?;
 
     if !status.success() {
-        return Err(std::io::Error::other("openssl certificate generation failed"));
+        return Err(std::io::Error::other(
+            "openssl certificate generation failed",
+        ));
     }
 
     let cert = std::fs::read(&cert_p)?;
@@ -569,12 +553,7 @@ impl FileTrustHandler {
                     .flatten()
                     .filter_map(Result::ok)
                     .map(|f| {
-                        let device_id = f
-                            .path()
-                            .file_stem()
-                            .unwrap()
-                            .to_string_lossy()
-                            .to_string();
+                        let device_id = f.path().file_stem().unwrap().to_string_lossy().to_string();
                         let cert = std::fs::read(f.path()).unwrap_or_default();
                         (device_id, cert)
                     }),
@@ -595,10 +574,7 @@ impl FileTrustHandler {
 #[kdeconnect_proto::async_trait]
 impl kdeconnect_proto::trust::TrustHandler for FileTrustHandler {
     async fn trust_device(&mut self, device_id: String, cert: Vec<u8>) {
-        let _ = std::fs::write(
-            self.path.join(format!("{device_id}.pem")),
-            &cert,
-        );
+        let _ = std::fs::write(self.path.join(format!("{device_id}.pem")), &cert);
         self.trusted_devices.insert(device_id, cert);
     }
 
@@ -623,9 +599,7 @@ fn sync_runtime(
     cmd_rx: crossbeam_channel::Receiver<SyncCmd>,
     event_tx: crossbeam_channel::Sender<SyncEvent>,
 ) {
-    use kdeconnect_proto::{
-        config::DeviceConfig, device::DeviceType, io::TokioIoImpl,
-    };
+    use kdeconnect_proto::{config::DeviceConfig, device::DeviceType, io::TokioIoImpl};
 
     let (cert, key) = match load_or_generate_cert(&device_id) {
         Ok(ck) => ck,
@@ -655,7 +629,8 @@ fn sync_runtime(
 
     let plugins: Vec<Box<dyn kdeconnect_proto::plugin::Plugin + Send + Sync>> = vec![];
     let trust_handler = FileTrustHandler::new(trusted_devices_dir());
-    let kdevice = kdeconnect_proto::device::Device::new(config, plugins, trust_handler, TokioIoImpl);
+    let kdevice =
+        kdeconnect_proto::device::Device::new(config, plugins, trust_handler, TokioIoImpl);
 
     let event_tx_mdns = event_tx.clone();
     let device_id_mdns = device_id.clone();
@@ -739,10 +714,7 @@ fn sync_runtime(
 /// Monitor for KDE Connect services on the network using `mdns-sd`.
 /// This is supplementary to kdeconnect-proto's built-in mDNS discovery.
 #[cfg(feature = "kde_connect")]
-fn mdns_monitor_loop(
-    _local_device_id: &str,
-    event_tx: crossbeam_channel::Sender<SyncEvent>,
-) {
+fn mdns_monitor_loop(_local_device_id: &str, event_tx: crossbeam_channel::Sender<SyncEvent>) {
     use mdns_sd::{ServiceDaemon, ServiceEvent};
 
     let mdns = match ServiceDaemon::new() {
@@ -810,8 +782,6 @@ fn load_or_create_device_id(storage: &Storage) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     #[cfg(feature = "kde_connect")]
     fn test_load_or_create_device_id_persists() {

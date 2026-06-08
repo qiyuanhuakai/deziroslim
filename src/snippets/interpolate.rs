@@ -34,40 +34,40 @@ pub fn parse_template(template: &str) -> Result<Vec<Token>, InterpError> {
     let mut literal_start = 0;
 
     while let Some((i, ch)) = chars.next() {
-        if ch == '{' {
-            if let Some(&(_, '{')) = chars.peek() {
-                chars.next();
-                if literal_start < i {
-                    tokens.push(Token::Literal(template[literal_start..i].to_string()));
-                }
-                let var_start = i + 2;
-                let mut depth = 1;
-                let mut j = var_start;
-                for (k, c) in template[var_start..].char_indices() {
-                    if c == '{' {
-                        depth += 1;
-                    } else if c == '}' {
-                        depth -= 1;
-                        if depth == 0 {
-                            j = var_start + k;
-                            break;
-                        }
+        if ch == '{'
+            && let Some(&(_, '{')) = chars.peek()
+        {
+            chars.next();
+            if literal_start < i {
+                tokens.push(Token::Literal(template[literal_start..i].to_string()));
+            }
+            let var_start = i + 2;
+            let mut depth = 1;
+            let mut j = var_start;
+            for (k, c) in template[var_start..].char_indices() {
+                if c == '{' {
+                    depth += 1;
+                } else if c == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        j = var_start + k;
+                        break;
                     }
                 }
-                if depth != 0 {
-                    return Err(InterpError::InvalidSyntax("unmatched {{".into()));
-                }
-                if !template[j..].starts_with("}}") {
-                    return Err(InterpError::InvalidSyntax("expected }}".into()));
-                }
-                let inner = template[var_start..j].trim();
-                if inner.is_empty() {
-                    return Err(InterpError::InvalidSyntax("empty variable name".into()));
-                }
-                tokens.push(Token::Variable(parse_variable(inner)?));
-                literal_start = j + 2;
-                continue;
             }
+            if depth != 0 {
+                return Err(InterpError::InvalidSyntax("unmatched {{".into()));
+            }
+            if !template[j..].starts_with("}}") {
+                return Err(InterpError::InvalidSyntax("expected }}".into()));
+            }
+            let inner = template[var_start..j].trim();
+            if inner.is_empty() {
+                return Err(InterpError::InvalidSyntax("empty variable name".into()));
+            }
+            tokens.push(Token::Variable(parse_variable(inner)?));
+            literal_start = j + 2;
+            continue;
         }
     }
     if literal_start < template.len() {
@@ -84,26 +84,45 @@ fn parse_variable(inner: &str) -> Result<InterpSegment, InterpError> {
         }
         let rest = rest.trim();
         if let Some(options_str) = rest.strip_prefix("Select:") {
-            let options: Vec<String> = options_str.split('|').map(|s| s.trim().to_string()).collect();
+            let options: Vec<String> = options_str
+                .split('|')
+                .map(|s| s.trim().to_string())
+                .collect();
             if options.is_empty() || options.iter().any(|o| o.is_empty()) {
                 return Err(InterpError::InvalidSyntax("empty picker option".into()));
             }
-            Ok(InterpSegment { name, default: None, options: Some(options) })
+            Ok(InterpSegment {
+                name,
+                default: None,
+                options: Some(options),
+            })
         } else if rest.contains('|') {
             let options: Vec<String> = rest.split('|').map(|s| s.trim().to_string()).collect();
             if options.is_empty() || options.iter().any(|o| o.is_empty()) {
                 return Err(InterpError::InvalidSyntax("empty picker option".into()));
             }
-            Ok(InterpSegment { name, default: None, options: Some(options) })
+            Ok(InterpSegment {
+                name,
+                default: None,
+                options: Some(options),
+            })
         } else {
-            Ok(InterpSegment { name, default: Some(rest.to_string()), options: None })
+            Ok(InterpSegment {
+                name,
+                default: Some(rest.to_string()),
+                options: None,
+            })
         }
     } else {
         let name = inner.trim().to_string();
         if name.is_empty() {
             return Err(InterpError::InvalidSyntax("empty variable name".into()));
         }
-        Ok(InterpSegment { name, default: None, options: None })
+        Ok(InterpSegment {
+            name,
+            default: None,
+            options: None,
+        })
     }
 }
 
@@ -157,7 +176,10 @@ mod tests {
     fn test_simple_variable() {
         let mut vals = HashMap::new();
         vals.insert("name".into(), "Alice".into());
-        assert_eq!(interpolate("Hello {{name}}!", &vals).unwrap(), "Hello Alice!");
+        assert_eq!(
+            interpolate("Hello {{name}}!", &vals).unwrap(),
+            "Hello Alice!"
+        );
     }
 
     #[test]

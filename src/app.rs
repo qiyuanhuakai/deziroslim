@@ -4223,9 +4223,7 @@ impl ClipboardApp {
                                     return;
                                 }
 
-                                if is_selected
-                                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                                {
+                                if is_selected && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                     self.execute_snippet(snippet.id);
                                     self.snippet_picker_open = false;
                                     return;
@@ -4234,8 +4232,8 @@ impl ClipboardApp {
                         });
 
                     if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-                        self.snippet_picker_selected =
-                            (self.snippet_picker_selected + 1).min(filtered.len().saturating_sub(1));
+                        self.snippet_picker_selected = (self.snippet_picker_selected + 1)
+                            .min(filtered.len().saturating_sub(1));
                     }
                     if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
                         self.snippet_picker_selected =
@@ -4319,7 +4317,7 @@ impl ClipboardApp {
                     ui.add_space(8.0);
 
                     if let Some(seg) = dialog.segments.get(dialog.current_index) {
-                        let label = if let Some(ref opts) = seg.options {
+                        let label = if let Some(ref _opts) = seg.options {
                             format!("{} [{}]", seg.name, t!("snippets.picker.pick_one"))
                         } else {
                             seg.name.clone()
@@ -4352,17 +4350,11 @@ impl ClipboardApp {
                                 .unwrap()
                                 .values
                                 .entry(seg.name.clone())
-                                .or_insert_with(|| {
-                                    seg.default.clone().unwrap_or_default()
-                                });
+                                .or_insert_with(|| seg.default.clone().unwrap_or_default());
                             ui.add(
                                 egui::TextEdit::singleline(val)
                                     .desired_width(ui.available_width())
-                                    .hint_text(
-                                        seg.default
-                                            .as_deref()
-                                            .unwrap_or(""),
-                                    ),
+                                    .hint_text(seg.default.as_deref().unwrap_or("")),
                             );
                         }
                     }
@@ -4398,33 +4390,26 @@ impl ClipboardApp {
             return;
         }
 
-        if advance {
-            if let Some(ref mut d) = self.snippet_variable_dialog {
-                if d.current_index + 1 < d.segments.len() {
-                    d.current_index += 1;
-                } else {
-                    let result =
-                        crate::snippets::interpolate::interpolate(&d.template, &d.values);
-                    let snippet_id = d.snippet_id;
-                    let snippet_name = d.snippet_name.clone();
-                    self.snippet_variable_dialog = None;
-                    match result {
-                        Ok(text) => {
-                            if let Err(err) = crate::clipboard::set_text(&text) {
-                                self.status = err;
-                            } else {
-                                let _ = self
-                                    .storage
-                                    .increment_snippet_use_count(snippet_id);
-                                self.status = format!(
-                                    "{}",
-                                    t!("snippets.picker.inserted", name = snippet_name)
-                                );
-                            }
+        if advance && let Some(ref mut d) = self.snippet_variable_dialog {
+            if d.current_index + 1 < d.segments.len() {
+                d.current_index += 1;
+            } else {
+                let result = crate::snippets::interpolate::interpolate(&d.template, &d.values);
+                let snippet_id = d.snippet_id;
+                let snippet_name = d.snippet_name.clone();
+                self.snippet_variable_dialog = None;
+                match result {
+                    Ok(text) => {
+                        if let Err(err) = crate::clipboard::set_text(&text) {
+                            self.status = err;
+                        } else {
+                            let _ = self.storage.increment_snippet_use_count(snippet_id);
+                            self.status =
+                                format!("{}", t!("snippets.picker.inserted", name = snippet_name));
                         }
-                        Err(err) => {
-                            self.status = format!("{err}");
-                        }
+                    }
+                    Err(err) => {
+                        self.status = format!("{err}");
                     }
                 }
             }

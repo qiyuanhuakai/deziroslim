@@ -7,9 +7,9 @@
 
 pub mod queue;
 
-use anyhow::Result;
 #[cfg(feature = "secure_storage")]
 use anyhow::Context;
+use anyhow::Result;
 
 /// Encrypts and decrypts clipboard entry content.
 pub trait SecureStore {
@@ -49,8 +49,7 @@ impl KeyringBackend {
     #[cfg(feature = "secure_storage")]
     pub fn with_key(key: &[u8; 32]) -> Result<Self> {
         use aes_gcm::KeyInit;
-        let cipher =
-            aes_gcm::Aes256Gcm::new_from_slice(key).context("invalid AES-256 key")?;
+        let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).context("invalid AES-256 key")?;
         Ok(Self { cipher })
     }
 }
@@ -71,8 +70,7 @@ fn load_or_create_cipher() -> Result<aes_gcm::Aes256Gcm> {
 
     let key_bytes: [u8; 32] = match entry.get_password() {
         Ok(encoded) => {
-            let bytes =
-                base64_decode(&encoded).context("failed to decode master key")?;
+            let bytes = base64_decode(&encoded).context("failed to decode master key")?;
             bytes
                 .try_into()
                 .map_err(|_| anyhow::anyhow!("master key has wrong length"))?
@@ -119,15 +117,13 @@ impl SecureStore for KeyringBackend {
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
         use aes_gcm::aead::Aead;
 
-        let text =
-            std::str::from_utf8(ciphertext).context("ciphertext is not valid UTF-8")?;
+        let text = std::str::from_utf8(ciphertext).context("ciphertext is not valid UTF-8")?;
 
         let encoded = text
             .strip_prefix(PREFIX)
             .context("invalid ciphertext format: missing enc:v1: prefix")?;
 
-        let combined =
-            base64_decode(encoded).context("invalid ciphertext format: bad base64")?;
+        let combined = base64_decode(encoded).context("invalid ciphertext format: bad base64")?;
 
         if combined.len() < 12 {
             anyhow::bail!("ciphertext too short: need at least 12 bytes for nonce");
@@ -222,7 +218,10 @@ mod tests {
         let result = backend.decrypt(b"no-prefix-here");
         assert!(result.is_err());
         assert!(
-            result.unwrap_err().to_string().contains("missing enc:v1: prefix"),
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("missing enc:v1: prefix"),
         );
     }
 
@@ -235,7 +234,10 @@ mod tests {
         let result = backend2.decrypt(&ct);
         assert!(result.is_err());
         assert!(
-            result.unwrap_err().to_string().contains("decryption failed"),
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("decryption failed"),
         );
     }
 
@@ -292,9 +294,7 @@ mod tests {
         let backend = test_backend();
         let result = backend.decrypt(&[0xFF, 0xFE, 0xFD]);
         assert!(result.is_err());
-        assert!(
-            result.unwrap_err().to_string().contains("not valid UTF-8"),
-        );
+        assert!(result.unwrap_err().to_string().contains("not valid UTF-8"),);
     }
 
     #[test]
@@ -346,7 +346,10 @@ mod tests {
         let result = backend.encrypt(b"test");
         assert!(result.is_err());
         assert!(
-            result.unwrap_err().to_string().contains("enable secure_storage"),
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("enable secure_storage"),
         );
     }
 
@@ -358,7 +361,10 @@ mod tests {
         let result = backend.decrypt(b"enc:v1:dGVzdA==");
         assert!(result.is_err());
         assert!(
-            result.unwrap_err().to_string().contains("enable secure_storage"),
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("enable secure_storage"),
         );
     }
 }

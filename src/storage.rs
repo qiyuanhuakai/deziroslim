@@ -1,10 +1,10 @@
 use crate::actions::{Action, ActionKind};
 use crate::encryption::SecureStore;
-use crate::snippets::Snippet;
 use crate::model::{
     ClipboardEntry, ClipboardEntrySummary, ClipboardKind, MAX_ENTRIES, RETENTION_DAYS,
     SelectionSource,
 };
+use crate::snippets::Snippet;
 use anyhow::{Context, Result};
 use chrono::{Duration, Local};
 use lru::LruCache;
@@ -325,7 +325,8 @@ impl Storage {
         };
         let hash = content_hash(entry.kind.as_str(), entry.source.as_str(), &hash_input);
         let sensitive = entry.is_sensitive() as i64;
-        let stored_content = self.encrypt_sensitive_content(&entry.content, entry.is_sensitive())?;
+        let stored_content =
+            self.encrypt_sensitive_content(&entry.content, entry.is_sensitive())?;
         let mut conn = self.conn.lock().expect("storage mutex poisoned");
         let tx = conn.transaction()?;
 
@@ -844,8 +845,7 @@ impl Storage {
         let snippets = stmt
             .query_map([], |row| {
                 let tags_str: String = row.get(9)?;
-                let tags: Vec<String> =
-                    serde_json::from_str(&tags_str).unwrap_or_default();
+                let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
                 Ok(Snippet {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -1644,7 +1644,10 @@ mod tests {
     fn test_snippets_crud() {
         let storage = temp_storage();
 
-        let mut snippet = Snippet::new("GitHub PR", "https://github.com/{{org}}/{{repo}}/pull/{{num}}");
+        let mut snippet = Snippet::new(
+            "GitHub PR",
+            "https://github.com/{{org}}/{{repo}}/pull/{{num}}",
+        );
         snippet.description = "Open a PR link".to_string();
         snippet.icon = "🔗".to_string();
         snippet.tags = vec!["dev".to_string(), "github".to_string()];
@@ -1654,13 +1657,19 @@ mod tests {
         let snippets = storage.load_snippets().expect("load snippets");
         assert_eq!(snippets.len(), 1);
         assert_eq!(snippets[0].name, "GitHub PR");
-        assert_eq!(snippets[0].template, "https://github.com/{{org}}/{{repo}}/pull/{{num}}");
+        assert_eq!(
+            snippets[0].template,
+            "https://github.com/{{org}}/{{repo}}/pull/{{num}}"
+        );
         assert_eq!(snippets[0].description, "Open a PR link");
         assert_eq!(snippets[0].icon, "🔗");
         assert!(snippets[0].enabled);
         assert_eq!(snippets[0].use_count, 0);
         assert!(snippets[0].last_used_at.is_none());
-        assert_eq!(snippets[0].tags, vec!["dev".to_string(), "github".to_string()]);
+        assert_eq!(
+            snippets[0].tags,
+            vec!["dev".to_string(), "github".to_string()]
+        );
 
         storage.increment_snippet_use_count(id).expect("increment");
         let snippets = storage.load_snippets().expect("load after increment");

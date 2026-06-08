@@ -451,12 +451,10 @@ impl IpcServer {
                     }
                 };
                 match storage.load_snippets() {
-                    Ok(snippets) => {
-                        match snippets.iter().find(|s| s.name == name) {
-                            Some(s) => s.id,
-                            None => return IpcResponse::err(&IpcError::NotFound),
-                        }
-                    }
+                    Ok(snippets) => match snippets.iter().find(|s| s.name == name) {
+                        Some(s) => s.id,
+                        None => return IpcResponse::err(&IpcError::NotFound),
+                    },
                     Err(e) => return IpcResponse::err(&IpcError::Storage(e.to_string())),
                 }
             }
@@ -480,12 +478,10 @@ impl IpcServer {
                     }
                 };
                 match storage.load_snippets() {
-                    Ok(snippets) => {
-                        match snippets.iter().find(|s| s.name == name) {
-                            Some(s) => s.id,
-                            None => return IpcResponse::err(&IpcError::NotFound),
-                        }
-                    }
+                    Ok(snippets) => match snippets.iter().find(|s| s.name == name) {
+                        Some(s) => s.id,
+                        None => return IpcResponse::err(&IpcError::NotFound),
+                    },
                     Err(e) => return IpcResponse::err(&IpcError::Storage(e.to_string())),
                 }
             }
