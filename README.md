@@ -1,6 +1,6 @@
 <a name="chinese"></a>
 
-![i18n](https://img.shields.io/badge/i18n-zh--CN%20100%25%20%7C%20en--US%20100%25-blue)
+![i18n](https://img.shields.io/badge/i18n-374%20keys%20%7C%20zh--CN%20100%25%20%7C%20en--US%20100%25-blue)
 [English](#i18n) | [中文](#tiez-slim-linux)
 
 # tiez-slim-linux
@@ -22,6 +22,14 @@ Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/tiez-clipboar
 - Linux 平台能力：X11 前台窗口识别、录制式全局快捷键（含鼠标中键）、StatusNotifierItem 系统托盘（支持热隐藏/重建）、窗口置顶、跟随鼠标呼出、四向边缘隐藏停靠、XDG 开机启动、可配置 `xdotool` 粘贴方式、XDG 默认打开程序下拉。
 - 音效：可在常规设置中启用复制/粘贴提示音、调整音量，并可单独关闭粘贴音效；Linux 下优先调用 `aplay`，再回退到 `paplay`，不可用时静默降级。
 - 简洁模式：隐藏复制时间，将标签和文本压缩到同一行，并仅在卡片悬停时显示操作工具栏；非简洁模式会保留复制时间和独立标签行，并在卡片标题元信息中显示来源应用，操作工具栏常显。
+- 应用黑名单与私有模式：可配置应用黑名单（支持通配符匹配 WM_CLASS），在指定应用中复制时自动跳过记录；私有模式可通过快捷键（默认 Ctrl+Alt+P）一键切换，启用后暂停所有剪贴板捕获，状态栏显示锁定图标。
+- Primary Selection 跟踪：X11 环境下通过 XFixes 扩展监听鼠标选区（PRIMARY selection），与剪贴板（CLIPBOARD）独立存储；选区条目标注 `🖱️ 选区` 徽章，支持仅选区过滤；中键粘贴自动走 PRIMARY 通道。
+- 正则 Actions 系统：基于正则表达式的自动化规则引擎，匹配剪贴板内容后可自动执行外部命令（如 URL 用浏览器打开、邮箱用邮件客户端打开）；支持工具栏 ⚡ 按钮快速触发、右键上下文菜单集成、自动触发模式（5 秒撤销窗口）；设置面板提供完整 CRUD、实时测试和测试运行。
+- 导出/导入与自动备份：支持将全部历史、标签和设置导出为 JSON 文件，可从 JSON 文件导入（自动去重）；关闭应用时可自动备份，保留份数可配置；数据管理面板含导出/导入/备份/立即备份/打开备份目录等操作。
+- 模糊搜索：基于 nucleo-matcher 的高性能模糊搜索，支持拼写纠错（如 `cllpboard` 匹配 `clipboard`）和中文模糊匹配；搜索结果按相关度排序，匹配字符高亮显示；可在设置中切换回传统子串搜索。
+- 数据库加密（opt-in）：通过 `secure_storage` feature gate 启用，使用 AES-256-GCM 加密敏感条目；密钥通过系统 keyring（GNOME Keyring / KWallet）管理；启用后标记为敏感的条目自动加密存储，读取时自动解密；支持批量加密/解密迁移，带 LRU 缓存优化读取性能。
+- KDE Connect 同步（opt-in）：通过 `kde_connect` feature gate 启用，支持与 Android 设备通过 KDE Connect 协议同步剪贴板；设置面板含启用开关、设备 ID 显示、QR 码配对、已发现设备列表；配对后双向同步，带 echo 防重复机制。
+- 国际化（i18n）：完整双语支持（zh-CN + en-US），374 个翻译键，100% 覆盖率；使用 rust-i18n v4，启动时自动检测系统语言，支持手动切换；所有用户可见字符串均通过 `t!()` 宏引用，无硬编码。
 
 ## 使用方法
 
@@ -63,11 +71,24 @@ tiez-cli search "关键词"
 # 将指定条目复制到剪贴板
 tiez-cli paste 42
 
-# 查看服务器状态
+# 查看服务器状态（含 KDE Connect 同步状态）
 tiez-cli status
+
+# 切换置顶状态
+tiez-cli pin 42
+
+# 设置标签
+tiez-cli tag 42 work important
+
+# 删除条目
+tiez-cli delete 42
+
+# 添加新条目
+tiez-cli add "要保存的文本"
 
 # JSON 格式输出（适合脚本处理）
 tiez-cli --json list
+tiez-cli --json status | jq '.sync'
 ```
 
 配合 rofi/wofi 可实现键盘驱动的剪贴板选择器，详见 [docs/rofi-script.sh](docs/rofi-script.sh) 和 [Sway/Hyprland 集成指南](docs/sway-integration.md)。
@@ -86,11 +107,24 @@ tiez-cli search "query"
 # Copy an entry to clipboard by ID
 tiez-cli paste 42
 
-# Show server status
+# Show server status (including KDE Connect sync state)
 tiez-cli status
+
+# Toggle pin state
+tiez-cli pin 42
+
+# Set tags on an entry
+tiez-cli tag 42 work important
+
+# Delete an entry
+tiez-cli delete 42
+
+# Add a new entry
+tiez-cli add "text to save"
 
 # JSON output (for scripting)
 tiez-cli --json list
+tiez-cli --json status | jq '.sync'
 ```
 
 For rofi/wofi keyboard-driven clipboard picker integration, see [docs/rofi-script.sh](docs/rofi-script.sh) and the [Sway/Hyprland integration guide](docs/sway-integration.md).
@@ -98,6 +132,70 @@ For rofi/wofi keyboard-driven clipboard picker integration, see [docs/rofi-scrip
 ## 与旧版差异
 
 原始 `tiez-clipboard` 使用 React + Tauri 2 + WebView。`tiez-slim-linux` 对齐个人 `qiyuanhuakai/tiez-clipboard` 分支中的主界面视觉和核心数据模型，并用 Rust 原生能力补齐文本/富文本/图片/文件剪贴板、X11 全局呼出、鼠标中键、点击/键盘粘贴流程、系统托盘、边缘停靠、默认打开应用设置、彩色 emoji/符号入口、音效、字体 fallback 和可配置数据位置。
+
+## KDE Connect 配对教程 / KDE Connect Pairing Guide
+
+> 此功能需要编译时启用 `kde_connect` feature：`cargo build --features kde_connect`
+
+### 中文
+
+1. 在 Android 手机安装 [KDE Connect](https://play.google.com/store/apps/details?id=org.kde.kdeconnect_tp)
+2. 启动 tiez-slim，进入 **设置 → 同步** 面板
+3. 打开「启用 KDE Connect」开关
+4. 点击「显示 QR 码」，用手机 KDE Connect 扫描
+5. 在手机端确认配对请求
+6. 配对成功后，设备列表显示已连接设备名和状态
+7. 之后在任意一端复制文本，另一端剪贴板会自动同步
+
+### English
+
+1. Install [KDE Connect](https://play.google.com/store/apps/details?id=org.kde.kdeconnect_tp) on your Android phone
+2. Launch tiez-slim, go to **Settings → Sync** panel
+3. Enable the "KDE Connect" toggle
+4. Click "Show QR Code" and scan with KDE Connect on your phone
+5. Confirm the pairing request on your phone
+6. After pairing, the device list shows the connected device name and status
+7. From now on, copying text on either side automatically syncs to the other
+
+> **注意 / Note**: 同步依赖两个设备在同一局域网。加密标记的敏感条目同步前会提示确认。
+> Sync requires both devices on the same network. Sensitive (encrypted) entries prompt for confirmation before syncing.
+
+## 加密模式启用 / Enabling Encryption
+
+> 此功能需要编译时启用 `secure_storage` feature：`cargo build --features secure_storage`
+
+加密模式使用 AES-256-GCM 加密标记为敏感的剪贴板条目，密钥由系统 keyring 管理。
+
+```bash
+# 编译时启用加密
+cargo build --features secure_storage
+
+# 或运行时启用
+cargo run --features secure_storage
+```
+
+启用步骤：
+1. 编译带 `secure_storage` feature 的版本
+2. 启动应用，进入 **设置 → 隐私** 面板
+3. 打开「安全存储」开关（系统 keyring 需可用）
+4. 之后标记为 `sensitive`/`password`/`secret` 的条目会自动加密存储
+5. 读取时自动解密，UI 无感知
+
+> **注意**: 如果 keyring 不可用（如 SSH 会话），启动时会输出警告但不会 panic。关闭加密后重启会自动批量解密。
+
+Encryption uses AES-256-GCM for sensitive clipboard entries, with keys managed by the system keyring (GNOME Keyring / KWallet).
+
+```bash
+# Build with encryption support
+cargo build --features secure_storage
+```
+
+Steps:
+1. Build with the `secure_storage` feature
+2. Launch app, go to **Settings → Privacy**
+3. Enable "Secure Storage" (system keyring must be available)
+4. Entries tagged `sensitive`/`password`/`secret` are automatically encrypted at rest
+5. Decryption is transparent on read
 
 <a name="i18n"></a>
 
