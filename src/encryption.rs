@@ -270,6 +270,61 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "secure_storage")]
+    fn ciphertext_too_short_returns_error() {
+        use base64::Engine;
+        let backend = test_backend();
+        let short_payload = base64::engine::general_purpose::STANDARD.encode(&[0u8; 8]);
+        let input = format!("enc:v1:{short_payload}");
+        let result = backend.decrypt(input.as_bytes());
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("too short"),
+            "expected 'too short' error for 8-byte payload",
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "secure_storage")]
+    fn utf8_error_on_binary_ciphertext() {
+        let backend = test_backend();
+        let result = backend.decrypt(&[0xFF, 0xFE, 0xFD]);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("not valid UTF-8"),
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "secure_storage")]
+    fn different_plaintexts_produce_different_ciphertexts() {
+        let backend = test_backend();
+        let ct_a = backend.encrypt(b"alpha").unwrap();
+        let ct_b = backend.encrypt(b"beta").unwrap();
+        assert_ne!(ct_a, ct_b);
+    }
+
+    #[test]
+    #[cfg(feature = "secure_storage")]
+    fn roundtrip_with_cjk_and_emoji() {
+        let backend = test_backend();
+        let plaintext = "你好世界 🌍🦀 — émojis & Ünïcödé";
+        let ct = backend.encrypt(plaintext.as_bytes()).unwrap();
+        let pt = backend.decrypt(&ct).unwrap();
+        assert_eq!(std::str::from_utf8(&pt).unwrap(), plaintext);
+    }
+
+    #[test]
+    #[cfg(feature = "secure_storage")]
+    fn tampered_ciphertext_fails_auth_tag() {
+        let backend = test_backend();
+        let mut ct = backend.encrypt(b"auth tag test").unwrap();
+        let last = ct.last_mut().unwrap();
+        *last ^= 0xFF;
+        assert!(backend.decrypt(&ct).is_err());
+    }
+
+    #[test]
     #[cfg(not(feature = "secure_storage"))]
     fn disabled_feature_returns_error() {
         let result = KeyringBackend::new();
@@ -278,6 +333,30 @@ mod tests {
         assert!(
             msg.contains("enable secure_storage feature"),
             "unexpected error: {msg}",
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "secure_storage"))]
+    fn disabled_encrypt_returns_error() {
+        use super::SecureStore;
+        let backend = super::KeyringBackend {};
+        let result = backend.encrypt(b"test");
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("enable secure_storage"),
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "secure_storage"))]
+    fn disabled_decrypt_returns_error() {
+        use super::SecureStore;
+        let backend = super::KeyringBackend {};
+        let result = backend.decrypt(b"enc:v1:dGVzdA==");
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("enable secure_storage"),
         );
     }
 }
