@@ -1,6 +1,7 @@
 use crate::actions::{Action, ActionKind};
 use crate::model::{
-    ClipboardEntry, ClipboardEntrySummary, ClipboardKind, MAX_ENTRIES, RETENTION_DAYS,
+    ClipboardEntry, ClipboardEntrySummary, ClipboardKind, SelectionSource, MAX_ENTRIES,
+    RETENTION_DAYS,
 };
 use anyhow::{Context, Result};
 use chrono::{Duration, Local};
@@ -180,6 +181,12 @@ impl Storage {
             "sensitive",
             "INTEGER NOT NULL DEFAULT 0",
         )?;
+        ensure_column(
+            &conn,
+            "clipboard_history",
+            "source",
+            "TEXT NOT NULL DEFAULT 'clipboard'",
+        )?;
         let backfill_done: bool = conn
             .query_row(
                 "SELECT value FROM settings WHERE key = 'migration.sensitive_backfill_v1'",
@@ -234,7 +241,7 @@ impl Storage {
                 entry.html_content.as_deref().unwrap_or("")
             )
         };
-        let hash = content_hash(entry.kind.as_str(), &hash_input);
+        let hash = content_hash(entry.kind.as_str(), entry.source.as_str(), &hash_input);
         let sensitive = entry.is_sensitive() as i64;
         let mut conn = self.conn.lock().expect("storage mutex poisoned");
         let tx = conn.transaction()?;
@@ -254,8 +261,9 @@ impl Storage {
             tx.execute(
                 "UPDATE clipboard_history
                  SET timestamp = ?1, source_app = ?2, preview = ?3, content_type = ?4,
-                     html_content = ?5, source_app_path = ?6, is_external = ?7, sensitive = ?8
-                 WHERE id = ?9",
+                     html_content = ?5, source_app_path = ?6, is_external = ?7, sensitive = ?8,
+                     source = ?9
+                 WHERE id = ?10",
                 params![
                     entry.timestamp,
                     entry.source_app,
@@ -265,6 +273,7 @@ impl Storage {
                     entry.source_app_path,
                     entry.is_external as i64,
                     sensitive,
+                    entry.source.as_str(),
                     id
                 ],
             )?;
@@ -273,8 +282,8 @@ impl Storage {
             tx.execute(
                 "INSERT INTO clipboard_history
                  (content_type, content, html_content, source_app, source_app_path, timestamp,
-                  preview, is_external, pinned_order, content_hash, sensitive)
-                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                  preview, is_external, pinned_order, content_hash, sensitive, source)
+                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     entry.kind.as_str(),
                     entry.content,
@@ -286,7 +295,8 @@ impl Storage {
                     entry.is_external as i64,
                     entry.pinned_order,
                     hash,
-                    sensitive
+                    sensitive,
+                    entry.source.as_str()
                 ],
             )?;
             tx.last_insert_rowid()
@@ -315,7 +325,7 @@ impl Storage {
         let sql = format!(
             "SELECT h.id, h.content_type, h.content, h.html_content, h.source_app,
                 h.source_app_path, h.timestamp, h.preview, h.is_pinned, h.use_count,
-                h.is_external, h.pinned_order
+                h.is_external, h.pinned_order, h.source
              FROM clipboard_history h
              WHERE {where_sql}
              ORDER BY h.is_pinned DESC, h.pinned_order ASC, h.timestamp DESC LIMIT 300"
@@ -346,7 +356,7 @@ impl Storage {
         let sql = format!(
             "SELECT h.id, h.content_type, h.source_app, h.source_app_path, h.timestamp,
                 h.preview, h.is_pinned, h.use_count, h.is_external, h.pinned_order,
-                h.sensitive
+                h.sensitive, h.source
              FROM clipboard_history h
              WHERE {where_sql}
              ORDER BY h.is_pinned DESC, h.pinned_order ASC, h.timestamp DESC LIMIT 300"
@@ -370,7 +380,7 @@ impl Storage {
         let conn = self.conn.lock().expect("storage mutex poisoned");
         let mut stmt = conn.prepare(
             "SELECT id, content_type, content, html_content, source_app, source_app_path,
-                timestamp, preview, is_pinned, use_count, is_external, pinned_order
+                timestamp, preview, is_pinned, use_count, is_external, pinned_order, source
              FROM clipboard_history WHERE id = ?1",
         )?;
         let mut entry = match stmt.query_row(params![id], row_to_entry).optional()? {
@@ -736,6 +746,11 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardEntry> {
         use_count: row.get(9)?,
         is_external: row.get::<_, i64>(10)? != 0,
         pinned_order: row.get(11)?,
+        source: SelectionSource::from(
+            row.get::<_, Option<String>>(12)?
+                .unwrap_or_default()
+                .as_str(),
+        ),
     })
 }
 
@@ -753,6 +768,11 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardEntrySum
         is_external: row.get::<_, i64>(8)? != 0,
         pinned_order: row.get(9)?,
         sensitive: row.get::<_, i64>(10)? != 0,
+        source: SelectionSource::from(
+            row.get::<_, Option<String>>(11)?
+                .unwrap_or_default()
+                .as_str(),
+        ),
     })
 }
 
@@ -770,9 +790,11 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, definition: &str)
     Ok(())
 }
 
-fn content_hash(kind: &str, content: &str) -> String {
+fn content_hash(kind: &str, source: &str, content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(kind.as_bytes());
+    hasher.update([0]);
+    hasher.update(source.as_bytes());
     hasher.update([0]);
     hasher.update(content.as_bytes());
     format!("{:x}", hasher.finalize())
@@ -1287,5 +1309,132 @@ mod tests {
         let actions = storage.load_actions().expect("load after migrate");
         assert_eq!(actions.len(), 1);
         assert_eq!(actions[0].name, "Migrated");
+    }
+
+    #[test]
+    fn test_source_migration() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let counter = DB_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "tiez-slim-linux-source-migration-{}-{nanos}-{counter}.db",
+            std::process::id()
+        ));
+        {
+            let conn = Connection::open(&path).expect("create old db");
+            conn.execute_batch(
+                "CREATE TABLE clipboard_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    source_app TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    preview TEXT NOT NULL,
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    content_hash TEXT NOT NULL UNIQUE
+                );",
+            )
+            .expect("create old schema");
+        }
+
+        let storage = Storage::open(path).expect("open migrates old schema");
+
+        let conn = storage.conn.lock().expect("poisoned");
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(clipboard_history)")
+            .expect("prepare");
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("query")
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(
+            columns.contains(&"source".to_string()),
+            "source column should exist after migration"
+        );
+        drop(conn);
+
+        let entry_clip =
+            ClipboardEntry::captured_text("clipboard text".to_string(), "test".to_string())
+                .expect("valid entry");
+        storage.save_entry(&entry_clip).expect("save clipboard");
+
+        let entry_primary = ClipboardEntry::captured_text_with_source(
+            "primary text".to_string(),
+            "test".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        storage.save_entry(&entry_primary).expect("save primary");
+
+        let entries = storage.list("").expect("list all");
+        assert_eq!(entries.len(), 2);
+        let clip_entry = entries
+            .iter()
+            .find(|e| e.content == "clipboard text")
+            .expect("find clipboard entry");
+        assert_eq!(clip_entry.source, SelectionSource::Clipboard);
+        let primary_entry = entries
+            .iter()
+            .find(|e| e.content == "primary text")
+            .expect("find primary entry");
+        assert_eq!(primary_entry.source, SelectionSource::Primary);
+    }
+
+    #[test]
+    fn test_source_coexist_dedup() {
+        let storage = temp_storage();
+
+        let entry_clip =
+            ClipboardEntry::captured_text("same content".to_string(), "test".to_string())
+                .expect("valid entry");
+        storage.save_entry(&entry_clip).expect("save clipboard");
+
+        let entry_primary = ClipboardEntry::captured_text_with_source(
+            "same content".to_string(),
+            "test".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        storage.save_entry(&entry_primary).expect("save primary");
+
+        let entries = storage.list("").expect("list all");
+        assert_eq!(
+            entries.len(),
+            2,
+            "same content from different sources should coexist"
+        );
+
+        storage
+            .save_entry(&entry_clip)
+            .expect("save clipboard again");
+        let entries = storage.list("").expect("list after re-save");
+        assert_eq!(
+            entries.len(),
+            2,
+            "re-saving clipboard should deduplicate within same source"
+        );
+    }
+
+    #[test]
+    fn test_source_persisted_in_summaries() {
+        let storage = temp_storage();
+
+        let entry = ClipboardEntry::captured_text_with_source(
+            "summary test".to_string(),
+            "test".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        storage.save_entry(&entry).expect("save");
+
+        let summaries = storage
+            .list_summaries_filtered("", None, None)
+            .expect("list summaries");
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].source, SelectionSource::Primary);
     }
 }

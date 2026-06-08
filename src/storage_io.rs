@@ -64,7 +64,7 @@ impl Storage {
             scope,
             ExportScope::HistoryOnly | ExportScope::SettingsAndHistory | ExportScope::All
         ) {
-            let mut stmt = conn.prepare("SELECT id, content_type, content, html_content, source_app, source_app_path, timestamp, preview, is_pinned, use_count, is_external, pinned_order FROM clipboard_history ORDER BY is_pinned DESC, pinned_order ASC, timestamp DESC")?;
+            let mut stmt = conn.prepare("SELECT id, content_type, content, html_content, source_app, source_app_path, timestamp, preview, is_pinned, use_count, is_external, pinned_order, source FROM clipboard_history ORDER BY is_pinned DESC, pinned_order ASC, timestamp DESC")?;
             let rows = stmt.query_map([], |row| {
                 let id: i64 = row.get(0)?;
                 let content_type: String = row.get(1)?;
@@ -78,6 +78,7 @@ impl Storage {
                 let use_count: i64 = row.get(9)?;
                 let is_external: bool = row.get::<_, i64>(10)? != 0;
                 let pinned_order: i64 = row.get(11)?;
+                let source_str: String = row.get(12)?;
                 let mut tag_stmt = conn
                     .prepare("SELECT tag FROM entry_tags WHERE entry_id = ?1 ORDER BY tag")
                     .unwrap();
@@ -100,6 +101,7 @@ impl Storage {
                     use_count,
                     is_external,
                     pinned_order,
+                    source: crate::model::SelectionSource::from(source_str.as_str()),
                 })
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
