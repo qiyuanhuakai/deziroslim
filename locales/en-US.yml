@@ -796,6 +796,8 @@ cli:
     error_not_found: "Record with ID %{id} not found"
     error_io: "IO error: %{err}"
     error_parse: "Parse error: %{err}"
+    snippet_empty: "No snippets yet"
+    snippet_uses: " uses"
 
 settings:
   sync:

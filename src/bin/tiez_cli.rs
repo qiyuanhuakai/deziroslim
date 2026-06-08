@@ -83,6 +83,38 @@ enum SubCommand {
         #[arg(long = "type")]
         entry_type: Option<String>,
     },
+    /// Manage text snippets.
+    #[command(subcommand)]
+    Snippet(SnippetCmd),
+}
+
+#[derive(Subcommand, Debug)]
+enum SnippetCmd {
+    /// List all snippets.
+    List,
+    /// Add a new snippet.
+    Add {
+        /// Snippet name.
+        name: String,
+        /// Template text with {{var}} placeholders.
+        template: String,
+        /// Optional description.
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Remove a snippet by ID or name.
+    Remove {
+        /// Snippet ID or name.
+        id_or_name: String,
+    },
+    /// Insert a snippet (interpolate and output).
+    Insert {
+        /// Snippet ID or name.
+        id_or_name: String,
+        /// Variable values in key=value format.
+        #[arg(long = "var")]
+        vars: Vec<String>,
+    },
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
@@ -110,6 +142,7 @@ fn main() {
             content,
             entry_type,
         } => cmd_add(&socket_path, &content, entry_type, cli.json),
+        SubCommand::Snippet(sub) => cmd_snippet(&socket_path, sub, cli.json),
     };
 
     std::process::exit(exit_code);
@@ -403,6 +436,111 @@ fn cmd_add(
         println!("{}: id={new_id}", t!("cli.success_done"));
     }
     0
+}
+
+fn cmd_snippet(socket_path: &std::path::Path, sub: SnippetCmd, json_output: bool) -> i32 {
+    match sub {
+        SnippetCmd::List => {
+            let resp = match send_ipc(socket_path, "snippet_list", serde_json::json!({})) {
+                Ok(r) => r,
+                Err(e) => return handle_error(&e),
+            };
+            if !resp.ok {
+                return handle_ipc_response_error(&resp);
+            }
+            let data = resp.data.unwrap_or_default();
+            if json_output {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
+            } else {
+                let snippets: Vec<serde_json::Value> =
+                    serde_json::from_value(data).unwrap_or_default();
+                if snippets.is_empty() {
+                    println!("{}", t!("cli.snippet_empty"));
+                    return 0;
+                }
+                for s in &snippets {
+                    let id = s.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                    let template = s.get("template").and_then(|v| v.as_str()).unwrap_or("");
+                    let uses = s.get("use_count").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let preview: String = template.chars().take(50).collect();
+                    println!("  [{id}] {name} — {preview} ({uses}{uses_label})",
+                        uses_label = t!("cli.snippet_uses"));
+                }
+            }
+            0
+        }
+        SnippetCmd::Add {
+            name,
+            template,
+            description,
+        } => {
+            let mut args = serde_json::json!({
+                "name": name,
+                "template": template,
+            });
+            if let Some(desc) = description {
+                args["description"] = serde_json::Value::String(desc);
+            }
+            let resp = match send_ipc(socket_path, "snippet_add", args) {
+                Ok(r) => r,
+                Err(e) => return handle_error(&e),
+            };
+            if !resp.ok {
+                return handle_ipc_response_error(&resp);
+            }
+            let data = resp.data.unwrap_or_default();
+            let new_id = data.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+            println!("{}: id={new_id}", t!("cli.success_done"));
+            0
+        }
+        SnippetCmd::Remove { id_or_name } => {
+            let args = if let Ok(id) = id_or_name.parse::<i64>() {
+                serde_json::json!({"id": id})
+            } else {
+                serde_json::json!({"name": id_or_name})
+            };
+            let resp = match send_ipc(socket_path, "snippet_remove", args) {
+                Ok(r) => r,
+                Err(e) => return handle_error(&e),
+            };
+            if !resp.ok {
+                return handle_ipc_response_error(&resp);
+            }
+            println!("{}", t!("cli.success_done"));
+            0
+        }
+        SnippetCmd::Insert { id_or_name, vars } => {
+            let mut args = if let Ok(id) = id_or_name.parse::<i64>() {
+                serde_json::json!({"id": id})
+            } else {
+                serde_json::json!({"name": id_or_name})
+            };
+            if !vars.is_empty() {
+                let mut map = serde_json::Map::new();
+                for v in &vars {
+                    if let Some((k, val)) = v.split_once('=') {
+                        map.insert(k.to_string(), serde_json::Value::String(val.to_string()));
+                    }
+                }
+                args["var"] = serde_json::Value::Object(map);
+            }
+            let resp = match send_ipc(socket_path, "snippet_insert", args) {
+                Ok(r) => r,
+                Err(e) => return handle_error(&e),
+            };
+            if !resp.ok {
+                return handle_ipc_response_error(&resp);
+            }
+            let data = resp.data.unwrap_or_default();
+            let text = data.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            print!("{text}");
+            0
+        }
+    }
 }
 
 // ── IPC helpers ───────────────────────────────────────────────────────

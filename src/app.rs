@@ -4290,7 +4290,6 @@ impl ClipboardApp {
         };
 
         let theme = self.theme.clone();
-        let mut close = false;
         let mut advance = false;
         let mut cancel = false;
 

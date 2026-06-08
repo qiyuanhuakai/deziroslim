@@ -248,6 +248,10 @@ impl IpcServer {
             "delete" => Self::cmd_delete(args, storage),
             "status" => Self::cmd_status(storage),
             "add" => Self::cmd_add(args, storage),
+            "snippet_list" => Self::cmd_snippet_list(storage),
+            "snippet_add" => Self::cmd_snippet_add(args, storage),
+            "snippet_remove" => Self::cmd_snippet_remove(args, storage),
+            "snippet_insert" => Self::cmd_snippet_insert(args, storage),
             other => IpcResponse::err(&IpcError::UnknownCommand(Self::unknown_cmd_code(other))),
         }
     }
@@ -405,6 +409,105 @@ impl IpcServer {
         match storage.save_entry(&entry) {
             Ok(id) => IpcResponse::ok(serde_json::json!({"id": id})),
             Err(e) => IpcResponse::err(&IpcError::Storage(e.to_string())),
+        }
+    }
+
+    fn cmd_snippet_list(storage: &Storage) -> IpcResponse {
+        match storage.load_snippets() {
+            Ok(snippets) => IpcResponse::ok(serde_json::to_value(snippets).unwrap_or_default()),
+            Err(e) => IpcResponse::err(&IpcError::Storage(e.to_string())),
+        }
+    }
+
+    fn cmd_snippet_add(args: &serde_json::Value, storage: &Storage) -> IpcResponse {
+        let name = match args.get("name").and_then(|v| v.as_str()) {
+            Some(n) if !n.is_empty() => n,
+            _ => return IpcResponse::err(&IpcError::InvalidJson("missing 'name'".into())),
+        };
+        let template = match args.get("template").and_then(|v| v.as_str()) {
+            Some(t) if !t.is_empty() => t,
+            _ => return IpcResponse::err(&IpcError::InvalidJson("missing 'template'".into())),
+        };
+        let mut snippet = crate::snippets::Snippet::new(name, template);
+        if let Some(desc) = args.get("description").and_then(|v| v.as_str()) {
+            snippet.description = desc.to_string();
+        }
+        match storage.save_snippet(&snippet) {
+            Ok(id) => IpcResponse::ok(serde_json::json!({"id": id})),
+            Err(e) => IpcResponse::err(&IpcError::Storage(e.to_string())),
+        }
+    }
+
+    fn cmd_snippet_remove(args: &serde_json::Value, storage: &Storage) -> IpcResponse {
+        let id = match args.get("id").and_then(|v| v.as_i64()) {
+            Some(id) => id,
+            None => {
+                let name = match args.get("name").and_then(|v| v.as_str()) {
+                    Some(n) => n,
+                    None => {
+                        return IpcResponse::err(&IpcError::InvalidJson(
+                            "missing 'id' or 'name'".into(),
+                        ));
+                    }
+                };
+                match storage.load_snippets() {
+                    Ok(snippets) => {
+                        match snippets.iter().find(|s| s.name == name) {
+                            Some(s) => s.id,
+                            None => return IpcResponse::err(&IpcError::NotFound),
+                        }
+                    }
+                    Err(e) => return IpcResponse::err(&IpcError::Storage(e.to_string())),
+                }
+            }
+        };
+        match storage.delete_snippet(id) {
+            Ok(()) => IpcResponse::ok(serde_json::json!({"deleted": id})),
+            Err(e) => IpcResponse::err(&IpcError::Storage(e.to_string())),
+        }
+    }
+
+    fn cmd_snippet_insert(args: &serde_json::Value, storage: &Storage) -> IpcResponse {
+        let id = match args.get("id").and_then(|v| v.as_i64()) {
+            Some(id) => id,
+            None => {
+                let name = match args.get("name").and_then(|v| v.as_str()) {
+                    Some(n) => n,
+                    None => {
+                        return IpcResponse::err(&IpcError::InvalidJson(
+                            "missing 'id' or 'name'".into(),
+                        ));
+                    }
+                };
+                match storage.load_snippets() {
+                    Ok(snippets) => {
+                        match snippets.iter().find(|s| s.name == name) {
+                            Some(s) => s.id,
+                            None => return IpcResponse::err(&IpcError::NotFound),
+                        }
+                    }
+                    Err(e) => return IpcResponse::err(&IpcError::Storage(e.to_string())),
+                }
+            }
+        };
+        let snippets = match storage.load_snippets() {
+            Ok(s) => s,
+            Err(e) => return IpcResponse::err(&IpcError::Storage(e.to_string())),
+        };
+        let snippet = match snippets.iter().find(|s| s.id == id) {
+            Some(s) => s.clone(),
+            None => return IpcResponse::err(&IpcError::NotFound),
+        };
+        let vars: std::collections::HashMap<String, String> = args
+            .get("var")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+        match crate::snippets::interpolate::interpolate(&snippet.template, &vars) {
+            Ok(text) => {
+                let _ = storage.increment_snippet_use_count(id);
+                IpcResponse::ok(serde_json::json!({"text": text}))
+            }
+            Err(e) => IpcResponse::err(&IpcError::InvalidJson(e.to_string())),
         }
     }
 }

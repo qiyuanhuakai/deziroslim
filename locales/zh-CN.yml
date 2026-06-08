@@ -819,6 +819,8 @@ cli:
     error_not_found: "未找到 ID 为 %{id} 的记录"
     error_io: "IO 错误: %{err}"
     error_parse: "解析失败: %{err}"
+    snippet_empty: "暂无代码片段"
+    snippet_uses: "次使用"
 
 settings:
   sync:
