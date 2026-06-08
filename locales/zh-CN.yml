@@ -466,6 +466,19 @@ settings:
     save_failed: "保存片段失败: %{err}"
     delete_failed: "删除片段失败: %{err}"
     delete_confirm: "确认删除片段「%{name}」？"
+    delete: "删除"
+    save: "保存"
+    cancel: "取消"
+    field_name: "名称："
+    field_template: "模板："
+    field_description: "描述："
+    field_tags: "标签："
+    name_hint: "例如：GitHub PR link"
+    template_hint: "例如：https://github.com/{{org}}/{{repo}}/pull/{{num}}"
+    description_hint: "可选描述"
+    tags_hint: "用逗号分隔，例如：dev, github"
+    name_template_required: "名称和模板不能为空"
+    uses: "次使用"
 
 emoji:
   group:

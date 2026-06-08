@@ -6,6 +6,7 @@ pub mod default_apps;
 pub mod general;
 pub mod privacy;
 pub mod shortcuts;
+pub mod snippets;
 pub mod sync;
 pub mod tags;
 
@@ -31,7 +32,6 @@ pub enum SettingsTab {
     #[allow(dead_code)]
     Encryption,
     Sync,
-    #[allow(dead_code)]
     Snippets,
 }
 
@@ -47,6 +47,7 @@ impl SettingsTab {
         SettingsTab::Privacy,
         SettingsTab::Actions,
         SettingsTab::Sync,
+        SettingsTab::Snippets,
     ];
 }
 
@@ -68,6 +69,7 @@ pub fn dispatch_panel(
         SettingsTab::Privacy => privacy::draw_privacy_panel(ui, app, ctx),
         SettingsTab::Actions => actions::draw_actions_panel(ui, app, ctx),
         SettingsTab::Sync => sync::draw_sync_panel(ui, app, ctx),
+        SettingsTab::Snippets => snippets::draw_snippets_panel(ui, app, ctx),
         _ => {
             ui.label("此面板将在后续 Phase 实现");
         }
@@ -538,8 +540,8 @@ mod tests {
     fn test_dispatch_panel_implemented_count() {
         assert_eq!(
             SettingsTab::IMPLEMENTED.len(),
-            10,
-            "Expected 10 implemented panels"
+            11,
+            "Expected 11 implemented panels"
         );
     }
 

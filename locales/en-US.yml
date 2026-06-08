@@ -452,6 +452,19 @@ settings:
     save_failed: "Failed to save snippet: %{err}"
     delete_failed: "Failed to delete snippet: %{err}"
     delete_confirm: "Delete snippet \"%{name}\"?"
+    delete: "Delete"
+    save: "Save"
+    cancel: "Cancel"
+    field_name: "Name:"
+    field_template: "Template:"
+    field_description: "Description:"
+    field_tags: "Tags:"
+    name_hint: "e.g. GitHub PR link"
+    template_hint: "e.g. https://github.com/{{org}}/{{repo}}/pull/{{num}}"
+    description_hint: "Optional description"
+    tags_hint: "Comma-separated, e.g.: dev, github"
+    name_template_required: "Name and template cannot be empty"
+    uses: "uses"
 
 emoji:
   group:

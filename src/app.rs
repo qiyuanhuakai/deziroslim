@@ -469,7 +469,7 @@ fn default_privacy_protection_kinds() -> Vec<String> {
 }
 
 fn default_settings_panel_collapsed() -> Vec<bool> {
-    vec![false; 9]
+    vec![false; 11]
 }
 
 fn default_color_mode() -> String {
@@ -765,6 +765,13 @@ pub struct ClipboardApp {
     action_executor: crate::actions::executor::ActionExecutor,
     pub(crate) actions_popover: crate::ui::toolbar_actions::ActionsPopover,
     pub(crate) pending_toolbar_action: Option<crate::actions::Action>,
+    pub(crate) snippets: Vec<crate::snippets::Snippet>,
+    pub(crate) snippet_editor_open: bool,
+    pub(crate) snippet_editing_id: Option<i64>,
+    pub(crate) snippet_edit_name: String,
+    pub(crate) snippet_edit_template: String,
+    pub(crate) snippet_edit_description: String,
+    pub(crate) snippet_edit_tags: String,
     pub(crate) font_choices: Vec<String>,
     pub(crate) primary_font_search: String,
     pub(crate) fallback_font_search: String,
@@ -835,6 +842,7 @@ impl ClipboardApp {
         let autostart_enabled =
             platform::autostart_enabled().unwrap_or(preferences.autostart_enabled);
         let loaded_actions = storage.load_actions().unwrap_or_default();
+        let loaded_snippets = storage.load_snippets().unwrap_or_default();
 
         #[cfg(feature = "kde_connect")]
         let sync_storage = storage.clone();
@@ -998,6 +1006,13 @@ impl ClipboardApp {
             },
             actions_popover: crate::ui::toolbar_actions::ActionsPopover::default(),
             pending_toolbar_action: None,
+            snippets: loaded_snippets,
+            snippet_editor_open: false,
+            snippet_editing_id: None,
+            snippet_edit_name: String::new(),
+            snippet_edit_template: String::new(),
+            snippet_edit_description: String::new(),
+            snippet_edit_tags: String::new(),
             font_choices,
             primary_font_search: String::new(),
             fallback_font_search: String::new(),
