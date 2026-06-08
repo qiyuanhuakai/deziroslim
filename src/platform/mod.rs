@@ -127,6 +127,8 @@ pub use linux::{
 pub use linux::{autostart_enabled, set_autostart};
 #[cfg(target_os = "linux")]
 pub use linux::{mouse_position, screen_geometry, start_tray};
+#[cfg(target_os = "linux")]
+pub use linux_xfixes::start_primary_watcher;
 #[cfg(target_os = "windows")]
 pub use windows::current_keyboard_modifiers;
 #[cfg(target_os = "windows")]
@@ -242,4 +244,12 @@ pub fn active_window_class() -> Option<String> {
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn active_window_class() -> Option<String> {
     None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn start_primary_watcher(
+    _sender: crossbeam_channel::Sender<crate::clipboard::ClipboardEvent>,
+    _primary_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    // Primary selection is X11/Linux-only; no-op on other platforms.
 }

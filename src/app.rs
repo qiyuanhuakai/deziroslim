@@ -1,4 +1,4 @@
-use crate::clipboard::{self, ClipboardEvent};
+use crate::clipboard::{self, ClipboardEvent, PrimaryEchoGuard};
 use crate::emoji_data::{ALL_TWEMOJI_EMOJIS, EMOJI_GROUPS, EmojiGroup};
 use crate::model::{ClipboardEntry, ClipboardEntrySummary, ClipboardKind};
 use crate::platform;
@@ -693,6 +693,7 @@ pub struct ClipboardApp {
     /// top of each iteration and short-circuits all capture paths
     /// while it is set.
     private_mode_flag: Arc<AtomicBool>,
+    echo_guard: clipboard::PrimaryEchoGuard,
     pub(crate) tray_handle: Option<platform::TrayHandle>,
     pub(crate) search_box_revealed: bool,
     search_scroll_gate: SearchScrollGate,
@@ -789,13 +790,17 @@ impl ClipboardApp {
         configure_fonts(&cc.egui_ctx, &preferences.font_selection());
         let (sender, events) = bounded(EVENT_CHANNEL_CAPACITY);
         let private_mode_flag = Arc::new(AtomicBool::new(preferences.private_mode));
+        let echo_guard = clipboard::PrimaryEchoGuard::new();
         clipboard::start_watcher(
             sender.clone(),
             preferences.app_exclusion_list.clone(),
             Arc::clone(&private_mode_flag),
             storage.clone(),
             preferences.builtin_actions_enabled,
+            echo_guard.clone(),
         );
+        let primary_enabled = Arc::new(AtomicBool::new(preferences.primary_selection_enabled));
+        platform::start_primary_watcher(sender.clone(), Arc::clone(&primary_enabled));
         let hotkey_handle = platform::start_hotkey_listener(
             sender.clone(),
             cc.egui_ctx.clone(),
@@ -900,6 +905,7 @@ impl ClipboardApp {
             hotkey_handle,
             hotkey_manager,
             private_mode_flag,
+            echo_guard,
             tray_handle,
             search_box_revealed: false,
             search_scroll_gate: SearchScrollGate {

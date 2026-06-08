@@ -222,37 +222,6 @@ impl From<&str> for ClipboardKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SelectionSource {
-    Clipboard,
-    Primary,
-}
-
-impl Default for SelectionSource {
-    fn default() -> Self {
-        Self::Clipboard
-    }
-}
-
-impl SelectionSource {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Clipboard => "clipboard",
-            Self::Primary => "primary",
-        }
-    }
-}
-
-impl From<&str> for SelectionSource {
-    fn from(s: &str) -> Self {
-        match s {
-            "primary" => Self::Primary,
-            _ => Self::Clipboard,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardEntry {
     pub id: i64,

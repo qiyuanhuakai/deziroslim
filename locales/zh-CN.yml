@@ -367,6 +367,7 @@ settings:
     enable: "启用主剪贴板捕获"
     enable_hint: "监听鼠标选区内容（X11 PRIMARY selection）"
     source_badge: "来源：%{source}"
+    source_label: "来源"
     source_clipboard: "CLIPBOARD"
     source_primary: "PRIMARY"
     filter_duplicates: "过滤与 CLIPBOARD 重复的 PRIMARY 内容"
@@ -538,6 +539,8 @@ clipboard:
     image: "图片"
     video: "视频"
     rich_text: "富文本"
+  source_clipboard: "CLIPBOARD"
+  source_primary: "PRIMARY"
   error:
     init_failed: "初始化剪贴板失败: %{err}"
     write_text_failed: "写入剪贴板失败: %{err}"

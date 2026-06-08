@@ -353,6 +353,7 @@ settings:
     enable: "Enable primary selection capture"
     enable_hint: "Monitor mouse selection content (X11 PRIMARY selection)"
     source_badge: "Source: %{source}"
+    source_label: "Source"
     source_clipboard: "CLIPBOARD"
     source_primary: "PRIMARY"
     filter_duplicates: "Filter PRIMARY content duplicated from CLIPBOARD"
@@ -522,6 +523,8 @@ clipboard:
     image: "Image"
     video: "Video"
     rich_text: "Rich Text"
+  source_clipboard: "CLIPBOARD"
+  source_primary: "PRIMARY"
   error:
     init_failed: "Failed to initialize clipboard: %{err}"
     write_text_failed: "Failed to write text to clipboard: %{err}"

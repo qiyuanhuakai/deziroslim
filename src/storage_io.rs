@@ -208,17 +208,18 @@ impl Storage {
         }
         for entry in &bundle.entries {
             let kind_str = entry.kind.as_str();
-            let hash = compute_content_hash(kind_str, &entry.content);
+            let source_str = entry.source.as_str();
+            let hash = compute_content_hash(kind_str, source_str, &entry.content);
             let is_sensitive = entry.is_sensitive() as i64;
             if mode == ImportMode::Merge {
-                let inserted = tx.execute("INSERT OR IGNORE INTO clipboard_history (content_type, content, html_content, source_app, source_app_path, timestamp, preview, is_pinned, use_count, is_external, pinned_order, content_hash, sensitive) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)", params![kind_str, entry.content, entry.html_content, entry.source_app, entry.source_app_path, entry.timestamp, entry.preview, entry.is_pinned as i64, entry.use_count, entry.is_external as i64, entry.pinned_order, hash, is_sensitive])?;
+                let inserted = tx.execute("INSERT OR IGNORE INTO clipboard_history (content_type, content, html_content, source_app, source_app_path, timestamp, preview, is_pinned, use_count, is_external, pinned_order, content_hash, sensitive, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)", params![kind_str, entry.content, entry.html_content, entry.source_app, entry.source_app_path, entry.timestamp, entry.preview, entry.is_pinned as i64, entry.use_count, entry.is_external as i64, entry.pinned_order, hash, is_sensitive, source_str])?;
                 if inserted == 0 {
                     stats.entries_skipped += 1;
                     continue;
                 }
                 stats.entries_added += 1;
             } else {
-                tx.execute("INSERT INTO clipboard_history (content_type, content, html_content, source_app, source_app_path, timestamp, preview, is_pinned, use_count, is_external, pinned_order, content_hash, sensitive) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)", params![kind_str, entry.content, entry.html_content, entry.source_app, entry.source_app_path, entry.timestamp, entry.preview, entry.is_pinned as i64, entry.use_count, entry.is_external as i64, entry.pinned_order, hash, is_sensitive])?;
+                tx.execute("INSERT INTO clipboard_history (content_type, content, html_content, source_app, source_app_path, timestamp, preview, is_pinned, use_count, is_external, pinned_order, content_hash, sensitive, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)", params![kind_str, entry.content, entry.html_content, entry.source_app, entry.source_app_path, entry.timestamp, entry.preview, entry.is_pinned as i64, entry.use_count, entry.is_external as i64, entry.pinned_order, hash, is_sensitive, source_str])?;
                 stats.entries_added += 1;
             }
             let new_id = tx.last_insert_rowid();
@@ -238,10 +239,12 @@ impl Storage {
     }
 }
 
-fn compute_content_hash(kind: &str, content: &str) -> String {
+fn compute_content_hash(kind: &str, source: &str, content: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(kind.as_bytes());
+    hasher.update([0]);
+    hasher.update(source.as_bytes());
     hasher.update([0]);
     hasher.update(content.as_bytes());
     format!("{:x}", hasher.finalize())
