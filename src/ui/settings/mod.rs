@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod appearance;
 pub mod clipboard;
 pub mod data;
@@ -23,7 +24,6 @@ pub enum SettingsTab {
     Data,
     #[allow(dead_code)]
     Privacy,
-    #[allow(dead_code)]
     Actions,
     #[allow(dead_code)]
     Primary,
@@ -45,6 +45,7 @@ impl SettingsTab {
         SettingsTab::Tags,
         SettingsTab::Data,
         SettingsTab::Privacy,
+        SettingsTab::Actions,
     ];
 }
 
@@ -64,6 +65,7 @@ pub fn dispatch_panel(
         SettingsTab::Tags => tags::draw_tags_panel(ui, app, ctx),
         SettingsTab::Data => data::draw_data_panel(ui, app, ctx),
         SettingsTab::Privacy => privacy::draw_privacy_panel(ui, app, ctx),
+        SettingsTab::Actions => actions::draw_actions_panel(ui, app, ctx),
         _ => {
             ui.label("此面板将在后续 Phase 实现");
         }
@@ -534,8 +536,8 @@ mod tests {
     fn test_dispatch_panel_implemented_count() {
         assert_eq!(
             SettingsTab::IMPLEMENTED.len(),
-            8,
-            "Expected 8 implemented panels"
+            9,
+            "Expected 9 implemented panels"
         );
     }
 
