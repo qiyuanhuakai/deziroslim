@@ -200,7 +200,12 @@ mod tests {
         a
     }
 
-    fn make_auto_action(name: &str, pattern: &str, auto_trigger: bool, auto_primary: bool) -> Action {
+    fn make_auto_action(
+        name: &str,
+        pattern: &str,
+        auto_trigger: bool,
+        auto_primary: bool,
+    ) -> Action {
         let mut a = Action::new(name, pattern, "echo %1");
         a.enabled = true;
         a.auto_trigger = auto_trigger;
@@ -342,7 +347,9 @@ mod tests {
         let actions = vec![make_auto_action("No Auto", r"https://", false, false)];
         let matcher = ActionMatcher::new(actions);
         assert!(
-            matcher.find_first_auto_trigger("https://example.com").is_none(),
+            matcher
+                .find_first_auto_trigger("https://example.com")
+                .is_none(),
             "action with auto_trigger=false should not be found by find_first_auto_trigger"
         );
     }
@@ -369,7 +376,9 @@ mod tests {
             "should not match via auto_trigger when only auto_trigger_primary is set"
         );
         assert!(
-            matcher.find_first_auto_trigger_primary("selected").is_some(),
+            matcher
+                .find_first_auto_trigger_primary("selected")
+                .is_some(),
             "should match via auto_trigger_primary"
         );
     }

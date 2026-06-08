@@ -2976,13 +2976,27 @@ impl ClipboardApp {
                     self.refresh_entries();
                 }
                 let src_clip = self.source_filter.as_ref() == Some(&SelectionSource::Clipboard);
-                if filter_chip(ui, t!("settings.primary_selection.source_clipboard"), src_clip, &self.theme).clicked() {
+                if filter_chip(
+                    ui,
+                    t!("settings.primary_selection.source_clipboard"),
+                    src_clip,
+                    &self.theme,
+                )
+                .clicked()
+                {
                     self.source_filter = Some(SelectionSource::Clipboard);
                     self.persist_preferences();
                     self.refresh_entries();
                 }
                 let src_pri = self.source_filter.as_ref() == Some(&SelectionSource::Primary);
-                if filter_chip(ui, t!("settings.primary_selection.source_primary"), src_pri, &self.theme).clicked() {
+                if filter_chip(
+                    ui,
+                    t!("settings.primary_selection.source_primary"),
+                    src_pri,
+                    &self.theme,
+                )
+                .clicked()
+                {
                     self.source_filter = Some(SelectionSource::Primary);
                     self.persist_preferences();
                     self.refresh_entries();
@@ -4284,10 +4298,7 @@ impl ClipboardApp {
 
         if segments.is_empty() {
             let builtins = crate::snippets::interpolate::resolve_builtins(None);
-            let result = crate::snippets::interpolate::interpolate(
-                &template,
-                &builtins,
-            );
+            let result = crate::snippets::interpolate::interpolate(&template, &builtins);
             match result {
                 Ok(text) => {
                     if let Err(err) = crate::clipboard::set_text(&text) {
@@ -5893,7 +5904,11 @@ fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
             bottom: 3.0,
         })
         .show(ui, |ui| {
-            ui.label(egui::RichText::new("\u{1F5B1} Primary").size(10.0).color(theme.accent));
+            ui.label(
+                egui::RichText::new("\u{1F5B1} Primary")
+                    .size(10.0)
+                    .color(theme.accent),
+            );
         });
 }
 

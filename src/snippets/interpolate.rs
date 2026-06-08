@@ -142,7 +142,10 @@ pub fn resolve_builtins(clipboard_content: Option<&str>) -> HashMap<String, Stri
     let mut map = HashMap::new();
     map.insert("date".into(), now.format("%Y-%m-%d").to_string());
     map.insert("time".into(), now.format("%H:%M:%S").to_string());
-    map.insert("datetime".into(), now.format("%Y-%m-%d %H:%M:%S").to_string());
+    map.insert(
+        "datetime".into(),
+        now.format("%Y-%m-%d %H:%M:%S").to_string(),
+    );
     map.insert("uuid".into(), Uuid::new_v4().to_string());
     if let Some(clip) = clipboard_content {
         let truncated: String = clip.chars().take(MAX_CLIPBOARD_LEN).collect();
@@ -313,14 +316,18 @@ mod tests {
     fn builtin_clipboard_truncated() {
         let long_text = "a".repeat(500);
         let builtins = resolve_builtins(Some(&long_text));
-        let clip = builtins.get("clipboard").expect("clipboard builtin missing");
+        let clip = builtins
+            .get("clipboard")
+            .expect("clipboard builtin missing");
         assert_eq!(clip.len(), 200);
     }
 
     #[test]
     fn builtin_clipboard_short_not_truncated() {
         let builtins = resolve_builtins(Some("hello"));
-        let clip = builtins.get("clipboard").expect("clipboard builtin missing");
+        let clip = builtins
+            .get("clipboard")
+            .expect("clipboard builtin missing");
         assert_eq!(clip, "hello");
     }
 
