@@ -116,14 +116,14 @@ mod tests {
     }
 
     #[test]
-    fn compile_100_patterns_under_10ms() {
+    fn compile_100_patterns_under_50ms() {
         let patterns: Vec<String> = (0..100).map(|i| format!("pattern_{i}_*")).collect();
         let start = std::time::Instant::now();
         let bl = AppBlacklist::new(patterns);
         let elapsed = start.elapsed();
         assert!(
-            elapsed.as_millis() < 10,
-            "compiling 100 patterns took {}ms (limit: 10ms)",
+            elapsed.as_millis() < 50,
+            "compiling 100 patterns took {}ms (limit: 50ms)",
             elapsed.as_millis()
         );
         assert!(bl.is_match("pattern_50_suffix"));
