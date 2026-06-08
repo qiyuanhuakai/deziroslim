@@ -7,7 +7,7 @@ edition = "2024"
 default = []
 devtools = ["log-miss-tr"]
 log-miss-tr = ["rust-i18n/log-miss-tr", "dep:log", "dep:env_logger"]
-secure_storage = ["aes-gcm", "keyring"]
+secure_storage = ["aes-gcm", "keyring", "base64", "getrandom"]
 
 [[bin]]
 name = "tiez-cli"
@@ -37,8 +37,10 @@ rust-i18n = "4"
 globset = "0.4"
 nucleo-matcher = "0.3"
 clap = { version = "4", features = ["derive"] }
-aes-gcm = { version = "0.10", optional = true }
+aes-gcm = { version = "0.10", optional = true, features = ["getrandom"] }
 keyring = { version = "3", optional = true }
+base64 = { version = "0.22", optional = true }
+getrandom = { version = "0.2", optional = true }
 kdeconnect-proto = "=0.2.1"  # locked: 2026-03 ecosystem unstable
 lru = "0.12"
 mdns-sd = "0.11"

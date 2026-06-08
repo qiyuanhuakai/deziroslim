@@ -49,6 +49,52 @@ MYCLIPBOARD_DEV=1 cargo run
 cargo run --features devtools
 ```
 
+## CLI 与脚本集成
+
+`tiez-slim` 提供命令行工具 `tiez-cli`，可通过 Unix socket 与运行中的 GUI 实例通信。需要先启动 `tiez-slim` 才能使用 `tiez-cli`。
+
+```bash
+# 列出最近的剪贴板记录
+tiez-cli list
+
+# 搜索历史
+tiez-cli search "关键词"
+
+# 将指定条目复制到剪贴板
+tiez-cli paste 42
+
+# 查看服务器状态
+tiez-cli status
+
+# JSON 格式输出（适合脚本处理）
+tiez-cli --json list
+```
+
+配合 rofi/wofi 可实现键盘驱动的剪贴板选择器，详见 [docs/rofi-script.sh](docs/rofi-script.sh) 和 [Sway/Hyprland 集成指南](docs/sway-integration.md)。
+
+---
+
+`tiez-slim` ships with `tiez-cli`, a command-line tool that talks to a running GUI instance over a Unix domain socket. The `tiez-slim` app must be running first.
+
+```bash
+# List recent clipboard entries
+tiez-cli list
+
+# Search history
+tiez-cli search "query"
+
+# Copy an entry to clipboard by ID
+tiez-cli paste 42
+
+# Show server status
+tiez-cli status
+
+# JSON output (for scripting)
+tiez-cli --json list
+```
+
+For rofi/wofi keyboard-driven clipboard picker integration, see [docs/rofi-script.sh](docs/rofi-script.sh) and the [Sway/Hyprland integration guide](docs/sway-integration.md).
+
 ## 与旧版差异
 
 原始 `tiez-clipboard` 使用 React + Tauri 2 + WebView。`tiez-slim-linux` 对齐个人 `qiyuanhuakai/tiez-clipboard` 分支中的主界面视觉和核心数据模型，并用 Rust 原生能力补齐文本/富文本/图片/文件剪贴板、X11 全局呼出、鼠标中键、点击/键盘粘贴流程、系统托盘、边缘停靠、默认打开应用设置、彩色 emoji/符号入口、音效、字体 fallback 和可配置数据位置。

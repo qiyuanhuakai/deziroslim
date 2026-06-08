@@ -12,7 +12,7 @@ use tiez_slim_linux::model::ClipboardEntrySummary;
 
 // ── CLI definition ────────────────────────────────────────────────────
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(name = "tiez-cli", about = "tiez-slim clipboard manager CLI", version)]
 struct Cli {
     /// Output in JSON format (machine-readable, jq-parsable).
@@ -23,7 +23,7 @@ struct Cli {
     command: SubCommand,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 enum SubCommand {
     /// List recent clipboard entries.
     List {
@@ -181,11 +181,7 @@ fn cmd_list(
             for entry in &entries {
                 println_entry(entry);
             }
-            println!(
-                "\n{}: {}",
-                t!("history.count", count = entries.len()),
-                entries.len()
-            );
+            println!("\n{}", t!("history.count", count = entries.len()));
         }
     }
     0
@@ -217,11 +213,7 @@ fn cmd_search(socket_path: &std::path::Path, query: &str, json_output: bool) -> 
             for entry in &entries {
                 println_entry(entry);
             }
-            println!(
-                "\n{}: {}",
-                t!("history.count", count = entries.len()),
-                entries.len()
-            );
+            println!("\n{}", t!("history.count", count = entries.len()));
         }
     }
     0
@@ -415,17 +407,33 @@ fn send_ipc(
 }
 
 fn handle_error(err: &IpcError) -> i32 {
-    let msg = match err {
+    match err {
         IpcError::ConnectionRefused => {
-            t!("cli.error_db_connect", err = err.to_string()).to_string()
+            eprintln!("Error: connection refused – GUI not running.");
+            eprintln!("Start with: systemctl --user start tiez-slim-linux");
+            2
         }
-        IpcError::InvalidJson(detail) => t!("cli.error_parse", err = detail).to_string(),
-        IpcError::NotFound => t!("cli.error_not_found", id = "?").to_string(),
-        IpcError::Io(io_err) => t!("cli.error_io", err = io_err.to_string()).to_string(),
-        _ => t!("cli.error_io", err = err.to_string()).to_string(),
-    };
-    eprintln!("{msg}");
-    err.exit_code()
+        IpcError::InvalidJson(detail) => {
+            eprintln!("{}", t!("cli.error_parse", err = detail));
+            3
+        }
+        IpcError::NotFound => {
+            eprintln!("{}", t!("cli.error_not_found", id = "?"));
+            5
+        }
+        IpcError::UnknownCommand(code) => {
+            eprintln!("Error: unknown command (code {code})");
+            4
+        }
+        IpcError::Io(io_err) => {
+            eprintln!("{}", t!("cli.error_io", err = io_err.to_string()));
+            1
+        }
+        _ => {
+            eprintln!("Error: {err}");
+            err.exit_code()
+        }
+    }
 }
 
 fn handle_ipc_response_error(resp: &IpcResponse) -> i32 {
@@ -437,7 +445,12 @@ fn handle_ipc_response_error(resp: &IpcResponse) -> i32 {
             err_body.message.clone()
         };
         eprintln!("{msg}");
-        code
+        // Server codes >= 100 indicate unknown command → CLI exit 4
+        if code >= 100 {
+            4
+        } else {
+            code
+        }
     } else {
         eprintln!("{}", t!("cli.error_io", err = "unknown error"));
         1
@@ -445,6 +458,85 @@ fn handle_ipc_response_error(resp: &IpcResponse) -> i32 {
 }
 
 // ── Display helpers ───────────────────────────────────────────────────
+
+/// Paste fallback: open the database directly when GUI is not running.
+fn paste_from_db(id: i64, rich: bool) -> i32 {
+    use tiez_slim_linux::storage::Storage;
+
+    let db_path = Storage::path_from_redirect_file().unwrap_or_else(Storage::default_path);
+    let storage = match Storage::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: cannot open database: {e}");
+            return 1;
+        }
+    };
+    match storage.get_entry(id) {
+        Ok(Some(entry)) => {
+            let content = if rich {
+                entry.html_content.as_deref().unwrap_or(&entry.content)
+            } else {
+                &entry.content
+            };
+            if let Err(e) = write_to_clipboard(content) {
+                eprintln!("Error: {e}");
+                return 1;
+            }
+            let _ = storage.increment_use_count(id);
+            println!("Copied entry #{id} to clipboard ({} chars)", content.len());
+            0
+        }
+        Ok(None) => {
+            eprintln!("Error: entry #{id} not found");
+            5
+        }
+        Err(e) => {
+            eprintln!("Error: database error: {e}");
+            1
+        }
+    }
+}
+
+/// Write text to the system clipboard.
+///
+/// Tries `wl-copy` (Wayland), then `xclip` (X11), then falls back to
+/// `arboard`. Content may be lost on X11 after process exit with arboard.
+fn write_to_clipboard(content: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    if let Ok(mut child) = Command::new("wl-copy").stdin(Stdio::piped()).spawn() {
+        if let Some(stdin) = child.stdin.as_mut() {
+            if stdin.write_all(content.as_bytes()).is_ok() {
+                drop(child.stdin.take());
+                if child.wait().map(|s| s.success()).unwrap_or(false) {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    if let Ok(mut child) = Command::new("xclip")
+        .args(["-selection", "clipboard"])
+        .stdin(Stdio::piped())
+        .spawn()
+    {
+        if let Some(stdin) = child.stdin.as_mut() {
+            if stdin.write_all(content.as_bytes()).is_ok() {
+                drop(child.stdin.take());
+                if child.wait().map(|s| s.success()).unwrap_or(false) {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    let mut cb =
+        arboard::Clipboard::new().map_err(|e| format!("clipboard not available: {e}"))?;
+    cb.set_text(content.to_owned())
+        .map_err(|e| format!("failed to set clipboard: {e}"))?;
+    Ok(())
+}
 
 fn println_entry(entry: &ClipboardEntrySummary) {
     let pin_marker = if entry.is_pinned { "📌 " } else { "" };
@@ -492,7 +584,8 @@ mod tests {
         assert!(matches!(
             cli.command,
             SubCommand::List {
-                kind: None,
+                limit: None,
+                type_: None,
                 tag: None
             }
         ));
@@ -501,11 +594,12 @@ mod tests {
     #[test]
     fn cli_args_parse_list_with_filters() {
         let cli = Cli::parse_from([
-            "tiez-cli", "--json", "list", "--kind", "text", "--tag", "work",
+            "tiez-cli", "--json", "list", "--limit", "5", "--type", "text", "--tag", "work",
         ]);
         assert!(cli.json);
-        if let SubCommand::List { kind, tag } = cli.command {
-            assert_eq!(kind.as_deref(), Some("text"));
+        if let SubCommand::List { limit, type_, tag } = cli.command {
+            assert_eq!(limit, Some(5));
+            assert_eq!(type_.as_deref(), Some("text"));
             assert_eq!(tag.as_deref(), Some("work"));
         } else {
             panic!("expected List subcommand");
@@ -515,8 +609,20 @@ mod tests {
     #[test]
     fn cli_args_parse_search() {
         let cli = Cli::parse_from(["tiez-cli", "search", "hello world"]);
-        if let SubCommand::Search { query } = cli.command {
+        if let SubCommand::Search { query, mode } = cli.command {
             assert_eq!(query, "hello world");
+            assert!(mode.is_none());
+        } else {
+            panic!("expected Search subcommand");
+        }
+    }
+
+    #[test]
+    fn cli_args_parse_search_with_mode() {
+        let cli = Cli::parse_from(["tiez-cli", "search", "test", "--mode", "fuzzy"]);
+        if let SubCommand::Search { query, mode } = cli.command {
+            assert_eq!(query, "test");
+            assert_eq!(mode.as_deref(), Some("fuzzy"));
         } else {
             panic!("expected Search subcommand");
         }
@@ -547,9 +653,9 @@ mod tests {
     #[test]
     fn cli_args_parse_tag() {
         let cli = Cli::parse_from(["tiez-cli", "tag", "3", "work", "important"]);
-        if let SubCommand::Tag { id, tags } = cli.command {
+        if let SubCommand::Tag { id, tag } = cli.command {
             assert_eq!(id, 3);
-            assert_eq!(tags, vec!["work", "important"]);
+            assert_eq!(tag, vec!["work", "important"]);
         } else {
             panic!("expected Tag subcommand");
         }
@@ -639,5 +745,28 @@ mod tests {
         };
         let code = handle_ipc_response_error(&resp);
         assert_eq!(code, 5);
+    }
+
+    #[test]
+    fn unknown_command_exit_code_is_4() {
+        let resp = IpcResponse {
+            ok: false,
+            data: None,
+            error: Some(tiez_slim_linux::ipc::IpcErrorBody {
+                code: 112,
+                message: "unknown command (code 112)".into(),
+            }),
+        };
+        let code = handle_ipc_response_error(&resp);
+        assert_eq!(code, 4);
+    }
+
+    #[test]
+    fn help_shows_all_subcommands() {
+        let err = Cli::try_parse_from(["tiez-cli", "--help"]).unwrap_err();
+        let help = err.to_string();
+        for sub in &["list", "search", "paste", "pin", "tag", "delete", "status", "add"] {
+            assert!(help.contains(sub), "help missing subcommand: {sub}");
+        }
     }
 }
