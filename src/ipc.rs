@@ -248,11 +248,7 @@ impl IpcServer {
             "delete" => Self::cmd_delete(args, storage),
             "status" => Self::cmd_status(storage),
             "add" => Self::cmd_add(args, storage),
-            other => {
-                IpcResponse::err(&IpcError::UnknownCommand(
-                    Self::unknown_cmd_code(other),
-                ))
-            }
+            other => IpcResponse::err(&IpcError::UnknownCommand(Self::unknown_cmd_code(other))),
         }
     }
 
@@ -268,10 +264,7 @@ impl IpcServer {
     /// `list` — return recent clipboard entries as summaries.
     /// Optional args: `{"kind":"text","tag":"work","query":"hello"}`
     fn cmd_list(args: &serde_json::Value, storage: &Storage) -> IpcResponse {
-        let query = args
-            .get("query")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
         let kind = args
             .get("kind")
             .and_then(|v| v.as_str())
@@ -296,9 +289,7 @@ impl IpcServer {
         let id = match args.get("id").and_then(|v| v.as_i64()) {
             Some(id) => id,
             None => {
-                return IpcResponse::err(&IpcError::InvalidJson(
-                    "missing 'id' field".into(),
-                ));
+                return IpcResponse::err(&IpcError::InvalidJson("missing 'id' field".into()));
             }
         };
 
@@ -318,9 +309,7 @@ impl IpcServer {
         let id = match args.get("id").and_then(|v| v.as_i64()) {
             Some(id) => id,
             None => {
-                return IpcResponse::err(&IpcError::InvalidJson(
-                    "missing 'id' field".into(),
-                ));
+                return IpcResponse::err(&IpcError::InvalidJson("missing 'id' field".into()));
             }
         };
 
@@ -336,9 +325,7 @@ impl IpcServer {
         let id = match args.get("id").and_then(|v| v.as_i64()) {
             Some(id) => id,
             None => {
-                return IpcResponse::err(&IpcError::InvalidJson(
-                    "missing 'id' field".into(),
-                ));
+                return IpcResponse::err(&IpcError::InvalidJson("missing 'id' field".into()));
             }
         };
 
@@ -364,9 +351,7 @@ impl IpcServer {
         let id = match args.get("id").and_then(|v| v.as_i64()) {
             Some(id) => id,
             None => {
-                return IpcResponse::err(&IpcError::InvalidJson(
-                    "missing 'id' field".into(),
-                ));
+                return IpcResponse::err(&IpcError::InvalidJson("missing 'id' field".into()));
             }
         };
 
@@ -378,10 +363,7 @@ impl IpcServer {
 
     /// `status` — return basic server status.
     fn cmd_status(storage: &Storage) -> IpcResponse {
-        let entry_count = storage
-            .list_all_summaries()
-            .map(|v| v.len())
-            .unwrap_or(0);
+        let entry_count = storage.list_all_summaries().map(|v| v.len()).unwrap_or(0);
 
         let tags = storage.saved_tags().unwrap_or_default();
 
@@ -407,9 +389,7 @@ impl IpcServer {
         let entry = match ClipboardEntry::captured_text(text.to_string(), "cli".to_string()) {
             Some(e) => e,
             None => {
-                return IpcResponse::err(&IpcError::InvalidJson(
-                    "empty or invalid text".into(),
-                ));
+                return IpcResponse::err(&IpcError::InvalidJson("empty or invalid text".into()));
             }
         };
         match storage.save_entry(&entry) {
@@ -428,7 +408,8 @@ pub fn send_request(socket_path: &Path, request: &IpcRequest) -> Result<IpcRespo
 
     // Write request.
     let mut writer = &stream;
-    let mut json = serde_json::to_string(request).map_err(|e| IpcError::InvalidJson(e.to_string()))?;
+    let mut json =
+        serde_json::to_string(request).map_err(|e| IpcError::InvalidJson(e.to_string()))?;
     json.push('\n');
     writer.write_all(json.as_bytes())?;
     writer.flush()?;
@@ -549,14 +530,18 @@ mod tests {
     fn socket_path_default_fallback_to_tmp() {
         let old = std::env::var("XDG_RUNTIME_DIR").ok();
         // SAFETY: test runs single-threaded in a temp context.
-        unsafe { std::env::remove_var("XDG_RUNTIME_DIR"); }
+        unsafe {
+            std::env::remove_var("XDG_RUNTIME_DIR");
+        }
 
         let path = IpcServer::socket_path_default();
         let uid = unsafe { libc::getuid() };
         assert_eq!(path, PathBuf::from(format!("/tmp/tiez-slim-{uid}.sock")));
 
         if let Some(v) = old {
-            unsafe { std::env::set_var("XDG_RUNTIME_DIR", v); }
+            unsafe {
+                std::env::set_var("XDG_RUNTIME_DIR", v);
+            }
         }
     }
 
@@ -708,7 +693,10 @@ mod tests {
 
         let meta = std::fs::metadata(&sock_path).unwrap();
         let mode = meta.permissions().mode() & 0o7777;
-        assert_eq!(mode, 0o600, "socket permissions should be 0600, got {mode:o}");
+        assert_eq!(
+            mode, 0o600,
+            "socket permissions should be 0600, got {mode:o}"
+        );
 
         let _ = std::fs::remove_file(&sock_path);
     }
