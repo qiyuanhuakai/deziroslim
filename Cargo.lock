@@ -4802,6 +4802,7 @@ dependencies = [
  "kdeconnect-proto",
  "keyring",
  "ksni",
+ "libc",
  "log",
  "lru",
  "mdns-sd",

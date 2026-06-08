@@ -1,3 +1,4 @@
+use crate::actions::executor::ActionExecutor;
 use crate::actions::matcher::ActionMatcher;
 use crate::blacklist::AppBlacklist;
 use crate::model::{ClipboardEntry, ClipboardKind};
@@ -94,6 +95,7 @@ fn watch_loop(
     } else {
         ActionMatcher::new(vec![])
     };
+    let action_executor = ActionExecutor::new();
     let mut last_seen = String::new();
     let mut last_image_fingerprint = String::new();
     let mut last_html_fingerprint = String::new();
@@ -203,9 +205,9 @@ fn watch_loop(
                         last_file_fingerprint.clear();
                         last_html_fingerprint.clear();
                         if builtin_actions_enabled
-                            && let Some(_matched) = action_matcher.find_first_match(&text)
+                            && let Some(matched) = action_matcher.find_first_match(&text)
                         {
-                            // TODO(T13): execute matched action
+                            action_executor.execute_async(&matched.action, &text);
                         }
                     }
                 }

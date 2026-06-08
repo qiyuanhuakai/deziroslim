@@ -14,6 +14,7 @@
 //! // TODO(T15): Implement action parameter substitution (Wave 1)
 //! // TODO(T16): Implement action hotkey binding (Wave 1)
 
+pub mod executor;
 pub mod matcher;
 
 use serde::{Deserialize, Serialize};

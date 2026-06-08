@@ -749,6 +749,15 @@ sync:
     reconnecting: "正在重新连接…"
     offline_hint: "设备离线，剪贴板变更会在重新连接后同步"
 
+action:
+  executor:
+    blocked_allowlist: "命令不在允许列表中"
+    too_many_concurrent: "并发操作数已达上限"
+    blocked_dangerous: "已阻止危险命令"
+    empty_command: "命令为空"
+    copy_not_supported: "复制操作暂不支持"
+    spawn_failed: "运行 %{program} 失败: %{err}"
+
 cli:
     title: "命令行"
     db_path: "数据库路径"

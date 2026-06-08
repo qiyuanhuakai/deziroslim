@@ -726,6 +726,15 @@ sync:
     reconnecting: "Reconnecting..."
     offline_hint: "Device offline; clipboard changes will sync when reconnected"
 
+action:
+  executor:
+    blocked_allowlist: "Command not in allowlist"
+    too_many_concurrent: "Too many concurrent actions"
+    blocked_dangerous: "Blocked dangerous command"
+    empty_command: "Empty command"
+    copy_not_supported: "Copy action not supported"
+    spawn_failed: "Failed to run %{program}: %{err}"
+
 cli:
     title: "Command Line"
     db_path: "Database path"
