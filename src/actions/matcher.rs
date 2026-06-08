@@ -154,6 +154,40 @@ impl ActionMatcher {
             }
         })
     }
+
+    /// Find the first matching action that has `auto_trigger` enabled.
+    /// Used by the clipboard watcher to only auto-execute actions explicitly marked for auto-trigger.
+    pub fn find_first_auto_trigger(&self, text: &str) -> Option<&CompiledAction> {
+        self.compiled.iter().find(|ca| {
+            if !ca.action.auto_trigger {
+                return false;
+            }
+            if let Some(ref re) = ca.regex {
+                re.is_match(text)
+            } else if let Some(ref gs) = ca.glob {
+                gs.is_match(text)
+            } else {
+                false
+            }
+        })
+    }
+
+    /// Find the first matching action that has `auto_trigger_primary` enabled.
+    /// Used by the PRIMARY selection watcher to only auto-execute actions explicitly marked for primary auto-trigger.
+    pub fn find_first_auto_trigger_primary(&self, text: &str) -> Option<&CompiledAction> {
+        self.compiled.iter().find(|ca| {
+            if !ca.action.auto_trigger_primary {
+                return false;
+            }
+            if let Some(ref re) = ca.regex {
+                re.is_match(text)
+            } else if let Some(ref gs) = ca.glob {
+                gs.is_match(text)
+            } else {
+                false
+            }
+        })
+    }
 }
 
 #[cfg(test)]
@@ -163,6 +197,14 @@ mod tests {
     fn make_action(name: &str, pattern: &str, enabled: bool) -> Action {
         let mut a = Action::new(name, pattern, "echo %1");
         a.enabled = enabled;
+        a
+    }
+
+    fn make_auto_action(name: &str, pattern: &str, auto_trigger: bool, auto_primary: bool) -> Action {
+        let mut a = Action::new(name, pattern, "echo %1");
+        a.enabled = true;
+        a.auto_trigger = auto_trigger;
+        a.auto_trigger_primary = auto_primary;
         a
     }
 
@@ -292,6 +334,43 @@ mod tests {
             elapsed.as_millis() < 50,
             "100 find_matching(100 actions) took {:?}, expected < 50ms",
             elapsed
+        );
+    }
+
+    #[test]
+    fn auto_trigger_false_not_matched_by_find_first_auto_trigger() {
+        let actions = vec![make_auto_action("No Auto", r"https://", false, false)];
+        let matcher = ActionMatcher::new(actions);
+        assert!(
+            matcher.find_first_auto_trigger("https://example.com").is_none(),
+            "action with auto_trigger=false should not be found by find_first_auto_trigger"
+        );
+    }
+
+    #[test]
+    fn auto_trigger_true_matched_by_find_first_auto_trigger() {
+        let actions = vec![make_auto_action("Auto URL", r"https://", true, false)];
+        let matcher = ActionMatcher::new(actions);
+        let m = matcher.find_first_auto_trigger("https://example.com");
+        assert!(m.is_some(), "action with auto_trigger=true should be found");
+        assert_eq!(m.unwrap().action.name, "Auto URL");
+        assert!(
+            matcher.find_first_auto_trigger("not a url").is_none(),
+            "should still respect pattern matching"
+        );
+    }
+
+    #[test]
+    fn auto_trigger_primary_respected() {
+        let actions = vec![make_auto_action("Primary Only", r"selected", false, true)];
+        let matcher = ActionMatcher::new(actions);
+        assert!(
+            matcher.find_first_auto_trigger("selected").is_none(),
+            "should not match via auto_trigger when only auto_trigger_primary is set"
+        );
+        assert!(
+            matcher.find_first_auto_trigger_primary("selected").is_some(),
+            "should match via auto_trigger_primary"
         );
     }
 }

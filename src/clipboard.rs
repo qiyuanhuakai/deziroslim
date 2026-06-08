@@ -327,7 +327,7 @@ fn watch_loop(
                         last_file_fingerprint.clear();
                         last_html_fingerprint.clear();
                         if builtin_actions_enabled
-                            && let Some(matched) = action_matcher.find_first_match(&text)
+                            && let Some(matched) = action_matcher.find_first_auto_trigger(&text)
                         {
                             action_executor.execute_async(&matched.action, &text);
                         }
@@ -351,7 +351,7 @@ fn watch_loop(
                         last_primary_text = primary_text;
                         if builtin_actions_enabled
                             && let Some(matched) =
-                                action_matcher.find_first_match(&last_primary_text)
+                                action_matcher.find_first_auto_trigger_primary(&last_primary_text)
                         {
                             action_executor.execute_async(&matched.action, &last_primary_text);
                         }
