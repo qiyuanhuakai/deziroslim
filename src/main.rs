@@ -2,6 +2,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 
 use anyhow::Context;
 use app::ClipboardApp;
+use ipc::IpcServer;
 use std::path::PathBuf;
 use std::sync::Arc;
 use storage::Storage;
@@ -25,6 +26,13 @@ fn main() -> anyhow::Result<()> {
     storage
         .cleanup_expired()
         .context(rust_i18n::t!("error.cleanup_failed"))?;
+
+    let ipc_socket = IpcServer::socket_path_default();
+    let ipc_storage = Arc::new(storage.clone());
+    match IpcServer::start(ipc_storage, ipc_socket) {
+        Ok(_server) => {}
+        Err(e) => eprintln!("IPC server failed to start: {e}"),
+    }
 
     let data_dir = storage
         .path()
