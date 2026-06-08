@@ -32,6 +32,7 @@ pub struct HotkeyConfig {
     pub rich_paste_hotkey: String,
     pub search_hotkey: String,
     pub private_mode_hotkey: String,
+    pub snippet_picker_hotkey: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,6 +77,7 @@ pub enum HotkeyAction {
     RichPaste,
     FocusSearch,
     TogglePrivateMode,
+    SnippetPicker,
 }
 
 #[derive(Clone)]

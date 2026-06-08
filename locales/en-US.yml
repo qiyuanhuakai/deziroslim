@@ -465,6 +465,13 @@ settings:
     tags_hint: "Comma-separated, e.g.: dev, github"
     name_template_required: "Name and template cannot be empty"
     uses: "uses"
+  picker:
+    title: "Select Snippet"
+    search_hint: "Search snippets…"
+    inserted: "Snippet inserted: %{name}"
+    fill_variable: "Fill Variable"
+    pick_one: "Pick one"
+    next: "Next"
 
 emoji:
   group:

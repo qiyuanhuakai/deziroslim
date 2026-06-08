@@ -6,6 +6,7 @@
 pub mod interpolate;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A reusable text snippet with `{{var}}` placeholder support.
 ///
@@ -68,4 +69,14 @@ impl Snippet {
             tags: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct SnippetVariableDialog {
+    pub snippet_id: i64,
+    pub snippet_name: String,
+    pub template: String,
+    pub segments: Vec<interpolate::InterpSegment>,
+    pub values: HashMap<String, String>,
+    pub current_index: usize,
 }

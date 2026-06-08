@@ -676,6 +676,7 @@ fn configure_hotkeys<C: Connection>(
         (&config.rich_paste_hotkey, HotkeyAction::RichPaste),
         (&config.search_hotkey, HotkeyAction::FocusSearch),
         (&config.private_mode_hotkey, HotkeyAction::TogglePrivateMode),
+        (&config.snippet_picker_hotkey, HotkeyAction::SnippetPicker),
     ] {
         if let Some(hotkey) = parse_hotkey(conn, combo, action)? {
             grab_hotkey(conn, root, &hotkey)?;
@@ -867,6 +868,7 @@ fn send_hotkey_action(sender: &Sender<ClipboardEvent>, action: HotkeyAction) {
         HotkeyAction::RichPaste => ClipboardEvent::PasteLatestRich,
         HotkeyAction::FocusSearch => ClipboardEvent::FocusSearch,
         HotkeyAction::TogglePrivateMode => ClipboardEvent::TogglePrivateMode,
+        HotkeyAction::SnippetPicker => ClipboardEvent::SnippetPicker,
     };
     let _ = sender.send(event);
 }

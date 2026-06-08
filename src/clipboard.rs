@@ -72,6 +72,7 @@ pub enum ClipboardEvent {
     SequentialPaste,
     OpenSettings,
     TogglePrivateMode,
+    SnippetPicker,
     Quit,
     Status(String),
     Error(String),

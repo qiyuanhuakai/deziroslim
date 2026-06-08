@@ -456,6 +456,13 @@ struct AppPreferences {
     builtin_actions_enabled: bool,
     #[serde(default)]
     action_command_allowlist: String,
+
+    #[serde(default = "default_snippet_picker_hotkey")]
+    snippet_picker_hotkey: String,
+}
+
+fn default_snippet_picker_hotkey() -> String {
+    "Super+Shift+V".to_string()
 }
 
 fn default_privacy_protection_kinds() -> Vec<String> {
@@ -597,6 +604,7 @@ impl Default for AppPreferences {
             cli_socket_path: None,
             builtin_actions_enabled: true,
             action_command_allowlist: String::new(),
+            snippet_picker_hotkey: default_snippet_picker_hotkey(),
         }
     }
 }
@@ -726,6 +734,11 @@ pub struct ClipboardApp {
     pub(crate) new_exclusion_input: String,
     pub(crate) private_mode: bool,
     pub(crate) private_mode_hotkey: String,
+    pub(crate) snippet_picker_hotkey: String,
+    pub(crate) snippet_picker_open: bool,
+    pub(crate) snippet_picker_query: String,
+    pub(crate) snippet_picker_selected: usize,
+    pub(crate) snippet_variable_dialog: Option<crate::snippets::SnippetVariableDialog>,
     pub(crate) exclusion_mode: crate::blacklist::ExclusionMode,
     pub(crate) auto_backup_enabled: bool,
     pub(crate) backup_retention_count: i32,
@@ -967,6 +980,11 @@ impl ClipboardApp {
             app_exclusion_list: preferences.app_exclusion_list,
             private_mode: preferences.private_mode,
             private_mode_hotkey: preferences.private_mode_hotkey,
+            snippet_picker_hotkey: preferences.snippet_picker_hotkey,
+            snippet_picker_open: false,
+            snippet_picker_query: String::new(),
+            snippet_picker_selected: 0,
+            snippet_variable_dialog: None,
             exclusion_mode: preferences.exclusion_mode,
             auto_backup_enabled: preferences.auto_backup_enabled,
             backup_retention_count: preferences.backup_retention_count,
@@ -1299,6 +1317,13 @@ impl ClipboardApp {
                     } else {
                         t!("settings.private_mode.toggle_off").to_string()
                     };
+                }
+                ClipboardEvent::SnippetPicker => {
+                    self.snippets = self.storage.load_snippets().unwrap_or_default();
+                    self.snippet_picker_open = true;
+                    self.snippet_picker_query.clear();
+                    self.snippet_picker_selected = 0;
+                    self.show_window(ctx, true);
                 }
                 ClipboardEvent::Quit => {
                     self.force_quit = true;
@@ -1703,6 +1728,7 @@ impl ClipboardApp {
             rich_paste_hotkey: self.rich_paste_hotkey.clone(),
             search_hotkey: self.search_hotkey.clone(),
             private_mode_hotkey: self.private_mode_hotkey.clone(),
+            snippet_picker_hotkey: self.snippet_picker_hotkey.clone(),
         }
     }
 
@@ -2249,6 +2275,7 @@ impl ClipboardApp {
             cli_socket_path: self.cli_socket_path.clone(),
             builtin_actions_enabled: self.builtin_actions_enabled,
             action_command_allowlist: self.action_command_allowlist.clone(),
+            snippet_picker_hotkey: self.snippet_picker_hotkey.clone(),
         }
     }
 
@@ -4093,6 +4120,317 @@ impl ClipboardApp {
                 });
             });
     }
+
+    fn draw_snippet_picker(&mut self, ctx: &egui::Context) {
+        if !self.snippet_picker_open {
+            return;
+        }
+
+        let theme = self.theme.clone();
+        let snippets = self.snippets.clone();
+
+        egui::Area::new(egui::Id::new("snippet_picker"))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                let frame = egui::Frame::none()
+                    .fill(theme.card)
+                    .stroke(egui::Stroke::new(1.0, theme.border))
+                    .rounding(egui::Rounding::same(12.0))
+                    .inner_margin(egui::Margin::same(16.0));
+
+                frame.show(ui, |ui| {
+                    ui.set_min_width(360.0);
+                    ui.set_max_width(360.0);
+                    ui.label(
+                        egui::RichText::new(t!("snippets.picker.title"))
+                            .size(14.0)
+                            .strong()
+                            .color(theme.fg),
+                    );
+                    ui.add_space(8.0);
+
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut self.snippet_picker_query)
+                            .desired_width(ui.available_width())
+                            .hint_text(t!("snippets.picker.search_hint")),
+                    );
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        self.snippet_picker_open = false;
+                        return;
+                    }
+
+                    let query = self.snippet_picker_query.to_lowercase();
+                    let filtered: Vec<_> = snippets
+                        .iter()
+                        .filter(|s| {
+                            s.enabled
+                                && (query.is_empty()
+                                    || s.name.to_lowercase().contains(&query)
+                                    || s.template.to_lowercase().contains(&query)
+                                    || s.description.to_lowercase().contains(&query))
+                        })
+                        .collect();
+
+                    if self.snippet_picker_selected >= filtered.len() {
+                        self.snippet_picker_selected = filtered.len().saturating_sub(1);
+                    }
+
+                    ui.add_space(4.0);
+                    egui::ScrollArea::vertical()
+                        .max_height(240.0)
+                        .show(ui, |ui| {
+                            for (i, snippet) in filtered.iter().enumerate() {
+                                let is_selected = i == self.snippet_picker_selected;
+                                let fill = if is_selected {
+                                    theme.history_selected
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                };
+                                let frame = egui::Frame::none()
+                                    .fill(fill)
+                                    .rounding(egui::Rounding::same(6.0))
+                                    .inner_margin(egui::Margin::symmetric(8.0, 4.0));
+
+                                let resp = frame
+                                    .show(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.label(
+                                                egui::RichText::new(&snippet.name)
+                                                    .size(12.5)
+                                                    .color(theme.fg),
+                                            );
+                                            ui.with_layout(
+                                                egui::Layout::right_to_left(egui::Align::Center),
+                                                |ui| {
+                                                    ui.label(
+                                                        egui::RichText::new(format!(
+                                                            "{}{}",
+                                                            snippet.use_count,
+                                                            t!("settings.snippets.uses")
+                                                        ))
+                                                        .size(10.0)
+                                                        .color(theme.muted),
+                                                    );
+                                                },
+                                            );
+                                        });
+                                    })
+                                    .response;
+
+                                if resp.interact(egui::Sense::click()).clicked() {
+                                    self.execute_snippet(snippet.id);
+                                    self.snippet_picker_open = false;
+                                    return;
+                                }
+
+                                if is_selected
+                                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                                {
+                                    self.execute_snippet(snippet.id);
+                                    self.snippet_picker_open = false;
+                                    return;
+                                }
+                            }
+                        });
+
+                    if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                        self.snippet_picker_selected =
+                            (self.snippet_picker_selected + 1).min(filtered.len().saturating_sub(1));
+                    }
+                    if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                        self.snippet_picker_selected =
+                            self.snippet_picker_selected.saturating_sub(1);
+                    }
+                });
+            });
+    }
+
+    fn execute_snippet(&mut self, snippet_id: i64) {
+        let Some(snippet) = self.snippets.iter().find(|s| s.id == snippet_id) else {
+            return;
+        };
+        let template = snippet.template.clone();
+        let segments = crate::snippets::interpolate::extract_variables(&template);
+
+        if segments.is_empty() {
+            let result = crate::snippets::interpolate::interpolate(
+                &template,
+                &std::collections::HashMap::new(),
+            );
+            match result {
+                Ok(text) => {
+                    if let Err(err) = crate::clipboard::set_text(&text) {
+                        self.status = err;
+                    } else {
+                        let _ = self.storage.increment_snippet_use_count(snippet_id);
+                        self.status =
+                            format!("{}", t!("snippets.picker.inserted", name = snippet.name));
+                    }
+                }
+                Err(err) => {
+                    self.status = format!("{err}");
+                }
+            }
+        } else {
+            let snippet_name = snippet.name.clone();
+            self.snippet_variable_dialog = Some(crate::snippets::SnippetVariableDialog {
+                snippet_id,
+                snippet_name,
+                template,
+                segments,
+                values: std::collections::HashMap::new(),
+                current_index: 0,
+            });
+        }
+    }
+
+    fn draw_snippet_variable_dialog(&mut self, ctx: &egui::Context) {
+        let Some(dialog) = self.snippet_variable_dialog.clone() else {
+            return;
+        };
+
+        let theme = self.theme.clone();
+        let mut close = false;
+        let mut advance = false;
+        let mut cancel = false;
+
+        egui::Area::new(egui::Id::new("snippet_variable_dialog"))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                let frame = egui::Frame::none()
+                    .fill(theme.card)
+                    .stroke(egui::Stroke::new(1.0, theme.border))
+                    .rounding(egui::Rounding::same(12.0))
+                    .inner_margin(egui::Margin::same(16.0));
+
+                frame.show(ui, |ui| {
+                    ui.set_min_width(300.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} — {} ({}/{})",
+                            t!("snippets.picker.fill_variable"),
+                            dialog.snippet_name,
+                            dialog.current_index + 1,
+                            dialog.segments.len()
+                        ))
+                        .size(13.0)
+                        .strong()
+                        .color(theme.fg),
+                    );
+                    ui.add_space(8.0);
+
+                    if let Some(seg) = dialog.segments.get(dialog.current_index) {
+                        let label = if let Some(ref opts) = seg.options {
+                            format!("{} [{}]", seg.name, t!("snippets.picker.pick_one"))
+                        } else {
+                            seg.name.clone()
+                        };
+                        ui.label(egui::RichText::new(label).color(theme.fg));
+                        ui.add_space(4.0);
+
+                        if let Some(ref opts) = seg.options {
+                            let val = self
+                                .snippet_variable_dialog
+                                .as_mut()
+                                .unwrap()
+                                .values
+                                .entry(seg.name.clone())
+                                .or_insert_with(|| opts[0].clone());
+                            egui::ComboBox::new(
+                                egui::Id::new(format!("snippet_pick_{}", seg.name)),
+                                "",
+                            )
+                            .selected_text(val.as_str())
+                            .show_ui(ui, |ui| {
+                                for opt in opts {
+                                    ui.selectable_value(val, opt.clone(), opt.as_str());
+                                }
+                            });
+                        } else {
+                            let val = self
+                                .snippet_variable_dialog
+                                .as_mut()
+                                .unwrap()
+                                .values
+                                .entry(seg.name.clone())
+                                .or_insert_with(|| {
+                                    seg.default.clone().unwrap_or_default()
+                                });
+                            ui.add(
+                                egui::TextEdit::singleline(val)
+                                    .desired_width(ui.available_width())
+                                    .hint_text(
+                                        seg.default
+                                            .as_deref()
+                                            .unwrap_or(""),
+                                    ),
+                            );
+                        }
+                    }
+
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if crate::ui::settings::settings_footer_button(
+                            ui,
+                            t!("snippets.picker.next"),
+                            &theme,
+                            80.0,
+                        )
+                        .clicked()
+                        {
+                            advance = true;
+                        }
+                        if crate::ui::settings::settings_footer_button(
+                            ui,
+                            t!("settings.snippets.cancel"),
+                            &theme,
+                            80.0,
+                        )
+                        .clicked()
+                        {
+                            cancel = true;
+                        }
+                    });
+                });
+            });
+
+        if cancel {
+            self.snippet_variable_dialog = None;
+            return;
+        }
+
+        if advance {
+            if let Some(ref mut d) = self.snippet_variable_dialog {
+                if d.current_index + 1 < d.segments.len() {
+                    d.current_index += 1;
+                } else {
+                    let result =
+                        crate::snippets::interpolate::interpolate(&d.template, &d.values);
+                    let snippet_id = d.snippet_id;
+                    let snippet_name = d.snippet_name.clone();
+                    self.snippet_variable_dialog = None;
+                    match result {
+                        Ok(text) => {
+                            if let Err(err) = crate::clipboard::set_text(&text) {
+                                self.status = err;
+                            } else {
+                                let _ = self
+                                    .storage
+                                    .increment_snippet_use_count(snippet_id);
+                                self.status = format!(
+                                    "{}",
+                                    t!("snippets.picker.inserted", name = snippet_name)
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            self.status = format!("{err}");
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn load_preferences(storage: &Storage) -> AppPreferences {
@@ -4123,6 +4461,7 @@ fn hotkey_config_from_preferences(preferences: &AppPreferences) -> platform::Hot
         rich_paste_hotkey: preferences.rich_paste_hotkey.clone(),
         search_hotkey: preferences.search_hotkey.clone(),
         private_mode_hotkey: preferences.private_mode_hotkey.clone(),
+        snippet_picker_hotkey: preferences.snippet_picker_hotkey.clone(),
     }
 }
 
@@ -4776,6 +5115,9 @@ impl eframe::App for ClipboardApp {
                 crate::ui::action_editor::EditorResult::Cancel => {}
             }
         }
+
+        self.draw_snippet_picker(ctx);
+        self.draw_snippet_variable_dialog(ctx);
 
         if self.last_cleanup.elapsed() >= CLEANUP_INTERVAL {
             self.last_cleanup = Instant::now();
