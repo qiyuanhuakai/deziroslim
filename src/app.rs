@@ -1,6 +1,6 @@
 use crate::clipboard::{self, ClipboardEvent};
 use crate::emoji_data::{ALL_TWEMOJI_EMOJIS, EMOJI_GROUPS, EmojiGroup};
-use crate::model::{ClipboardEntry, ClipboardEntrySummary, ClipboardKind};
+use crate::model::{ClipboardEntry, ClipboardEntrySummary, ClipboardKind, SelectionSource};
 use crate::platform;
 use crate::sound::{self, SoundEffect};
 use crate::storage::Storage;
@@ -428,6 +428,8 @@ struct AppPreferences {
     primary_selection_enabled: bool,
     #[serde(default)]
     primary_degraded: bool,
+    #[serde(default)]
+    source_filter: Option<SelectionSource>,
 
     // #10 fuzzy search
     #[serde(default = "default_search_mode")]
@@ -595,6 +597,7 @@ impl Default for AppPreferences {
             last_backup_at: None,
             primary_selection_enabled: true,
             primary_degraded: false,
+            source_filter: None,
             search_mode: "fuzzy".to_string(),
             secure_storage_enabled: false,
             kde_connect_enabled: false,
@@ -755,6 +758,7 @@ pub struct ClipboardApp {
     pub(crate) error_modal_message: String,
     pub(crate) primary_selection_enabled: bool,
     pub(crate) primary_degraded: bool,
+    source_filter: Option<SelectionSource>,
     pub(crate) search_mode: String,
     pub(crate) secure_storage_enabled: bool,
     pub(crate) kde_connect_enabled: bool,
@@ -991,6 +995,7 @@ impl ClipboardApp {
             last_backup_at: preferences.last_backup_at,
             primary_selection_enabled: preferences.primary_selection_enabled,
             primary_degraded: preferences.primary_degraded,
+            source_filter: preferences.source_filter,
             search_mode: preferences.search_mode,
             secure_storage_enabled: preferences.secure_storage_enabled,
             kde_connect_enabled: preferences.kde_connect_enabled,
@@ -1126,6 +1131,7 @@ impl ClipboardApp {
                 &self.query,
                 self.kind_filter.as_ref(),
                 active_tag_filter,
+                self.source_filter.as_ref(),
             );
             match entries {
                 Ok(entries) => {
@@ -2266,6 +2272,7 @@ impl ClipboardApp {
             last_backup_at: self.last_backup_at,
             primary_selection_enabled: self.primary_selection_enabled,
             primary_degraded: self.primary_degraded,
+            source_filter: self.source_filter.clone(),
             search_mode: self.search_mode.clone(),
             secure_storage_enabled: self.secure_storage_enabled,
             kde_connect_enabled: self.kde_connect_enabled,
@@ -2414,6 +2421,7 @@ impl ClipboardApp {
         self.last_backup_at = preferences.last_backup_at;
         self.primary_selection_enabled = preferences.primary_selection_enabled;
         self.primary_degraded = preferences.primary_degraded;
+        self.source_filter = preferences.source_filter;
         self.search_mode = preferences.search_mode;
         self.secure_storage_enabled = preferences.secure_storage_enabled;
         self.kde_connect_enabled = preferences.kde_connect_enabled;
@@ -2959,6 +2967,27 @@ impl ClipboardApp {
                     self.set_kind_filter(Some(kind));
                 }
             }
+            if self.primary_selection_enabled {
+                ui.add_space(4.0);
+                let src_all = self.source_filter.is_none();
+                if filter_chip(ui, t!("history.filter_all"), src_all, &self.theme).clicked() {
+                    self.source_filter = None;
+                    self.persist_preferences();
+                    self.refresh_entries();
+                }
+                let src_clip = self.source_filter.as_ref() == Some(&SelectionSource::Clipboard);
+                if filter_chip(ui, t!("settings.primary_selection.source_clipboard"), src_clip, &self.theme).clicked() {
+                    self.source_filter = Some(SelectionSource::Clipboard);
+                    self.persist_preferences();
+                    self.refresh_entries();
+                }
+                let src_pri = self.source_filter.as_ref() == Some(&SelectionSource::Primary);
+                if filter_chip(ui, t!("settings.primary_selection.source_primary"), src_pri, &self.theme).clicked() {
+                    self.source_filter = Some(SelectionSource::Primary);
+                    self.persist_preferences();
+                    self.refresh_entries();
+                }
+            }
         });
     }
 
@@ -3162,6 +3191,9 @@ impl ClipboardApp {
                                         );
                                         if !entry.source_app.trim().is_empty() {
                                             source_app_badge(ui, &entry.source_app, &self.theme);
+                                        }
+                                        if entry.source == SelectionSource::Primary {
+                                            primary_source_badge(ui, &self.theme);
                                         }
                                         kind_badge(ui, entry.kind.label(), &self.theme);
                                         if entry.is_pinned {
@@ -5843,6 +5875,22 @@ fn source_app_badge(ui: &mut egui::Ui, source: &str, theme: &MacosTokens) {
         })
         .show(ui, |ui| {
             ui.label(egui::RichText::new(label).size(10.5).color(theme.muted));
+        });
+}
+
+fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
+    egui::Frame::none()
+        .fill(theme.accent_soft)
+        .stroke(egui::Stroke::new(1.0, theme.accent))
+        .rounding(egui::Rounding::same(99.0))
+        .inner_margin(egui::Margin {
+            left: 7.0,
+            right: 7.0,
+            top: 3.0,
+            bottom: 3.0,
+        })
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new("\u{1F5B1} Primary").size(10.0).color(theme.accent));
         });
 }
 

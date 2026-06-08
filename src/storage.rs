@@ -395,7 +395,7 @@ impl Storage {
 
     #[allow(dead_code)]
     pub fn list(&self, query: &str) -> Result<Vec<ClipboardEntry>> {
-        self.list_filtered(query, None, None)
+        self.list_filtered(query, None, None, None)
     }
 
     #[allow(dead_code)]
@@ -404,9 +404,10 @@ impl Storage {
         query: &str,
         kind: Option<&ClipboardKind>,
         tag: Option<&str>,
+        source: Option<&SelectionSource>,
     ) -> Result<Vec<ClipboardEntry>> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
-        let (where_sql, values) = build_where_clause(query, kind, tag);
+        let (where_sql, values) = build_where_clause(query, kind, tag, source);
         let sql = format!(
             "SELECT h.id, h.content_type, h.content, h.html_content, h.source_app,
                 h.source_app_path, h.timestamp, h.preview, h.is_pinned, h.use_count,
@@ -438,9 +439,10 @@ impl Storage {
         query: &str,
         kind: Option<&ClipboardKind>,
         tag: Option<&str>,
+        source: Option<&SelectionSource>,
     ) -> Result<Vec<ClipboardEntrySummary>> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
-        let (where_sql, values) = build_where_clause(query, kind, tag);
+        let (where_sql, values) = build_where_clause(query, kind, tag, source);
         let sql = format!(
             "SELECT h.id, h.content_type, h.source_app, h.source_app_path, h.timestamp,
                 h.preview, h.is_pinned, h.use_count, h.is_external, h.pinned_order,
@@ -884,6 +886,7 @@ fn build_where_clause(
     query: &str,
     kind: Option<&ClipboardKind>,
     tag: Option<&str>,
+    source: Option<&SelectionSource>,
 ) -> (String, Vec<String>) {
     let mut sql = String::from("1 = 1");
     let mut values = Vec::new();
@@ -906,6 +909,10 @@ fn build_where_clause(
             " AND EXISTS (SELECT 1 FROM entry_tags ft WHERE ft.entry_id = h.id AND ft.tag = ?)",
         );
         values.push(tag.to_string());
+    }
+    if let Some(source) = source {
+        sql.push_str(" AND h.source = ?");
+        values.push(source.as_str().to_string());
     }
     (sql, values)
 }
@@ -1111,19 +1118,19 @@ mod tests {
             .expect("set url tag");
 
         let urls = storage
-            .list_filtered("", Some(&ClipboardKind::Url), None)
+            .list_filtered("", Some(&ClipboardKind::Url), None, None)
             .expect("filter url");
         assert_eq!(urls.len(), 1);
         assert_eq!(urls[0].kind, ClipboardKind::Url);
 
         let tagged_urls = storage
-            .list_filtered("", Some(&ClipboardKind::Url), Some("work"))
+            .list_filtered("", Some(&ClipboardKind::Url), Some("work"), None)
             .expect("filter url tag");
         assert_eq!(tagged_urls.len(), 1);
         assert_eq!(tagged_urls[0].content, "https://example.com");
 
         let missing = storage
-            .list_filtered("", Some(&ClipboardKind::Text), Some("work"))
+            .list_filtered("", Some(&ClipboardKind::Text), Some("work"), None)
             .expect("filter impossible combination");
         assert!(missing.is_empty());
     }
@@ -1193,7 +1200,7 @@ mod tests {
         storage.save_entry(&entry).expect("save image");
 
         let images = storage
-            .list_filtered("", Some(&ClipboardKind::Image), None)
+            .list_filtered("", Some(&ClipboardKind::Image), None, None)
             .expect("filter images");
         assert_eq!(images.len(), 1);
         assert_eq!(images[0].kind, ClipboardKind::Image);
@@ -1212,7 +1219,7 @@ mod tests {
         storage.save_entry(&entry).expect("save rich text");
 
         let rich = storage
-            .list_filtered("", Some(&ClipboardKind::RichText), None)
+            .list_filtered("", Some(&ClipboardKind::RichText), None, None)
             .expect("filter rich text");
         assert_eq!(rich.len(), 1);
         assert_eq!(rich[0].content, "Hello world");
@@ -1241,7 +1248,7 @@ mod tests {
         storage.save_entry(&second).expect("save second");
 
         let rich = storage
-            .list_filtered("", Some(&ClipboardKind::RichText), None)
+            .list_filtered("", Some(&ClipboardKind::RichText), None, None)
             .expect("filter rich text");
         assert_eq!(rich.len(), 2);
         assert!(rich
@@ -1264,7 +1271,7 @@ mod tests {
         storage.save_entry(&entry).expect("save file");
 
         let files = storage
-            .list_filtered("", Some(&ClipboardKind::File), None)
+            .list_filtered("", Some(&ClipboardKind::File), None, None)
             .expect("filter files");
         assert_eq!(files.len(), 1);
         assert!(files[0].is_external);
@@ -1352,7 +1359,7 @@ mod tests {
         let id = storage.save_entry(&entry).expect("save");
 
         let summaries = storage
-            .list_summaries_filtered("", Some(&ClipboardKind::Text), None)
+            .list_summaries_filtered("", Some(&ClipboardKind::Text), None, None)
             .expect("list summaries");
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].id, id);
@@ -1369,7 +1376,7 @@ mod tests {
         storage.save_entry(&entry).expect("save");
 
         let summaries = storage
-            .list_summaries_filtered("", None, None)
+            .list_summaries_filtered("", None, None, None)
             .expect("list summaries");
         assert_eq!(summaries.len(), 1);
         assert!(
@@ -1634,7 +1641,7 @@ mod tests {
         storage.save_entry(&entry).expect("save");
 
         let summaries = storage
-            .list_summaries_filtered("", None, None)
+            .list_summaries_filtered("", None, None, None)
             .expect("list summaries");
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].source, SelectionSource::Primary);

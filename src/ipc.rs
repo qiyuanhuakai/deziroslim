@@ -275,7 +275,7 @@ impl IpcServer {
             .map(ClipboardKind::from);
         let tag = args.get("tag").and_then(|v| v.as_str());
 
-        match storage.list_summaries_filtered(query, kind.as_ref(), tag) {
+        match storage.list_summaries_filtered(query, kind.as_ref(), tag, None) {
             Ok(entries) => IpcResponse::ok(serde_json::to_value(entries).unwrap_or_default()),
             Err(e) => IpcResponse::err(&IpcError::Storage(e.to_string())),
         }
