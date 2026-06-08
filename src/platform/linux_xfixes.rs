@@ -78,7 +78,6 @@ fn try_xfixes_session(
     primary_enabled: &Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (conn, screen_num) = x11rb::connect(None)?;
-    let conn = RustConnection::from_connection(conn)?;
     let screen = &conn.setup().roots[screen_num];
     let root = screen.root;
 

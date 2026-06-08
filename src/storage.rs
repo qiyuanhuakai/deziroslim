@@ -376,6 +376,27 @@ impl Storage {
         Ok(summaries)
     }
 
+    pub fn list_all_summaries(&self) -> Result<Vec<ClipboardEntrySummary>> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        let sql = "SELECT h.id, h.content_type, h.source_app, h.source_app_path, h.timestamp,
+                h.preview, h.is_pinned, h.use_count, h.is_external, h.pinned_order,
+                h.sensitive
+             FROM clipboard_history h
+             ORDER BY h.is_pinned DESC, h.pinned_order ASC, h.timestamp DESC LIMIT 300";
+        let mut stmt = conn.prepare(sql)?;
+        let mut summaries = stmt
+            .query_map([], row_to_summary)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let ids: Vec<i64> = summaries.iter().map(|s| s.id).collect();
+        let tags_by_id = fetch_tags_batch(&conn, &ids)?;
+        for summary in &mut summaries {
+            if let Some(tags) = tags_by_id.get(&summary.id) {
+                summary.tags = tags.clone();
+            }
+        }
+        Ok(summaries)
+    }
+
     pub fn get_entry(&self, id: i64) -> Result<Option<ClipboardEntry>> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
         let mut stmt = conn.prepare(

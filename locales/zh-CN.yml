@@ -378,6 +378,7 @@ settings:
     capture_enabled: "已启用主剪贴板捕获"
     capture_disabled: "已关闭主剪贴板捕获"
     content_label: "主剪贴板内容"
+    degraded_notice: "XFixes 不可用，Primary 以兼容模式（轮询）运行"
 
   search:
     title: "搜索设置"
@@ -699,6 +700,7 @@ status:
   font_fallback_not_found: "备用字体未找到：%{name}"
   hotkey_recording: "正在录制主快捷键，可按鼠标中键"
   rich_paste_clipboard_written: "已写入剪贴板，准备粘贴"
+  primary_degraded: "Primary 以兼容模式运行（XFixes 不可用）"
   dev_panel:
     title: "开发工具"
     run_mode: "运行模式：dev"

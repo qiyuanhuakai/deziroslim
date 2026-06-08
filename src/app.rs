@@ -1,4 +1,4 @@
-use crate::clipboard::{self, ClipboardEvent, PrimaryEchoGuard};
+use crate::clipboard::{self, ClipboardEvent};
 use crate::emoji_data::{ALL_TWEMOJI_EMOJIS, EMOJI_GROUPS, EmojiGroup};
 use crate::model::{ClipboardEntry, ClipboardEntrySummary, ClipboardKind};
 use crate::platform;
@@ -754,6 +754,7 @@ pub struct ClipboardApp {
     pub(crate) action_command_allowlist: String,
     action_matcher: crate::actions::matcher::ActionMatcher,
     entry_matching_actions: HashMap<i64, Vec<crate::actions::Action>>,
+    search_hits: HashMap<i64, Vec<usize>>,
     action_executor: crate::actions::executor::ActionExecutor,
     pub(crate) actions_popover: crate::ui::toolbar_actions::ActionsPopover,
     pub(crate) pending_toolbar_action: Option<crate::actions::Action>,
@@ -969,6 +970,7 @@ impl ClipboardApp {
             action_command_allowlist: preferences.action_command_allowlist.clone(),
             action_matcher: crate::actions::matcher::ActionMatcher::new(loaded_actions),
             entry_matching_actions: HashMap::new(),
+            search_hits: HashMap::new(),
             action_executor: {
                 let exec = crate::actions::executor::ActionExecutor::new();
                 let allowlist: Vec<String> = preferences
@@ -1043,35 +1045,68 @@ impl ClipboardApp {
     }
 
     pub(crate) fn refresh_entries(&mut self) {
+        self.search_hits.clear();
         let active_tag_filter = self
             .tag_filter
             .as_deref()
             .filter(|_| self.tag_manager_enabled);
-        let entries = self.storage.list_summaries_filtered(
-            &self.query,
-            self.kind_filter.as_ref(),
-            active_tag_filter,
-        );
-        match entries {
-            Ok(entries) => {
-                self.entries = entries;
-                self.full_entry_cache.borrow_mut().clear();
-                let visible_ids = self
-                    .entries
-                    .iter()
-                    .map(|entry| entry.id)
-                    .collect::<BTreeSet<_>>();
-                self.rich_preview_cache
-                    .retain(|id, _| visible_ids.contains(id));
-                self.image_textures.retain(|id, _| visible_ids.contains(id));
-                self.ensure_selection();
-                self.rebuild_entry_matching_actions();
+        let use_fuzzy = self.search_mode == "fuzzy" && !self.query.trim().is_empty();
+        if use_fuzzy {
+            match self.storage.list_all_summaries() {
+                Ok(all_entries) => {
+                    let filtered: Vec<_> = all_entries
+                        .into_iter()
+                        .filter(|e| {
+                            self.kind_filter.as_ref().map_or(true, |k| &e.kind == k)
+                                && active_tag_filter
+                                    .map_or(true, |t| e.tags.iter().any(|et| et == t))
+                        })
+                        .collect();
+                    let engine = crate::search::engine_for_mode(&self.search_mode);
+                    let hits = engine.search(&self.query, &filtered);
+                    self.search_hits = hits
+                        .iter()
+                        .map(|h| (h.entry.id, h.matched_indices.clone()))
+                        .collect();
+                    self.entries = hits.into_iter().map(|h| h.entry).collect();
+                    self.finish_refresh_entries();
+                }
+                Err(err) => {
+                    self.status = format!("{}: {err}", t!("history.load_failed"));
+                }
             }
-            Err(err) => self.status = format!("{}: {err}", t!("history.load_failed")),
+        } else {
+            let entries = self.storage.list_summaries_filtered(
+                &self.query,
+                self.kind_filter.as_ref(),
+                active_tag_filter,
+            );
+            match entries {
+                Ok(entries) => {
+                    self.entries = entries;
+                    self.finish_refresh_entries();
+                }
+                Err(err) => self.status = format!("{}: {err}", t!("history.load_failed")),
+            }
         }
     }
 
-    fn rebuild_entry_matching_actions(&mut self) {
+    fn finish_refresh_entries(&mut self) {
+        self.full_entry_cache.borrow_mut().clear();
+        let visible_ids = self
+            .entries
+            .iter()
+            .map(|entry| entry.id)
+            .collect::<BTreeSet<_>>();
+        self.rich_preview_cache
+            .retain(|id, _| visible_ids.contains(id));
+        self.image_textures.retain(|id, _| visible_ids.contains(id));
+        self.ensure_selection();
+        self.rebuild_entry_matching_actions();
+    }
+
+
+        fn rebuild_entry_matching_actions(&mut self) {
         self.action_matcher = crate::actions::matcher::ActionMatcher::new(self.actions.clone());
         self.entry_matching_actions.clear();
         for entry in &self.entries {
@@ -3000,18 +3035,22 @@ impl ClipboardApp {
                         if self.compact_rows {
                             ui.horizontal_wrapped(|ui| {
                                 ui.spacing_mut().item_spacing = egui::vec2(5.0, 2.0);
-                                ui.add(
-                                    egui::Label::new(
-                                        egui::RichText::new(text).size(12.5).monospace().color(
-                                            if sensitive && !self.show_sensitive {
-                                                self.theme.muted
-                                            } else {
-                                                self.theme.fg
-                                            },
-                                        ),
-                                    )
-                                    .truncate(),
-                                );
+                                let text_color = if sensitive && !self.show_sensitive {
+                                    self.theme.muted
+                                } else {
+                                    self.theme.fg
+                                };
+                                let match_indices = self.search_hits.get(&entry.id);
+                                if let Some(indices) = match_indices {
+                                    if !indices.is_empty() && !sensitive {
+                                        render_highlighted_text(ui, &text, indices, 12.5, text_color, &self.theme);
+                                    } else {
+                                        ui.add(egui::Label::new(egui::RichText::new(text).size(12.5).monospace().color(text_color)).truncate());
+                                    }
+                                } else {
+                                    ui.add(egui::Label::new(egui::RichText::new(text).size(12.5).monospace().color(text_color)).truncate());
+                                }
+
                                 if self.tag_manager_enabled {
                                     for tag in &entry.tags {
                                         tag_chip(ui, tag, &self.theme);
@@ -3051,18 +3090,22 @@ impl ClipboardApp {
                                 );
                                 ui.add_space(action_width);
                             });
-                            ui.add(
-                                egui::Label::new(
-                                    egui::RichText::new(text).size(13.5).monospace().color(
-                                        if sensitive && !self.show_sensitive {
-                                            self.theme.muted
-                                        } else {
-                                            self.theme.fg
-                                        },
-                                    ),
-                                )
-                                .truncate(),
-                            );
+                            let text_color = if sensitive && !self.show_sensitive {
+                                self.theme.muted
+                            } else {
+                                self.theme.fg
+                            };
+                            let match_indices = self.search_hits.get(&entry.id);
+                            if let Some(indices) = match_indices {
+                                if !indices.is_empty() && !sensitive {
+                                    render_highlighted_text(ui, &text, indices, 13.5, text_color, &self.theme);
+                                } else {
+                                    ui.add(egui::Label::new(egui::RichText::new(text).size(13.5).monospace().color(text_color)).truncate());
+                                }
+                            } else {
+                                ui.add(egui::Label::new(egui::RichText::new(text).size(13.5).monospace().color(text_color)).truncate());
+                            }
+
                             if self.tag_manager_enabled && !entry.tags.is_empty() {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.spacing_mut().item_spacing.y = 2.0;
@@ -4875,6 +4918,49 @@ fn parse_tags(value: &str) -> Vec<String> {
         .filter(|tag| !tag.is_empty())
         .map(ToOwned::to_owned)
         .collect()
+}
+
+fn render_highlighted_text(
+    ui: &mut egui::Ui,
+    text: &str,
+    match_indices: &[usize],
+    font_size: f32,
+    base_color: egui::Color32,
+    theme: &MacosTokens,
+) {
+    let highlight_bg = egui::Color32::from_rgba_unmultiplied(
+        theme.accent.r(), theme.accent.g(), theme.accent.b(), 50,
+    );
+    let highlight_fg = theme.accent;
+    let highlight_set: std::collections::HashSet<usize> = match_indices.iter().copied().collect();
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+        let mut segment_start = 0;
+        let mut in_highlight = false;
+        for (byte_idx, _) in text.char_indices() {
+            let is_match = highlight_set.contains(&byte_idx);
+            if is_match != in_highlight && byte_idx > segment_start {
+                let segment = &text[segment_start..byte_idx];
+                let (fg, bg) = if in_highlight {
+                    (highlight_fg, highlight_bg)
+                } else {
+                    (base_color, egui::Color32::TRANSPARENT)
+                };
+                ui.add(egui::Label::new(egui::RichText::new(segment).size(font_size).monospace().color(fg).background_color(bg)).truncate());
+                segment_start = byte_idx;
+            }
+            in_highlight = is_match;
+        }
+        if segment_start < text.len() {
+            let segment = &text[segment_start..];
+            let (fg, bg) = if in_highlight {
+                (highlight_fg, highlight_bg)
+            } else {
+                (base_color, egui::Color32::TRANSPARENT)
+            };
+            ui.add(egui::Label::new(egui::RichText::new(segment).size(font_size).monospace().color(fg).background_color(bg)).truncate());
+        }
+    });
 }
 
 fn search_box(

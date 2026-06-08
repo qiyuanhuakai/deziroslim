@@ -364,6 +364,7 @@ settings:
     capture_enabled: "Primary selection capture enabled"
     capture_disabled: "Primary selection capture disabled"
     content_label: "Primary selection content"
+    degraded_notice: "XFixes unavailable; primary selection running in polling compatibility mode"
 
   search:
     title: "Search Settings"
@@ -676,6 +677,7 @@ status:
   font_fallback_not_found: "Fallback font not found: %{name}"
   hotkey_recording: "Recording main hotkey, middle mouse button allowed"
   rich_paste_clipboard_written: "Written to clipboard, ready to paste"
+  primary_degraded: "Primary selection running in compatibility mode (XFixes unavailable)"
   dev_panel:
     title: "Developer tools"
     run_mode: "Run mode: dev"
