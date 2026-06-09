@@ -45,7 +45,6 @@ pub enum SyncState {
 #[cfg(feature = "kde_connect")]
 #[derive(Debug)]
 enum SyncCmd {
-    Enable,
     Disable,
     Pair(String),
     Unpair(String),
@@ -329,7 +328,7 @@ impl ClipboardPlugin {
 /// Prevents feedback loop: suppresses local clipboard re-capture after a remote write.
 #[cfg(feature = "kde_connect")]
 #[derive(Clone)]
-pub(crate) struct SyncEchoGuard {
+pub struct SyncEchoGuard {
     inner: Arc<std::sync::Mutex<(String, Option<std::time::Instant>)>>,
 }
 
@@ -358,6 +357,13 @@ impl SyncEchoGuard {
 }
 
 #[cfg(feature = "kde_connect")]
+impl Default for SyncEchoGuard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "kde_connect")]
 fn content_hash(content: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -366,7 +372,7 @@ fn content_hash(content: &str) -> String {
 }
 
 #[cfg(feature = "kde_connect")]
-pub(crate) struct TiezClipboardPlugin {
+pub struct TiezClipboardPlugin {
     echo_guard: SyncEchoGuard,
     event_tx: crossbeam_channel::Sender<SyncEvent>,
 }
@@ -676,7 +682,6 @@ fn sync_runtime(
                 }
                 cmd = tokio_cmd_rx.recv() => {
                     match cmd {
-                        Some(SyncCmd::Enable) => {}
                         Some(SyncCmd::Disable) => break,
                         Some(SyncCmd::Pair(peer_id)) => {
                             device.pair_with(&peer_id).await;
@@ -782,6 +787,11 @@ fn load_or_create_device_id(storage: &Storage) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "kde_connect")]
+    use super::*;
+    #[cfg(feature = "kde_connect")]
+    use crate::storage::Storage;
+
     #[test]
     #[cfg(feature = "kde_connect")]
     fn test_load_or_create_device_id_persists() {
@@ -814,12 +824,12 @@ mod tests {
         mgr.state = SyncState::Pairing {
             device_name: "Phone".into(),
         };
-        assert!(matches!(&*mgr.state(), SyncState::Pairing { .. }));
+        assert!(matches!(mgr.state(), SyncState::Pairing { .. }));
 
         mgr.state = SyncState::Connected {
             device_name: "Phone".into(),
         };
-        assert!(matches!(&*mgr.state(), SyncState::Connected { .. }));
+        assert!(matches!(mgr.state(), SyncState::Connected { .. }));
     }
 
     #[test]

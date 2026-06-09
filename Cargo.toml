@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [features]
-default = []
+default = ["kde_connect"]
 devtools = ["log-miss-tr"]
 log-miss-tr = ["rust-i18n/log-miss-tr", "dep:log", "dep:env_logger"]
 secure_storage = ["aes-gcm", "keyring", "base64", "getrandom"]
