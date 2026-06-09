@@ -3,3 +3,7 @@ rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 [target.aarch64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[alias]
+ci = "run --bin tiez-slim-linux -- ci"
+dev = "run --bin tiez-slim-linux -- dev"
