@@ -1,7 +1,7 @@
 use crate::actions::executor::ActionExecutor;
 use crate::actions::matcher::ActionMatcher;
 use crate::blacklist::AppBlacklist;
-use crate::model::{ClipboardEntry, ClipboardKind, SelectionSource};
+use crate::model::{ClipboardEntry, ClipboardKind};
 use crate::platform;
 use crate::storage::Storage;
 use arboard::Clipboard;
@@ -84,7 +84,7 @@ pub fn start_watcher(
     private_mode: Arc<AtomicBool>,
     storage: Storage,
     builtin_actions_enabled: bool,
-    echo_guard: PrimaryEchoGuard,
+    _echo_guard: PrimaryEchoGuard,
 ) {
     thread::Builder::new()
         .name("clipboard-watcher".to_string())
@@ -95,7 +95,7 @@ pub fn start_watcher(
                 private_mode,
                 storage,
                 builtin_actions_enabled,
-                echo_guard,
+                _echo_guard,
             )
         })
         .expect("spawn clipboard watcher");
@@ -208,7 +208,7 @@ fn watch_loop(
     private_mode: Arc<AtomicBool>,
     storage: Storage,
     builtin_actions_enabled: bool,
-    echo_guard: PrimaryEchoGuard,
+    _echo_guard: PrimaryEchoGuard,
 ) {
     let blacklist = AppBlacklist::new(exclusion_patterns);
     let action_matcher = if builtin_actions_enabled {
@@ -221,7 +221,6 @@ fn watch_loop(
     let mut last_image_fingerprint = String::new();
     let mut last_html_fingerprint = String::new();
     let mut last_file_fingerprint = String::new();
-    let mut last_primary_text = String::new();
     // Keep a single arboard::Clipboard instance across iterations; constructing
     // one is expensive (X11/GTK init). Recreate only when every probe fails,
     // which signals the underlying connection is broken.
@@ -334,30 +333,6 @@ fn watch_loop(
                     }
                 }
             }
-
-            if let Some(primary_text) = read_primary_text() {
-                let primary_hash = string_fingerprint(&primary_text);
-                if primary_text != last_primary_text && !echo_guard.should_suppress(&primary_hash) {
-                    let entry = ClipboardEntry::captured_text_with_source(
-                        primary_text.clone(),
-                        platform::active_app_name(),
-                        Some(SelectionSource::Primary),
-                    );
-                    let sent_or_skipped = match entry {
-                        Some(e) => sender.try_send(ClipboardEvent::Captured(e)).is_ok(),
-                        None => true,
-                    };
-                    if sent_or_skipped {
-                        last_primary_text = primary_text;
-                        if builtin_actions_enabled
-                            && let Some(matched) =
-                                action_matcher.find_first_auto_trigger_primary(&last_primary_text)
-                        {
-                            action_executor.execute_async(&matched.action, &last_primary_text);
-                        }
-                    }
-                }
-            }
         }
         if !handled {
             clipboard = None;
@@ -377,7 +352,7 @@ fn image_fingerprint(width: usize, height: usize, bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn string_fingerprint(value: &str) -> String {
+pub(crate) fn string_fingerprint(value: &str) -> String {
     if value.is_empty() {
         return String::new();
     }

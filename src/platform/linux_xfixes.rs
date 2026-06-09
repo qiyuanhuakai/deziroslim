@@ -5,7 +5,7 @@
 //! Falls back to xclip polling when XFixes is unavailable or the
 //! connection drops.
 
-use crate::clipboard::ClipboardEvent;
+use crate::clipboard::{ClipboardEvent, PrimaryEchoGuard, string_fingerprint};
 use crate::model::{ClipboardEntry, SelectionSource};
 use crate::platform;
 use crossbeam_channel::Sender;
@@ -35,31 +35,39 @@ impl XFixesProbe {
     }
 }
 
-pub fn start_primary_watcher(sender: Sender<ClipboardEvent>, primary_enabled: Arc<AtomicBool>) {
+pub fn start_primary_watcher(
+    sender: Sender<ClipboardEvent>,
+    primary_enabled: Arc<AtomicBool>,
+    echo_guard: PrimaryEchoGuard,
+) {
     thread::Builder::new()
         .name("primary-watcher".to_string())
         .spawn(move || {
             if XFixesProbe::is_available() {
                 eprintln!("primary_watcher: XFixes event mode");
-                run_xfixes_loop(&sender, &primary_enabled);
+                run_xfixes_loop(&sender, &primary_enabled, &echo_guard);
             } else {
                 eprintln!("primary_watcher: degraded to arboard polling");
                 let _ = sender.try_send(ClipboardEvent::Status(
                     t!("status.primary_degraded").to_string(),
                 ));
-                run_polling_loop(&sender, &primary_enabled);
+                run_polling_loop(&sender, &primary_enabled, &echo_guard);
             }
         })
         .expect("spawn primary watcher");
 }
 
-fn run_xfixes_loop(sender: &Sender<ClipboardEvent>, primary_enabled: &Arc<AtomicBool>) {
+fn run_xfixes_loop(
+    sender: &Sender<ClipboardEvent>,
+    primary_enabled: &Arc<AtomicBool>,
+    echo_guard: &PrimaryEchoGuard,
+) {
     loop {
         if !primary_enabled.load(Ordering::Acquire) {
             thread::sleep(Duration::from_millis(500));
             continue;
         }
-        match try_xfixes_session(sender, primary_enabled) {
+        match try_xfixes_session(sender, primary_enabled, echo_guard) {
             Ok(()) => return,
             Err(err) => {
                 eprintln!("primary_watcher: XFixes session error: {err}, retrying in 2s");
@@ -72,6 +80,7 @@ fn run_xfixes_loop(sender: &Sender<ClipboardEvent>, primary_enabled: &Arc<Atomic
 fn try_xfixes_session(
     sender: &Sender<ClipboardEvent>,
     primary_enabled: &Arc<AtomicBool>,
+    echo_guard: &PrimaryEchoGuard,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (conn, screen_num) = x11rb::connect(None)?;
     let screen = &conn.setup().roots[screen_num];
@@ -111,15 +120,9 @@ fn try_xfixes_session(
 
                 if let Some(text) = read_primary_text()
                     && text != last_text
+                    && capture_primary_text(sender, echo_guard, &text)
                 {
-                    last_text = text.clone();
-                    if let Some(entry) = ClipboardEntry::captured_text_with_source(
-                        text,
-                        platform::active_app_name(),
-                        Some(SelectionSource::Primary),
-                    ) {
-                        let _ = sender.try_send(ClipboardEvent::Captured(entry));
-                    }
+                    last_text = text;
                 }
             }
             None => {
@@ -129,7 +132,11 @@ fn try_xfixes_session(
     }
 }
 
-fn run_polling_loop(sender: &Sender<ClipboardEvent>, primary_enabled: &Arc<AtomicBool>) {
+fn run_polling_loop(
+    sender: &Sender<ClipboardEvent>,
+    primary_enabled: &Arc<AtomicBool>,
+    echo_guard: &PrimaryEchoGuard,
+) {
     let mut last_text = String::new();
     loop {
         if !primary_enabled.load(Ordering::Acquire) {
@@ -138,18 +145,31 @@ fn run_polling_loop(sender: &Sender<ClipboardEvent>, primary_enabled: &Arc<Atomi
         }
         if let Some(text) = read_primary_text()
             && text != last_text
+            && capture_primary_text(sender, echo_guard, &text)
         {
-            last_text = text.clone();
-            if let Some(entry) = ClipboardEntry::captured_text_with_source(
-                text,
-                platform::active_app_name(),
-                Some(SelectionSource::Primary),
-            ) {
-                let _ = sender.try_send(ClipboardEvent::Captured(entry));
-            }
+            last_text = text;
         }
         thread::sleep(POLL_INTERVAL);
     }
+}
+
+fn capture_primary_text(
+    sender: &Sender<ClipboardEvent>,
+    echo_guard: &PrimaryEchoGuard,
+    text: &str,
+) -> bool {
+    let fingerprint = string_fingerprint(text);
+    if echo_guard.should_suppress(&fingerprint) {
+        return false;
+    }
+    let Some(entry) = ClipboardEntry::captured_text_with_source(
+        text.to_string(),
+        platform::active_app_name(),
+        Some(SelectionSource::Primary),
+    ) else {
+        return true;
+    };
+    sender.try_send(ClipboardEvent::Captured(entry)).is_ok()
 }
 
 fn read_primary_text() -> Option<String> {

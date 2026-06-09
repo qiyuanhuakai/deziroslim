@@ -30,11 +30,15 @@ const APP_REPO_URL: &str = "https://github.com/qiyuanhuakai/tiez-slim-linux";
 const PREFERENCES_KEY: &str = "ui.tiez_slim_linux";
 const LEGACY_PREFERENCES_KEY: &str = "ui.native_tiez";
 const EMOJI_FAVORITES_KEY: &str = "app.emoji_favorites";
+const SETTINGS_PANEL_COUNT: usize = 12;
 const HISTORY_MAX_WIDTH: f32 = 560.0;
 const DEFAULT_WINDOW_SIZE: egui::Vec2 = egui::vec2(480.0, 680.0);
 const MIN_NORMAL_WINDOW_SIZE: egui::Vec2 = egui::vec2(320.0, 400.0);
 const RESIZE_HIT_SIZE: f32 = 8.0;
 const CARD_ACTION_WIDTH: f32 = 120.0;
+const CARD_TAG_RESERVED_ACTION_WIDTH: f32 = CARD_ACTION_WIDTH + 12.0;
+const COMPACT_CARD_TAG_LIMIT: usize = 2;
+const REGULAR_CARD_TAG_LIMIT: usize = 5;
 const TOOLBAR_BUTTON_SIZE: f32 = 32.0;
 const TOOLBAR_ICON_SIZE: f32 = 16.0;
 const TOOLBAR_BUTTON_RADIUS: f32 = 9.0;
@@ -50,6 +54,7 @@ const ENTRY_PREVIEW_HOVER_DELAY: Duration = Duration::from_millis(650);
 const SEARCH_BOX_SCROLL_THRESHOLD: f32 = 8.0;
 const SEARCH_BOX_SCROLL_GATE_DELAY: Duration = Duration::from_millis(450);
 const FORCE_HISTORY_TOP_DURATION: Duration = Duration::from_millis(260);
+const SEARCH_REFRESH_DEBOUNCE: Duration = Duration::from_millis(120);
 const EVENT_CHANNEL_CAPACITY: usize = 100;
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(6 * 3600);
 const ACTIVITY_REPAINT_WINDOW: Duration = Duration::from_millis(500);
@@ -478,7 +483,15 @@ fn default_privacy_protection_kinds() -> Vec<String> {
 }
 
 fn default_settings_panel_collapsed() -> Vec<bool> {
-    vec![false; 12]
+    vec![false; SETTINGS_PANEL_COUNT]
+}
+
+fn normalize_settings_panel_collapsed(collapsed: &mut Vec<bool>) {
+    if collapsed.len() < SETTINGS_PANEL_COUNT {
+        collapsed.resize(SETTINGS_PANEL_COUNT, false);
+    } else if collapsed.len() > SETTINGS_PANEL_COUNT {
+        collapsed.truncate(SETTINGS_PANEL_COUNT);
+    }
 }
 
 fn default_color_mode() -> String {
@@ -526,7 +539,7 @@ fn default_secure_storage_enabled() -> bool {
 }
 
 fn default_kde_connect_enabled() -> bool {
-    false
+    true
 }
 
 fn default_kde_connect_device_name() -> String {
@@ -600,7 +613,7 @@ impl Default for AppPreferences {
             source_filter: None,
             search_mode: "fuzzy".to_string(),
             secure_storage_enabled: false,
-            kde_connect_enabled: false,
+            kde_connect_enabled: true,
             kde_connect_device_id: None,
             kde_connect_device_name: "tiez-slim-linux".to_string(),
             sync_enabled: false,
@@ -632,6 +645,7 @@ pub struct ClipboardApp {
     preview_hover_id: Option<i64>,
     preview_hover_since: Option<Instant>,
     query: String,
+    pending_search_refresh_at: Option<Instant>,
     pub(crate) status: String,
     last_activity: Instant,
     last_cleanup: Instant,
@@ -832,7 +846,11 @@ impl ClipboardApp {
             echo_guard.clone(),
         );
         let primary_enabled = Arc::new(AtomicBool::new(preferences.primary_selection_enabled));
-        platform::start_primary_watcher(sender.clone(), Arc::clone(&primary_enabled));
+        platform::start_primary_watcher(
+            sender.clone(),
+            Arc::clone(&primary_enabled),
+            echo_guard.clone(),
+        );
         let hotkey_handle = platform::start_hotkey_listener(
             sender.clone(),
             cc.egui_ctx.clone(),
@@ -874,6 +892,7 @@ impl ClipboardApp {
             preview_hover_id: None,
             preview_hover_since: None,
             query: String::new(),
+            pending_search_refresh_at: None,
             last_activity: Instant::now(),
             last_cleanup: Instant::now(),
             status: platform::platform_note().to_string(),
@@ -1097,6 +1116,7 @@ impl ClipboardApp {
     }
 
     pub(crate) fn refresh_entries(&mut self) {
+        self.pending_search_refresh_at = None;
         self.search_hits.clear();
         let active_tag_filter = self
             .tag_filter
@@ -1140,6 +1160,24 @@ impl ClipboardApp {
                 }
                 Err(err) => self.status = format!("{}: {err}", t!("history.load_failed")),
             }
+        }
+    }
+
+    fn schedule_search_refresh(&mut self, ctx: &egui::Context) {
+        let due_at = Instant::now() + SEARCH_REFRESH_DEBOUNCE;
+        self.pending_search_refresh_at = Some(due_at);
+        ctx.request_repaint_after(SEARCH_REFRESH_DEBOUNCE);
+    }
+
+    fn process_pending_search_refresh(&mut self, ctx: &egui::Context) {
+        let Some(due_at) = self.pending_search_refresh_at else {
+            return;
+        };
+        let now = Instant::now();
+        if now >= due_at {
+            self.refresh_entries();
+        } else {
+            ctx.request_repaint_after(due_at.saturating_duration_since(now));
         }
     }
 
@@ -2900,7 +2938,7 @@ impl ClipboardApp {
                                     self.focus_search = false;
                                 }
                                 if search.changed() {
-                                    self.refresh_entries();
+                                    self.schedule_search_refresh(ctx);
                                 }
                                 if !self.query.is_empty()
                                     && toolbar_button(
@@ -2956,51 +2994,63 @@ impl ClipboardApp {
     }
 
     fn draw_type_filters(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            let all_selected = self.kind_filter.is_none();
-            if filter_chip(ui, t!("history.filter_all"), all_selected, &self.theme).clicked() {
-                self.set_kind_filter(None);
-            }
-            for kind in ClipboardKind::ALL {
-                let selected = self.kind_filter.as_ref() == Some(&kind);
-                if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
-                    self.set_kind_filter(Some(kind));
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 3.0;
+            ui.horizontal_wrapped(|ui| {
+                let all_selected = self.kind_filter.is_none();
+                if filter_chip(ui, t!("history.filter_all"), all_selected, &self.theme).clicked() {
+                    self.set_kind_filter(None);
                 }
-            }
+                for kind in ClipboardKind::ALL.iter().take(3).cloned() {
+                    let selected = self.kind_filter.as_ref() == Some(&kind);
+                    if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
+                        self.set_kind_filter(Some(kind));
+                    }
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                for kind in ClipboardKind::ALL.iter().skip(3).cloned() {
+                    let selected = self.kind_filter.as_ref() == Some(&kind);
+                    if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
+                        self.set_kind_filter(Some(kind));
+                    }
+                }
+            });
             if self.primary_selection_enabled {
-                ui.add_space(4.0);
-                let src_all = self.source_filter.is_none();
-                if filter_chip(ui, t!("history.filter_all"), src_all, &self.theme).clicked() {
-                    self.source_filter = None;
-                    self.persist_preferences();
-                    self.refresh_entries();
-                }
-                let src_clip = self.source_filter.as_ref() == Some(&SelectionSource::Clipboard);
-                if filter_chip(
-                    ui,
-                    t!("settings.primary_selection.source_clipboard"),
-                    src_clip,
-                    &self.theme,
-                )
-                .clicked()
-                {
-                    self.source_filter = Some(SelectionSource::Clipboard);
-                    self.persist_preferences();
-                    self.refresh_entries();
-                }
-                let src_pri = self.source_filter.as_ref() == Some(&SelectionSource::Primary);
-                if filter_chip(
-                    ui,
-                    t!("settings.primary_selection.source_primary"),
-                    src_pri,
-                    &self.theme,
-                )
-                .clicked()
-                {
-                    self.source_filter = Some(SelectionSource::Primary);
-                    self.persist_preferences();
-                    self.refresh_entries();
-                }
+                ui.horizontal_wrapped(|ui| {
+                    let src_all = self.source_filter.is_none();
+                    if filter_chip(ui, t!("history.filter_all"), src_all, &self.theme).clicked() {
+                        self.source_filter = None;
+                        self.persist_preferences();
+                        self.refresh_entries();
+                    }
+                    let src_clip = self.source_filter.as_ref() == Some(&SelectionSource::Clipboard);
+                    if filter_chip(
+                        ui,
+                        t!("settings.primary_selection.source_clipboard"),
+                        src_clip,
+                        &self.theme,
+                    )
+                    .clicked()
+                    {
+                        self.source_filter = Some(SelectionSource::Clipboard);
+                        self.persist_preferences();
+                        self.refresh_entries();
+                    }
+                    let src_pri = self.source_filter.as_ref() == Some(&SelectionSource::Primary);
+                    if filter_chip(
+                        ui,
+                        t!("settings.primary_selection.source_primary"),
+                        src_pri,
+                        &self.theme,
+                    )
+                    .clicked()
+                    {
+                        self.source_filter = Some(SelectionSource::Primary);
+                        self.persist_preferences();
+                        self.refresh_entries();
+                    }
+                });
             }
         });
     }
@@ -3183,9 +3233,12 @@ impl ClipboardApp {
                                 }
 
                                 if self.tag_manager_enabled {
-                                    for tag in &entry.tags {
-                                        tag_chip(ui, tag, &self.theme);
-                                    }
+                                    limited_tag_chips(
+                                        ui,
+                                        &entry.tags,
+                                        &self.theme,
+                                        COMPACT_CARD_TAG_LIMIT,
+                                    );
                                 }
                             });
                         } else {
@@ -3264,12 +3317,21 @@ impl ClipboardApp {
                             }
 
                             if self.tag_manager_enabled && !entry.tags.is_empty() {
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.spacing_mut().item_spacing.y = 2.0;
-                                    for tag in &entry.tags {
-                                        tag_chip(ui, tag, &self.theme);
-                                    }
-                                });
+                                let tag_width = (ui.available_width()
+                                    - CARD_TAG_RESERVED_ACTION_WIDTH)
+                                    .max(120.0);
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(tag_width, 24.0),
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        limited_tag_chips(
+                                            ui,
+                                            &entry.tags,
+                                            &self.theme,
+                                            REGULAR_CARD_TAG_LIMIT,
+                                        );
+                                    },
+                                );
                             }
                         }
                     });
@@ -3869,6 +3931,7 @@ impl ClipboardApp {
             .clicked()
             {
                 self.emoji_tab = EmojiTab::Favorites;
+                self.refresh_emoji_favorites_from_disk();
                 self.persist_preferences();
             }
         });
@@ -3955,7 +4018,6 @@ impl ClipboardApp {
                     });
             }
             EmojiTab::Favorites => {
-                self.refresh_emoji_favorites_from_disk();
                 self.handle_emoji_favorite_drops(ui.ctx());
                 ui.horizontal_wrapped(|ui| {
                     if ui.button(t!("emoji.add_favorite")).clicked() {
@@ -4474,6 +4536,8 @@ fn load_preferences(storage: &Storage) -> AppPreferences {
         .unwrap_or_default();
     preferences.persistent = true;
     preferences.sound_volume = preferences.sound_volume.min(100);
+    normalize_settings_panel_collapsed(&mut preferences.settings_panel_collapsed);
+    preferences.kde_connect_enabled = true;
     preferences
 }
 
@@ -5055,6 +5119,7 @@ impl eframe::App for ClipboardApp {
         self.handle_shortcuts(ctx);
         self.handle_search_box_scroll(ctx);
         self.drain_events(ctx);
+        self.process_pending_search_refresh(ctx);
         self.process_pending_paste(ctx);
         // Sample the pointer once per frame so edge-docking doesn't reissue
         // the X11 query for every internal check.
@@ -5468,8 +5533,17 @@ fn search_box(
         .inner
 }
 
+fn limited_tag_chips(ui: &mut egui::Ui, tags: &[String], theme: &MacosTokens, limit: usize) {
+    for tag in tags.iter().take(limit) {
+        tag_chip(ui, tag, theme);
+    }
+    if tags.len() > limit {
+        tag_chip(ui, &format!("+{}", tags.len() - limit), theme);
+    }
+}
+
 fn tag_chip(ui: &mut egui::Ui, tag: &str, theme: &MacosTokens) {
-    let label = clipped_chip_label(tag, 18);
+    let label = clipped_chip_label(tag, 12);
     egui::Frame::none()
         .fill(theme.accent_soft)
         .rounding(egui::Rounding::same(99.0))

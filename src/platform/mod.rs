@@ -252,6 +252,7 @@ pub fn active_window_class() -> Option<String> {
 pub fn start_primary_watcher(
     _sender: crossbeam_channel::Sender<crate::clipboard::ClipboardEvent>,
     _primary_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    _echo_guard: crate::clipboard::PrimaryEchoGuard,
 ) {
     // Primary selection is X11/Linux-only; no-op on other platforms.
 }
