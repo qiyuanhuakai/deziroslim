@@ -12,6 +12,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::Duration;
 use x11rb::connection::Connection;
@@ -25,6 +27,7 @@ x11rb::atom_manager! {
         _NET_ACTIVE_WINDOW,
         _NET_WM_NAME,
         WM_NAME,
+        WM_CLASS,
         UTF8_STRING,
     }
 }
@@ -228,11 +231,12 @@ pub fn start_tray(
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
     enabled: bool,
+    private_mode: Arc<AtomicBool>,
 ) -> Option<TrayHandle> {
     if !enabled {
         return None;
     }
-    match start_status_notifier(sender.clone(), ctx.clone()) {
+    match start_status_notifier(sender.clone(), ctx.clone(), private_mode) {
         Ok(handle) => Some(TrayHandle::new(move || handle.shutdown().wait())),
         Err(err) => {
             let _ = sender.send(ClipboardEvent::Status(
@@ -359,6 +363,12 @@ mod tests {
         assert_eq!(geometry.y, -120.0);
         assert_eq!(geometry.width, 1920.0);
         assert_eq!(geometry.height, 1080.0);
+    }
+
+    #[test]
+    fn active_window_class_returns_option_without_panic() {
+        // In headless CI (no DISPLAY) this returns None; in X11 it returns Some.
+        let _result = super::active_window_class();
     }
 }
 
@@ -665,6 +675,8 @@ fn configure_hotkeys<C: Connection>(
         (&config.sequential_hotkey, HotkeyAction::SequentialPaste),
         (&config.rich_paste_hotkey, HotkeyAction::RichPaste),
         (&config.search_hotkey, HotkeyAction::FocusSearch),
+        (&config.private_mode_hotkey, HotkeyAction::TogglePrivateMode),
+        (&config.snippet_picker_hotkey, HotkeyAction::SnippetPicker),
     ] {
         if let Some(hotkey) = parse_hotkey(conn, combo, action)? {
             grab_hotkey(conn, root, &hotkey)?;
@@ -855,6 +867,8 @@ fn send_hotkey_action(sender: &Sender<ClipboardEvent>, action: HotkeyAction) {
         HotkeyAction::SequentialPaste => ClipboardEvent::SequentialPaste,
         HotkeyAction::RichPaste => ClipboardEvent::PasteLatestRich,
         HotkeyAction::FocusSearch => ClipboardEvent::FocusSearch,
+        HotkeyAction::TogglePrivateMode => ClipboardEvent::TogglePrivateMode,
+        HotkeyAction::SnippetPicker => ClipboardEvent::SnippetPicker,
     };
     let _ = sender.send(event);
 }
@@ -893,10 +907,15 @@ fn keysym_to_keycode<C: Connection>(conn: &C, keysym: u32) -> Result<Option<Keyc
 fn start_status_notifier(
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
+    private_mode: Arc<AtomicBool>,
 ) -> Result<ksni::blocking::Handle<TiezSlimLinuxTray>, String> {
     use ksni::blocking::TrayMethods;
 
-    let tray = TiezSlimLinuxTray { sender, ctx };
+    let tray = TiezSlimLinuxTray {
+        sender,
+        ctx,
+        private_mode,
+    };
     tray.assume_sni_available(true)
         .spawn()
         .map_err(|err| err.to_string())
@@ -905,6 +924,10 @@ fn start_status_notifier(
 struct TiezSlimLinuxTray {
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
+    /// Shared flag toggled from the UI thread. The ksni daemon polls
+    /// `icon_pixmap` whenever the SNI host re-queries; we consult
+    /// this flag to choose the red-dot variant when private mode is on.
+    private_mode: Arc<AtomicBool>,
 }
 
 impl ksni::Tray for TiezSlimLinuxTray {
@@ -925,7 +948,11 @@ impl ksni::Tray for TiezSlimLinuxTray {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        vec![tray_icon_pixmap()]
+        if self.private_mode.load(std::sync::atomic::Ordering::Acquire) {
+            vec![tray_icon_pixmap_private()]
+        } else {
+            vec![tray_icon_pixmap()]
+        }
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
@@ -969,8 +996,21 @@ impl ksni::Tray for TiezSlimLinuxTray {
 }
 
 fn tray_icon_pixmap() -> ksni::Icon {
+    tray_icon_pixmap_with_private(false)
+}
+
+fn tray_icon_pixmap_private() -> ksni::Icon {
+    tray_icon_pixmap_with_private(true)
+}
+
+fn tray_icon_pixmap_with_private(private: bool) -> ksni::Icon {
     let width = 32;
     let height = 32;
+    // Red dot bounds in the top-right corner when private mode is on.
+    // Centre at (25, 7), radius 5 — covers pixels 20..=30, 2..=12.
+    let dot_center_x = 25.0_f32;
+    let dot_center_y = 7.0_f32;
+    let dot_radius_sq = 5.0_f32 * 5.0_f32;
     let mut data = Vec::with_capacity(width * height * 4);
     for y in 0..height {
         for x in 0..width {
@@ -984,7 +1024,14 @@ fn tray_icon_pixmap() -> ksni::Icon {
                 || (y == 20 && (12..=19).contains(&x))
                 || ((18..=23).contains(&x) && (11..=16).contains(&y) && x + y >= 33);
             let on_slim = y == 26 && (10..=21).contains(&x);
-            let (a, r, g, b) = if on_mark {
+            let on_dot = private && {
+                let dx = x as f32 - dot_center_x;
+                let dy = y as f32 - dot_center_y;
+                dx * dx + dy * dy <= dot_radius_sq
+            };
+            let (a, r, g, b) = if on_dot {
+                (255, 220, 38, 38)
+            } else if on_mark {
                 (255, navy.0, navy.1, navy.2)
             } else if on_slim {
                 (255, accent.0, accent.1, accent.2)
@@ -1034,6 +1081,52 @@ fn active_window_title() -> Option<String> {
         reset_x11_connection();
     }
     result
+}
+
+/// Returns the WM_CLASS of the focused window (e.g. `"org.kde.dolphin"`).
+///
+/// Parses the second null-terminated string from the `WM_CLASS` property.
+/// Returns `None` when no X11 display is available or the property is missing.
+pub fn active_window_class() -> Option<String> {
+    let conn = x11_connection()?;
+    let screen_num = x11_screen_num()?;
+    let screen = &conn.setup().roots[screen_num];
+    let atoms = match Atoms::new(conn.as_ref()).ok()?.reply() {
+        Ok(atoms) => atoms,
+        Err(_) => {
+            reset_x11_connection();
+            return None;
+        }
+    };
+    let active_window = read_window_property(conn.as_ref(), screen.root, atoms._NET_ACTIVE_WINDOW)?;
+
+    // WM_CLASS type is STRING (Latin-1), not UTF8_STRING.
+    let reply = conn
+        .get_property(
+            false,
+            active_window,
+            atoms.WM_CLASS,
+            AtomEnum::STRING,
+            0,
+            2048,
+        )
+        .ok()?
+        .reply()
+        .ok()?;
+    let bytes = reply.value;
+    // WM_CLASS = instance_name\0class_name\0 — extract class (second string).
+    let null_pos = bytes.iter().position(|&b| b == 0)?;
+    let class_bytes = bytes.get(null_pos + 1..)?;
+    let class_end = class_bytes
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(class_bytes.len());
+    let class = std::str::from_utf8(&class_bytes[..class_end]).ok()?;
+    let class = class.trim();
+    if class.is_empty() {
+        return None;
+    }
+    Some(class.to_string())
 }
 
 fn read_window_property<C: Connection>(conn: &C, window: Window, atom: u32) -> Option<Window> {

@@ -117,6 +117,44 @@ pub fn compile_custom_rules(raw: &str) -> Result<Vec<Regex>, Vec<(usize, regex::
     }
 }
 
+/// Origin of a clipboard capture: normal CLIPBOARD selection (Ctrl+C) or
+/// PRIMARY selection (mouse highlight).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SelectionSource {
+    #[default]
+    #[serde(rename = "clipboard")]
+    Clipboard,
+    #[serde(rename = "primary")]
+    Primary,
+}
+
+impl SelectionSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Clipboard => "clipboard",
+            Self::Primary => "primary",
+        }
+    }
+}
+
+impl From<&str> for SelectionSource {
+    fn from(s: &str) -> Self {
+        match s {
+            "primary" => Self::Primary,
+            _ => Self::Clipboard,
+        }
+    }
+}
+
+/// Fast fingerprint for a string (not cryptographically secure).
+/// Used for echo suppression and primary-selection dedup.
+pub fn string_fingerprint(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(s.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClipboardKind {
     Text,
@@ -194,6 +232,8 @@ pub struct ClipboardEntry {
     pub use_count: i64,
     pub is_external: bool,
     pub pinned_order: i64,
+    #[serde(default)]
+    pub source: SelectionSource,
 }
 
 /// Lightweight projection of [`ClipboardEntry`] used for list rendering.
@@ -215,6 +255,8 @@ pub struct ClipboardEntrySummary {
     pub is_external: bool,
     pub pinned_order: i64,
     pub sensitive: bool,
+    #[serde(default)]
+    pub source: SelectionSource,
 }
 
 impl ClipboardEntrySummary {
@@ -250,11 +292,20 @@ pub fn make_summary(entry: &ClipboardEntry) -> ClipboardEntrySummary {
         is_external: entry.is_external,
         pinned_order: entry.pinned_order,
         sensitive: entry.is_sensitive(),
+        source: entry.source.clone(),
     }
 }
 
 impl ClipboardEntry {
     pub fn captured_text(content: String, source_app: String) -> Option<Self> {
+        Self::captured_text_with_source(content, source_app, None)
+    }
+
+    pub fn captured_text_with_source(
+        content: String,
+        source_app: String,
+        source: Option<SelectionSource>,
+    ) -> Option<Self> {
         let trimmed = content.trim_matches('\0').trim().to_string();
         if trimmed.is_empty() || trimmed.len() > MAX_CONTENT_BYTES {
             return None;
@@ -274,6 +325,7 @@ impl ClipboardEntry {
             use_count: 0,
             is_external: false,
             pinned_order: 0,
+            source: source.unwrap_or_default(),
         })
     }
 
@@ -296,6 +348,7 @@ impl ClipboardEntry {
             use_count: 0,
             is_external: false,
             pinned_order: 0,
+            source: SelectionSource::default(),
         })
     }
 
@@ -326,6 +379,7 @@ impl ClipboardEntry {
             use_count: 0,
             is_external: false,
             pinned_order: 0,
+            source: SelectionSource::default(),
         })
     }
 
@@ -367,6 +421,7 @@ impl ClipboardEntry {
             use_count: 0,
             is_external: true,
             pinned_order: 0,
+            source: SelectionSource::default(),
         })
     }
 
@@ -860,5 +915,55 @@ mod tests {
                 .expect("valid entry");
         let summary = make_summary(&entry);
         assert!(summary.is_sensitive());
+    }
+
+    #[test]
+    fn test_selection_source() {
+        assert_eq!(SelectionSource::Clipboard.as_str(), "clipboard");
+        assert_eq!(SelectionSource::Primary.as_str(), "primary");
+        assert_eq!(SelectionSource::default(), SelectionSource::Clipboard);
+        assert_eq!(SelectionSource::from("primary"), SelectionSource::Primary);
+        assert_eq!(
+            SelectionSource::from("clipboard"),
+            SelectionSource::Clipboard
+        );
+        assert_eq!(SelectionSource::from("unknown"), SelectionSource::Clipboard);
+
+        let json = serde_json::to_string(&SelectionSource::Primary).unwrap();
+        assert_eq!(json, "\"primary\"");
+        let roundtrip: SelectionSource = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtrip, SelectionSource::Primary);
+
+        let json_clip = serde_json::to_string(&SelectionSource::Clipboard).unwrap();
+        assert_eq!(json_clip, "\"clipboard\"");
+        let roundtrip_clip: SelectionSource = serde_json::from_str(&json_clip).unwrap();
+        assert_eq!(roundtrip_clip, SelectionSource::Clipboard);
+    }
+
+    #[test]
+    fn test_captured_text_with_source() {
+        let entry = ClipboardEntry::captured_text_with_source(
+            "hello".to_string(),
+            "test".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        assert_eq!(entry.source, SelectionSource::Primary);
+
+        let entry_default = ClipboardEntry::captured_text("hello".to_string(), "test".to_string())
+            .expect("valid entry");
+        assert_eq!(entry_default.source, SelectionSource::Clipboard);
+    }
+
+    #[test]
+    fn test_make_summary_propagates_source() {
+        let entry = ClipboardEntry::captured_text_with_source(
+            "test".to_string(),
+            "src".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        let summary = make_summary(&entry);
+        assert_eq!(summary.source, SelectionSource::Primary);
     }
 }

@@ -1,22 +1,32 @@
+use crate::actions::{Action, ActionKind};
+use crate::encryption::SecureStore;
 use crate::model::{
     ClipboardEntry, ClipboardEntrySummary, ClipboardKind, MAX_ENTRIES, RETENTION_DAYS,
+    SelectionSource,
 };
+use crate::snippets::Snippet;
 use anyhow::{Context, Result};
 use chrono::{Duration, Local};
+use lru::LruCache;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use rust_i18n::t;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 const APP_DATA_DIR: &str = "tiez-slim-linux";
 const LEGACY_DATA_DIR: &str = "myclipboard";
+const ENCRYPTED_PREFIX: &str = "enc:v1:";
+const DECRYPTED_CACHE_CAP: usize = 256;
 
 #[derive(Clone)]
 pub struct Storage {
     conn: Arc<Mutex<Connection>>,
     path: PathBuf,
+    encryptor: Option<Arc<dyn SecureStore + Send + Sync>>,
+    decrypted_cache: Arc<Mutex<LruCache<i64, String>>>,
 }
 
 impl Storage {
@@ -84,6 +94,10 @@ impl Storage {
         let storage = Self {
             conn: Arc::new(Mutex::new(conn)),
             path,
+            encryptor: None,
+            decrypted_cache: Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(DECRYPTED_CACHE_CAP).unwrap(),
+            ))),
         };
         storage.migrate()?;
         Ok(storage)
@@ -93,6 +107,67 @@ impl Storage {
         &self.path
     }
 
+    pub fn set_encryptor(&mut self, encryptor: Arc<dyn SecureStore + Send + Sync>) {
+        self.encryptor = Some(encryptor);
+    }
+
+    pub fn has_encryptor(&self) -> bool {
+        self.encryptor.is_some()
+    }
+
+    pub fn clear_decrypted_cache(&self) {
+        if let Ok(mut cache) = self.decrypted_cache.lock() {
+            cache.clear();
+        }
+    }
+
+    pub fn encrypt_sensitive_content(&self, content: &str, is_sensitive: bool) -> Result<String> {
+        if !is_sensitive {
+            return Ok(content.to_string());
+        }
+        let Some(ref enc) = self.encryptor else {
+            return Ok(content.to_string());
+        };
+        if content.starts_with(ENCRYPTED_PREFIX) {
+            return Ok(content.to_string());
+        }
+        let ct = enc.encrypt(content.as_bytes())?;
+        String::from_utf8(ct).context("encrypted content is not valid UTF-8")
+    }
+
+    pub fn decrypt_content(&self, id: i64, raw: &str) -> String {
+        if !raw.starts_with(ENCRYPTED_PREFIX) {
+            return raw.to_string();
+        }
+        {
+            let Ok(mut cache) = self.decrypted_cache.lock() else {
+                return raw.to_string();
+            };
+            if let Some(cached) = cache.get(&id) {
+                return cached.clone();
+            }
+        }
+        let Some(ref enc) = self.encryptor else {
+            return raw.to_string();
+        };
+        let Ok(decrypted) = enc.decrypt(raw.as_bytes()) else {
+            return raw.to_string();
+        };
+        let Ok(text) = String::from_utf8(decrypted) else {
+            return raw.to_string();
+        };
+        if let Ok(mut cache) = self.decrypted_cache.lock() {
+            if let Some(cached) = cache.get(&id) {
+                return cached.clone();
+            }
+            cache.put(id, text.clone());
+        }
+        text
+    }
+
+    pub(crate) fn conn(&self) -> &std::sync::Mutex<rusqlite::Connection> {
+        &self.conn
+    }
     fn migrate(&self) -> Result<()> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
         conn.execute_batch(
@@ -134,7 +209,41 @@ impl Storage {
             CREATE INDEX IF NOT EXISTS idx_clipboard_timestamp
                 ON clipboard_history(timestamp);
             CREATE INDEX IF NOT EXISTS idx_entry_tags_tag
-                ON entry_tags(tag);",
+                ON entry_tags(tag);
+
+            CREATE TABLE IF NOT EXISTS actions (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                pattern TEXT NOT NULL,
+                command TEXT NOT NULL,
+                icon TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                auto_trigger INTEGER NOT NULL DEFAULT 0,
+                auto_trigger_primary INTEGER NOT NULL DEFAULT 0,
+                toolbar_button INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                is_builtin INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                last_used_at INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_actions_enabled ON actions(enabled);
+            CREATE INDEX IF NOT EXISTS idx_actions_sort ON actions(sort_order);
+
+            CREATE TABLE IF NOT EXISTS snippets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                template TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                icon TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                use_count INTEGER NOT NULL DEFAULT 0,
+                last_used_at INTEGER,
+                created_at INTEGER NOT NULL,
+                tags TEXT NOT NULL DEFAULT '[]'
+            );
+            CREATE INDEX IF NOT EXISTS idx_snippets_name ON snippets(name);
+            CREATE INDEX IF NOT EXISTS idx_snippets_enabled ON snippets(enabled);",
         )?;
         ensure_column(&conn, "clipboard_history", "html_content", "TEXT")?;
         ensure_column(&conn, "clipboard_history", "source_app_path", "TEXT")?;
@@ -156,6 +265,12 @@ impl Storage {
             "clipboard_history",
             "sensitive",
             "INTEGER NOT NULL DEFAULT 0",
+        )?;
+        ensure_column(
+            &conn,
+            "clipboard_history",
+            "source",
+            "TEXT NOT NULL DEFAULT 'clipboard'",
         )?;
         let backfill_done: bool = conn
             .query_row(
@@ -211,8 +326,10 @@ impl Storage {
                 entry.html_content.as_deref().unwrap_or("")
             )
         };
-        let hash = content_hash(entry.kind.as_str(), &hash_input);
+        let hash = content_hash(entry.kind.as_str(), entry.source.as_str(), &hash_input);
         let sensitive = entry.is_sensitive() as i64;
+        let stored_content =
+            self.encrypt_sensitive_content(&entry.content, entry.is_sensitive())?;
         let mut conn = self.conn.lock().expect("storage mutex poisoned");
         let tx = conn.transaction()?;
 
@@ -231,17 +348,20 @@ impl Storage {
             tx.execute(
                 "UPDATE clipboard_history
                  SET timestamp = ?1, source_app = ?2, preview = ?3, content_type = ?4,
-                     html_content = ?5, source_app_path = ?6, is_external = ?7, sensitive = ?8
-                 WHERE id = ?9",
+                     content = ?5, html_content = ?6, source_app_path = ?7, is_external = ?8,
+                     sensitive = ?9, source = ?10
+                 WHERE id = ?11",
                 params![
                     entry.timestamp,
                     entry.source_app,
                     entry.preview,
                     entry.kind.as_str(),
+                    stored_content,
                     entry.html_content,
                     entry.source_app_path,
                     entry.is_external as i64,
                     sensitive,
+                    entry.source.as_str(),
                     id
                 ],
             )?;
@@ -250,11 +370,11 @@ impl Storage {
             tx.execute(
                 "INSERT INTO clipboard_history
                  (content_type, content, html_content, source_app, source_app_path, timestamp,
-                  preview, is_external, pinned_order, content_hash, sensitive)
-                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                  preview, is_external, pinned_order, content_hash, sensitive, source)
+                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     entry.kind.as_str(),
-                    entry.content,
+                    stored_content,
                     entry.html_content,
                     entry.source_app,
                     entry.source_app_path,
@@ -263,7 +383,8 @@ impl Storage {
                     entry.is_external as i64,
                     entry.pinned_order,
                     hash,
-                    sensitive
+                    sensitive,
+                    entry.source.as_str()
                 ],
             )?;
             tx.last_insert_rowid()
@@ -277,7 +398,7 @@ impl Storage {
 
     #[allow(dead_code)]
     pub fn list(&self, query: &str) -> Result<Vec<ClipboardEntry>> {
-        self.list_filtered(query, None, None)
+        self.list_filtered(query, None, None, None)
     }
 
     #[allow(dead_code)]
@@ -286,28 +407,32 @@ impl Storage {
         query: &str,
         kind: Option<&ClipboardKind>,
         tag: Option<&str>,
+        source: Option<&SelectionSource>,
     ) -> Result<Vec<ClipboardEntry>> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
-        let (where_sql, values) = build_where_clause(query, kind, tag);
+        let (where_sql, values) = build_where_clause(query, kind, tag, source);
         let sql = format!(
             "SELECT h.id, h.content_type, h.content, h.html_content, h.source_app,
                 h.source_app_path, h.timestamp, h.preview, h.is_pinned, h.use_count,
-                h.is_external, h.pinned_order
+                h.is_external, h.pinned_order, h.source
              FROM clipboard_history h
              WHERE {where_sql}
              ORDER BY h.is_pinned DESC, h.pinned_order ASC, h.timestamp DESC LIMIT 300"
         );
-        let mut stmt = conn.prepare(&sql)?;
-        let mut entries = stmt
-            .query_map(params_from_iter(values.iter()), row_to_entry)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut entries = {
+            let mut stmt = conn.prepare(&sql)?;
+            stmt.query_map(params_from_iter(values.iter()), row_to_entry)?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
 
         let ids: Vec<i64> = entries.iter().map(|e| e.id).collect();
         let tags_by_id = fetch_tags_batch(&conn, &ids)?;
+        drop(conn);
         for entry in &mut entries {
             if let Some(tags) = tags_by_id.get(&entry.id) {
                 entry.tags = tags.clone();
             }
+            entry.content = self.decrypt_content(entry.id, &entry.content);
         }
         Ok(entries)
     }
@@ -317,13 +442,14 @@ impl Storage {
         query: &str,
         kind: Option<&ClipboardKind>,
         tag: Option<&str>,
+        source: Option<&SelectionSource>,
     ) -> Result<Vec<ClipboardEntrySummary>> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
-        let (where_sql, values) = build_where_clause(query, kind, tag);
+        let (where_sql, values) = build_where_clause(query, kind, tag, source);
         let sql = format!(
             "SELECT h.id, h.content_type, h.source_app, h.source_app_path, h.timestamp,
                 h.preview, h.is_pinned, h.use_count, h.is_external, h.pinned_order,
-                h.sensitive
+                h.sensitive, h.source
              FROM clipboard_history h
              WHERE {where_sql}
              ORDER BY h.is_pinned DESC, h.pinned_order ASC, h.timestamp DESC LIMIT 300"
@@ -343,18 +469,43 @@ impl Storage {
         Ok(summaries)
     }
 
+    pub fn list_all_summaries(&self) -> Result<Vec<ClipboardEntrySummary>> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        let sql = "SELECT h.id, h.content_type, h.source_app, h.source_app_path, h.timestamp,
+                h.preview, h.is_pinned, h.use_count, h.is_external, h.pinned_order,
+                h.sensitive, h.source
+             FROM clipboard_history h
+             ORDER BY h.is_pinned DESC, h.pinned_order ASC, h.timestamp DESC LIMIT 300";
+        let mut stmt = conn.prepare(sql)?;
+        let mut summaries = stmt
+            .query_map([], row_to_summary)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let ids: Vec<i64> = summaries.iter().map(|s| s.id).collect();
+        let tags_by_id = fetch_tags_batch(&conn, &ids)?;
+        for summary in &mut summaries {
+            if let Some(tags) = tags_by_id.get(&summary.id) {
+                summary.tags = tags.clone();
+            }
+        }
+        Ok(summaries)
+    }
+
     pub fn get_entry(&self, id: i64) -> Result<Option<ClipboardEntry>> {
         let conn = self.conn.lock().expect("storage mutex poisoned");
-        let mut stmt = conn.prepare(
-            "SELECT id, content_type, content, html_content, source_app, source_app_path,
-                timestamp, preview, is_pinned, use_count, is_external, pinned_order
-             FROM clipboard_history WHERE id = ?1",
-        )?;
-        let mut entry = match stmt.query_row(params![id], row_to_entry).optional()? {
-            Some(entry) => entry,
-            None => return Ok(None),
+        let mut entry = {
+            let mut stmt = conn.prepare(
+                "SELECT id, content_type, content, html_content, source_app, source_app_path,
+                    timestamp, preview, is_pinned, use_count, is_external, pinned_order, source
+                 FROM clipboard_history WHERE id = ?1",
+            )?;
+            match stmt.query_row(params![id], row_to_entry).optional()? {
+                Some(entry) => entry,
+                None => return Ok(None),
+            }
         };
         let tags_by_id = fetch_tags_batch(&conn, &[entry.id])?;
+        drop(conn);
+        entry.content = self.decrypt_content(entry.id, &entry.content);
         if let Some(tags) = tags_by_id.get(&entry.id) {
             entry.tags = tags.clone();
         }
@@ -420,7 +571,7 @@ impl Storage {
             )?;
         }
         // Recompute cached sensitive so UI masking tracks the tag set.
-        let (content, content_type): (String, String) = tx
+        let (raw_content, content_type): (String, String) = tx
             .query_row(
                 "SELECT content, content_type FROM clipboard_history WHERE id = ?1",
                 params![id],
@@ -428,6 +579,7 @@ impl Storage {
             )
             .optional()?
             .unwrap_or_default();
+        let content = self.decrypt_content(id, &raw_content);
         let kind = ClipboardKind::from(content_type.as_str());
         let tagged_sensitive = tags.iter().any(|tag| {
             let tag = tag.to_ascii_lowercase();
@@ -567,12 +719,177 @@ impl Storage {
             .query_map(params![id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?)
     }
+
+    pub fn save_action(&self, action: &Action) -> Result<i64> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        conn.execute(
+            "INSERT OR REPLACE INTO actions
+             (id, name, kind, pattern, command, icon, enabled,
+              auto_trigger, auto_trigger_primary, toolbar_button,
+              sort_order, is_builtin, created_at, last_used_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                action.id as i64,
+                action.name,
+                serde_json::to_string(&action.kind).unwrap_or_default(),
+                action.pattern,
+                action.command,
+                action.icon,
+                action.enabled as i64,
+                action.auto_trigger as i64,
+                action.auto_trigger_primary as i64,
+                action.toolbar_button as i64,
+                action.sort_order,
+                action.is_builtin as i64,
+                action.created_at,
+                action.last_used_at,
+            ],
+        )?;
+        Ok(action.id as i64)
+    }
+
+    pub fn load_actions(&self) -> Result<Vec<Action>> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT id, name, kind, pattern, command, icon, enabled,
+                    auto_trigger, auto_trigger_primary, toolbar_button,
+                    sort_order, is_builtin, created_at, last_used_at
+             FROM actions ORDER BY sort_order ASC, id ASC",
+        )?;
+        let actions = stmt
+            .query_map([], |row| {
+                let kind_str: String = row.get(2)?;
+                let kind: ActionKind =
+                    serde_json::from_str(&kind_str).unwrap_or(ActionKind::ShellCommand);
+                Ok(Action {
+                    id: row.get::<_, i64>(0)? as u64,
+                    name: row.get(1)?,
+                    kind,
+                    pattern: row.get(3)?,
+                    command: row.get(4)?,
+                    icon: row.get(5)?,
+                    enabled: row.get::<_, i64>(6)? != 0,
+                    auto_trigger: row.get::<_, i64>(7)? != 0,
+                    auto_trigger_primary: row.get::<_, i64>(8)? != 0,
+                    toolbar_button: row.get::<_, i64>(9)? != 0,
+                    sort_order: row.get(10)?,
+                    is_builtin: row.get::<_, i64>(11)? != 0,
+                    created_at: row.get(12)?,
+                    last_used_at: row.get(13)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(actions)
+    }
+
+    pub fn delete_action(&self, id: u64) -> Result<()> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        conn.execute("DELETE FROM actions WHERE id = ?1", params![id as i64])?;
+        Ok(())
+    }
+
+    pub fn update_action_last_used(&self, id: u64, at: i64) -> Result<()> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        conn.execute(
+            "UPDATE actions SET last_used_at = ?1 WHERE id = ?2",
+            params![at, id as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn save_snippet(&self, snippet: &Snippet) -> Result<i64> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        let tags_json = serde_json::to_string(&snippet.tags).unwrap_or_else(|_| "[]".into());
+        if snippet.id == 0 {
+            conn.execute(
+                "INSERT INTO snippets
+                 (name, template, description, icon, enabled, use_count, last_used_at, created_at, tags)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    snippet.name,
+                    snippet.template,
+                    snippet.description,
+                    snippet.icon,
+                    snippet.enabled as i64,
+                    snippet.use_count,
+                    snippet.last_used_at,
+                    snippet.created_at,
+                    tags_json,
+                ],
+            )?;
+            Ok(conn.last_insert_rowid())
+        } else {
+            conn.execute(
+                "INSERT OR REPLACE INTO snippets
+                 (id, name, template, description, icon, enabled, use_count, last_used_at, created_at, tags)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    snippet.id,
+                    snippet.name,
+                    snippet.template,
+                    snippet.description,
+                    snippet.icon,
+                    snippet.enabled as i64,
+                    snippet.use_count,
+                    snippet.last_used_at,
+                    snippet.created_at,
+                    tags_json,
+                ],
+            )?;
+            Ok(snippet.id)
+        }
+    }
+
+    pub fn load_snippets(&self) -> Result<Vec<Snippet>> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT id, name, template, description, icon, enabled,
+                    use_count, last_used_at, created_at, tags
+             FROM snippets ORDER BY use_count DESC, name ASC",
+        )?;
+        let snippets = stmt
+            .query_map([], |row| {
+                let tags_str: String = row.get(9)?;
+                let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
+                Ok(Snippet {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    template: row.get(2)?,
+                    description: row.get(3)?,
+                    icon: row.get(4)?,
+                    enabled: row.get::<_, i64>(5)? != 0,
+                    use_count: row.get(6)?,
+                    last_used_at: row.get(7)?,
+                    created_at: row.get(8)?,
+                    tags,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(snippets)
+    }
+
+    pub fn delete_snippet(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        conn.execute("DELETE FROM snippets WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn increment_snippet_use_count(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        let now = chrono::Utc::now().timestamp();
+        conn.execute(
+            "UPDATE snippets SET use_count = use_count + 1, last_used_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        Ok(())
+    }
 }
 
 fn build_where_clause(
     query: &str,
     kind: Option<&ClipboardKind>,
     tag: Option<&str>,
+    source: Option<&SelectionSource>,
 ) -> (String, Vec<String>) {
     let mut sql = String::from("1 = 1");
     let mut values = Vec::new();
@@ -595,6 +912,10 @@ fn build_where_clause(
             " AND EXISTS (SELECT 1 FROM entry_tags ft WHERE ft.entry_id = h.id AND ft.tag = ?)",
         );
         values.push(tag.to_string());
+    }
+    if let Some(source) = source {
+        sql.push_str(" AND h.source = ?");
+        values.push(source.as_str().to_string());
     }
     (sql, values)
 }
@@ -636,6 +957,11 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardEntry> {
         use_count: row.get(9)?,
         is_external: row.get::<_, i64>(10)? != 0,
         pinned_order: row.get(11)?,
+        source: SelectionSource::from(
+            row.get::<_, Option<String>>(12)?
+                .unwrap_or_default()
+                .as_str(),
+        ),
     })
 }
 
@@ -653,6 +979,11 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardEntrySum
         is_external: row.get::<_, i64>(8)? != 0,
         pinned_order: row.get(9)?,
         sensitive: row.get::<_, i64>(10)? != 0,
+        source: SelectionSource::from(
+            row.get::<_, Option<String>>(11)?
+                .unwrap_or_default()
+                .as_str(),
+        ),
     })
 }
 
@@ -670,9 +1001,11 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, definition: &str)
     Ok(())
 }
 
-fn content_hash(kind: &str, content: &str) -> String {
+fn content_hash(kind: &str, source: &str, content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(kind.as_bytes());
+    hasher.update([0]);
+    hasher.update(source.as_bytes());
     hasher.update([0]);
     hasher.update(content.as_bytes());
     format!("{:x}", hasher.finalize())
@@ -788,19 +1121,19 @@ mod tests {
             .expect("set url tag");
 
         let urls = storage
-            .list_filtered("", Some(&ClipboardKind::Url), None)
+            .list_filtered("", Some(&ClipboardKind::Url), None, None)
             .expect("filter url");
         assert_eq!(urls.len(), 1);
         assert_eq!(urls[0].kind, ClipboardKind::Url);
 
         let tagged_urls = storage
-            .list_filtered("", Some(&ClipboardKind::Url), Some("work"))
+            .list_filtered("", Some(&ClipboardKind::Url), Some("work"), None)
             .expect("filter url tag");
         assert_eq!(tagged_urls.len(), 1);
         assert_eq!(tagged_urls[0].content, "https://example.com");
 
         let missing = storage
-            .list_filtered("", Some(&ClipboardKind::Text), Some("work"))
+            .list_filtered("", Some(&ClipboardKind::Text), Some("work"), None)
             .expect("filter impossible combination");
         assert!(missing.is_empty());
     }
@@ -870,7 +1203,7 @@ mod tests {
         storage.save_entry(&entry).expect("save image");
 
         let images = storage
-            .list_filtered("", Some(&ClipboardKind::Image), None)
+            .list_filtered("", Some(&ClipboardKind::Image), None, None)
             .expect("filter images");
         assert_eq!(images.len(), 1);
         assert_eq!(images[0].kind, ClipboardKind::Image);
@@ -889,7 +1222,7 @@ mod tests {
         storage.save_entry(&entry).expect("save rich text");
 
         let rich = storage
-            .list_filtered("", Some(&ClipboardKind::RichText), None)
+            .list_filtered("", Some(&ClipboardKind::RichText), None, None)
             .expect("filter rich text");
         assert_eq!(rich.len(), 1);
         assert_eq!(rich[0].content, "Hello world");
@@ -918,7 +1251,7 @@ mod tests {
         storage.save_entry(&second).expect("save second");
 
         let rich = storage
-            .list_filtered("", Some(&ClipboardKind::RichText), None)
+            .list_filtered("", Some(&ClipboardKind::RichText), None, None)
             .expect("filter rich text");
         assert_eq!(rich.len(), 2);
         assert!(rich
@@ -941,7 +1274,7 @@ mod tests {
         storage.save_entry(&entry).expect("save file");
 
         let files = storage
-            .list_filtered("", Some(&ClipboardKind::File), None)
+            .list_filtered("", Some(&ClipboardKind::File), None, None)
             .expect("filter files");
         assert_eq!(files.len(), 1);
         assert!(files[0].is_external);
@@ -1029,7 +1362,7 @@ mod tests {
         let id = storage.save_entry(&entry).expect("save");
 
         let summaries = storage
-            .list_summaries_filtered("", Some(&ClipboardKind::Text), None)
+            .list_summaries_filtered("", Some(&ClipboardKind::Text), None, None)
             .expect("list summaries");
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].id, id);
@@ -1046,7 +1379,7 @@ mod tests {
         storage.save_entry(&entry).expect("save");
 
         let summaries = storage
-            .list_summaries_filtered("", None, None)
+            .list_summaries_filtered("", None, None, None)
             .expect("list summaries");
         assert_eq!(summaries.len(), 1);
         assert!(
@@ -1077,5 +1410,325 @@ mod tests {
 
         let missing = storage.get_entry(9_999_999).expect("get missing");
         assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_actions_crud() {
+        let storage = temp_storage();
+
+        let mut action = Action::new("Open URL", "^https?://", "xdg-open %1");
+        action.kind = ActionKind::Open;
+        action.icon = "🌐".to_string();
+        action.sort_order = 1;
+        let id = storage.save_action(&action).expect("save action");
+        assert_eq!(id, action.id as i64);
+
+        let actions = storage.load_actions().expect("load actions");
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].name, "Open URL");
+        assert_eq!(actions[0].kind, ActionKind::Open);
+        assert_eq!(actions[0].icon, "🌐");
+        assert_eq!(actions[0].sort_order, 1);
+        assert!(actions[0].enabled);
+        assert!(actions[0].last_used_at.is_none());
+
+        storage
+            .update_action_last_used(action.id, 1700000000)
+            .expect("update last used");
+        let actions = storage.load_actions().expect("load after update");
+        assert_eq!(actions[0].last_used_at, Some(1700000000));
+
+        storage.delete_action(action.id).expect("delete action");
+        let actions = storage.load_actions().expect("load after delete");
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn test_actions_save_upsert() {
+        let storage = temp_storage();
+
+        let mut action = Action::new("Test", "pattern", "cmd %1");
+        action.sort_order = 0;
+        storage.save_action(&action).expect("first save");
+
+        action.name = "Updated Test".to_string();
+        action.sort_order = 5;
+        storage.save_action(&action).expect("upsert");
+
+        let actions = storage.load_actions().expect("load");
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].name, "Updated Test");
+        assert_eq!(actions[0].sort_order, 5);
+    }
+
+    #[test]
+    fn test_actions_ordering() {
+        let storage = temp_storage();
+
+        let mut a = Action::new("B", "b", "cmd");
+        a.sort_order = 2;
+        a.id = 2;
+        let mut b = Action::new("A", "a", "cmd");
+        b.sort_order = 1;
+        b.id = 1;
+        let mut c = Action::new("C", "c", "cmd");
+        c.sort_order = 1;
+        c.id = 3;
+
+        storage.save_action(&a).expect("save a");
+        storage.save_action(&b).expect("save b");
+        storage.save_action(&c).expect("save c");
+
+        let actions = storage.load_actions().expect("load");
+        assert_eq!(actions.len(), 3);
+        assert_eq!(actions[0].name, "A");
+        assert_eq!(actions[1].name, "C");
+        assert_eq!(actions[2].name, "B");
+    }
+
+    #[test]
+    fn test_actions_migration_creates_table() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "tiez-slim-linux-actions-migration-{}-{nanos}.db",
+            std::process::id()
+        ));
+        {
+            let conn = Connection::open(&path).expect("create old db");
+            conn.execute_batch(
+                "CREATE TABLE clipboard_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    source_app TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    preview TEXT NOT NULL,
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    content_hash TEXT NOT NULL UNIQUE
+                );",
+            )
+            .expect("create old schema");
+        }
+
+        let storage = Storage::open(path).expect("open migrates old schema");
+        let action = Action::new("Migrated", "test", "echo %1");
+        storage.save_action(&action).expect("save after migrate");
+        let actions = storage.load_actions().expect("load after migrate");
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].name, "Migrated");
+    }
+
+    #[test]
+    fn test_source_migration() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let counter = DB_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "tiez-slim-linux-source-migration-{}-{nanos}-{counter}.db",
+            std::process::id()
+        ));
+        {
+            let conn = Connection::open(&path).expect("create old db");
+            conn.execute_batch(
+                "CREATE TABLE clipboard_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    source_app TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    preview TEXT NOT NULL,
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    content_hash TEXT NOT NULL UNIQUE
+                );",
+            )
+            .expect("create old schema");
+        }
+
+        let storage = Storage::open(path).expect("open migrates old schema");
+
+        {
+            let conn = storage.conn.lock().expect("poisoned");
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(clipboard_history)")
+                .expect("prepare");
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .expect("query")
+                .filter_map(|r| r.ok())
+                .collect();
+            assert!(
+                columns.contains(&"source".to_string()),
+                "source column should exist after migration"
+            );
+        }
+
+        let entry_clip =
+            ClipboardEntry::captured_text("clipboard text".to_string(), "test".to_string())
+                .expect("valid entry");
+        storage.save_entry(&entry_clip).expect("save clipboard");
+
+        let entry_primary = ClipboardEntry::captured_text_with_source(
+            "primary text".to_string(),
+            "test".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        storage.save_entry(&entry_primary).expect("save primary");
+
+        let entries = storage.list("").expect("list all");
+        assert_eq!(entries.len(), 2);
+        let clip_entry = entries
+            .iter()
+            .find(|e| e.content == "clipboard text")
+            .expect("find clipboard entry");
+        assert_eq!(clip_entry.source, SelectionSource::Clipboard);
+        let primary_entry = entries
+            .iter()
+            .find(|e| e.content == "primary text")
+            .expect("find primary entry");
+        assert_eq!(primary_entry.source, SelectionSource::Primary);
+    }
+
+    #[test]
+    fn test_source_coexist_dedup() {
+        let storage = temp_storage();
+
+        let entry_clip =
+            ClipboardEntry::captured_text("same content".to_string(), "test".to_string())
+                .expect("valid entry");
+        storage.save_entry(&entry_clip).expect("save clipboard");
+
+        let entry_primary = ClipboardEntry::captured_text_with_source(
+            "same content".to_string(),
+            "test".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        storage.save_entry(&entry_primary).expect("save primary");
+
+        let entries = storage.list("").expect("list all");
+        assert_eq!(
+            entries.len(),
+            2,
+            "same content from different sources should coexist"
+        );
+
+        storage
+            .save_entry(&entry_clip)
+            .expect("save clipboard again");
+        let entries = storage.list("").expect("list after re-save");
+        assert_eq!(
+            entries.len(),
+            2,
+            "re-saving clipboard should deduplicate within same source"
+        );
+    }
+
+    #[test]
+    fn test_source_persisted_in_summaries() {
+        let storage = temp_storage();
+
+        let entry = ClipboardEntry::captured_text_with_source(
+            "summary test".to_string(),
+            "test".to_string(),
+            Some(SelectionSource::Primary),
+        )
+        .expect("valid entry");
+        storage.save_entry(&entry).expect("save");
+
+        let summaries = storage
+            .list_summaries_filtered("", None, None, None)
+            .expect("list summaries");
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].source, SelectionSource::Primary);
+    }
+
+    #[test]
+    fn test_snippets_crud() {
+        let storage = temp_storage();
+
+        let mut snippet = Snippet::new(
+            "GitHub PR",
+            "https://github.com/{{org}}/{{repo}}/pull/{{num}}",
+        );
+        snippet.description = "Open a PR link".to_string();
+        snippet.icon = "🔗".to_string();
+        snippet.tags = vec!["dev".to_string(), "github".to_string()];
+        let id = storage.save_snippet(&snippet).expect("save snippet");
+        assert!(id > 0);
+
+        let snippets = storage.load_snippets().expect("load snippets");
+        assert_eq!(snippets.len(), 1);
+        assert_eq!(snippets[0].name, "GitHub PR");
+        assert_eq!(
+            snippets[0].template,
+            "https://github.com/{{org}}/{{repo}}/pull/{{num}}"
+        );
+        assert_eq!(snippets[0].description, "Open a PR link");
+        assert_eq!(snippets[0].icon, "🔗");
+        assert!(snippets[0].enabled);
+        assert_eq!(snippets[0].use_count, 0);
+        assert!(snippets[0].last_used_at.is_none());
+        assert_eq!(
+            snippets[0].tags,
+            vec!["dev".to_string(), "github".to_string()]
+        );
+
+        storage.increment_snippet_use_count(id).expect("increment");
+        let snippets = storage.load_snippets().expect("load after increment");
+        assert_eq!(snippets[0].use_count, 1);
+        assert!(snippets[0].last_used_at.is_some());
+
+        storage.delete_snippet(id).expect("delete snippet");
+        let snippets = storage.load_snippets().expect("load after delete");
+        assert!(snippets.is_empty());
+    }
+
+    #[test]
+    fn test_snippets_ordering() {
+        let storage = temp_storage();
+
+        let mut a = Snippet::new("Alpha", "aaa");
+        a.use_count = 5;
+        storage.save_snippet(&a).expect("save a");
+
+        let mut b = Snippet::new("Beta", "bbb");
+        b.use_count = 10;
+        storage.save_snippet(&b).expect("save b");
+
+        let mut c = Snippet::new("Gamma", "ccc");
+        c.use_count = 10;
+        storage.save_snippet(&c).expect("save c");
+
+        let snippets = storage.load_snippets().expect("load");
+        assert_eq!(snippets.len(), 3);
+        assert_eq!(snippets[0].name, "Beta");
+        assert_eq!(snippets[1].name, "Gamma");
+        assert_eq!(snippets[2].name, "Alpha");
+    }
+
+    #[test]
+    fn test_snippets_upsert() {
+        let storage = temp_storage();
+
+        let mut snippet = Snippet::new("Test", "hello");
+        let id = storage.save_snippet(&snippet).expect("first save");
+
+        snippet.id = id;
+        snippet.name = "Updated Test".to_string();
+        snippet.template = "world".to_string();
+        storage.save_snippet(&snippet).expect("upsert");
+
+        let snippets = storage.load_snippets().expect("load");
+        assert_eq!(snippets.len(), 1);
+        assert_eq!(snippets[0].name, "Updated Test");
+        assert_eq!(snippets[0].template, "world");
     }
 }

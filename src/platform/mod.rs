@@ -2,6 +2,8 @@ use rust_i18n::t;
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+pub mod linux_xfixes;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -29,6 +31,8 @@ pub struct HotkeyConfig {
     pub sequential_hotkey: String,
     pub rich_paste_hotkey: String,
     pub search_hotkey: String,
+    pub private_mode_hotkey: String,
+    pub snippet_picker_hotkey: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -48,6 +52,7 @@ pub enum PasteMethod {
 }
 
 impl PasteMethod {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Self {
         match value {
             "shift_insert" => PasteMethod::ShiftInsert,
@@ -71,6 +76,8 @@ pub enum HotkeyAction {
     SequentialPaste,
     RichPaste,
     FocusSearch,
+    TogglePrivateMode,
+    SnippetPicker,
 }
 
 #[derive(Clone)]
@@ -109,6 +116,8 @@ impl HotkeyUpdateHandle {
 }
 
 #[cfg(target_os = "linux")]
+pub use linux::active_window_class;
+#[cfg(target_os = "linux")]
 pub use linux::current_keyboard_modifiers;
 #[cfg(target_os = "linux")]
 pub use linux::validate_hotkey;
@@ -120,6 +129,8 @@ pub use linux::{
 pub use linux::{autostart_enabled, set_autostart};
 #[cfg(target_os = "linux")]
 pub use linux::{mouse_position, screen_geometry, start_tray};
+#[cfg(target_os = "linux")]
+pub use linux_xfixes::start_primary_watcher;
 #[cfg(target_os = "windows")]
 pub use windows::current_keyboard_modifiers;
 #[cfg(target_os = "windows")]
@@ -212,6 +223,7 @@ pub fn start_tray(
     _sender: crossbeam_channel::Sender<crate::clipboard::ClipboardEvent>,
     _ctx: egui::Context,
     _enabled: bool,
+    _private_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Option<TrayHandle> {
     None
 }
@@ -224,4 +236,23 @@ pub fn screen_geometry() -> Option<ScreenGeometry> {
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn mouse_position() -> Option<(f32, f32)> {
     None
+}
+
+#[cfg(target_os = "windows")]
+pub fn active_window_class() -> Option<String> {
+    None
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+pub fn active_window_class() -> Option<String> {
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn start_primary_watcher(
+    _sender: crossbeam_channel::Sender<crate::clipboard::ClipboardEvent>,
+    _primary_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    _echo_guard: crate::clipboard::PrimaryEchoGuard,
+) {
+    // Primary selection is X11/Linux-only; no-op on other platforms.
 }

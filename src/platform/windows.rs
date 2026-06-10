@@ -6,6 +6,8 @@ use crate::platform::{
 };
 use crossbeam_channel::Sender;
 use rust_i18n::t;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
@@ -67,6 +69,7 @@ pub fn start_tray(
     _sender: Sender<ClipboardEvent>,
     _ctx: egui::Context,
     _enabled: bool,
+    _private_mode: Arc<AtomicBool>,
 ) -> Option<TrayHandle> {
     None
 }

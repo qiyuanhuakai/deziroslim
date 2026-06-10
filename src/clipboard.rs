@@ -1,5 +1,9 @@
+use crate::actions::executor::ActionExecutor;
+use crate::actions::matcher::ActionMatcher;
+use crate::blacklist::AppBlacklist;
 use crate::model::{ClipboardEntry, ClipboardKind};
 use crate::platform;
+use crate::storage::Storage;
 use arboard::Clipboard;
 use crossbeam_channel::Sender;
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
@@ -9,8 +13,55 @@ use std::borrow::Cow;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Duration (ms) within which primary selection writes from our own
+/// watcher are suppressed to avoid echo loops.
+const PRIMARY_ECHO_WINDOW: Duration = Duration::from_millis(500);
+
+/// Tracks recent primary-selection writes so that our own xclip/xsel
+/// write-back does not immediately re-enter the capture path.
+///
+/// The guard stores the content fingerprint + write instant of the last
+/// write we performed.  When the watcher sees a primary selection whose
+/// fingerprint matches within `PRIMARY_ECHO_WINDOW`, it skips capture.
+#[derive(Clone)]
+pub struct PrimaryEchoGuard {
+    inner: Arc<Mutex<(String, Option<Instant>)>>,
+}
+
+impl PrimaryEchoGuard {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new((String::new(), None))),
+        }
+    }
+}
+
+impl Default for PrimaryEchoGuard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PrimaryEchoGuard {
+    /// Record a write we just performed.
+    pub fn mark_write(&self, content_hash: String) {
+        let mut state = self.inner.lock().expect("echo guard poisoned");
+        *state = (content_hash, Some(Instant::now()));
+    }
+
+    /// Returns `true` if `content_hash` matches the last write within the
+    /// echo window.
+    pub fn should_suppress(&self, content_hash: &str) -> bool {
+        let state = self.inner.lock().expect("echo guard poisoned");
+        state.0 == content_hash && state.1.is_some_and(|at| at.elapsed() < PRIMARY_ECHO_WINDOW)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum ClipboardEvent {
@@ -20,15 +71,33 @@ pub enum ClipboardEvent {
     PasteLatestRich,
     SequentialPaste,
     OpenSettings,
+    TogglePrivateMode,
+    SnippetPicker,
     Quit,
     Status(String),
     Error(String),
 }
 
-pub fn start_watcher(sender: Sender<ClipboardEvent>) {
+pub fn start_watcher(
+    sender: Sender<ClipboardEvent>,
+    exclusion_patterns: Vec<String>,
+    private_mode: Arc<AtomicBool>,
+    storage: Storage,
+    builtin_actions_enabled: bool,
+    echo_guard: PrimaryEchoGuard,
+) {
     thread::Builder::new()
         .name("clipboard-watcher".to_string())
-        .spawn(move || watch_loop(sender))
+        .spawn(move || {
+            watch_loop(
+                sender,
+                exclusion_patterns,
+                private_mode,
+                storage,
+                builtin_actions_enabled,
+                echo_guard,
+            )
+        })
         .expect("spawn clipboard watcher");
 }
 
@@ -38,6 +107,78 @@ pub fn set_text(content: &str) -> Result<(), String> {
     clipboard
         .set_text(content.to_string())
         .map_err(|err| t!("clipboard.error.write_text_failed", err = err).to_string())
+}
+
+#[cfg(target_os = "linux")]
+pub fn read_primary_text() -> Option<String> {
+    let output = Command::new("xclip")
+        .args(["-selection", "primary", "-o"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout).to_string();
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_primary_text() -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+pub fn write_primary_text(content: &str) -> Result<(), String> {
+    let mut child = Command::new("xclip")
+        .args(["-selection", "primary"])
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        stdin
+            .write_all(content.as_bytes())
+            .map_err(|err| t!("clipboard.error.write_text_failed", err = err).to_string())?;
+    }
+    let _ = child.wait();
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn write_primary_text(_content: &str) -> Result<(), String> {
+    Err("Primary selection not supported".to_string())
+}
+
+#[cfg(target_os = "linux")]
+pub fn simulate_middle_click() -> Result<(), String> {
+    let status = Command::new("xdotool")
+        .args(["click", "2"])
+        .status()
+        .map_err(|err| t!("clipboard.error.init_failed", err = err).to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(t!("clipboard.error.write_text_failed", err = status).to_string())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn simulate_middle_click() -> Result<(), String> {
+    Err("Middle click not supported".to_string())
+}
+
+pub fn paste_primary_entry(
+    entry: &ClipboardEntry,
+    echo_guard: &PrimaryEchoGuard,
+) -> Result<(), String> {
+    write_primary_text(&entry.content)?;
+    echo_guard.mark_write(string_fingerprint(&entry.content));
+    simulate_middle_click()
 }
 
 pub fn set_entry(entry: &ClipboardEntry, paste_with_format: bool) -> Result<(), String> {
@@ -61,7 +202,21 @@ pub fn set_entry(entry: &ClipboardEntry, paste_with_format: bool) -> Result<(), 
     }
 }
 
-fn watch_loop(sender: Sender<ClipboardEvent>) {
+fn watch_loop(
+    sender: Sender<ClipboardEvent>,
+    exclusion_patterns: Vec<String>,
+    private_mode: Arc<AtomicBool>,
+    storage: Storage,
+    builtin_actions_enabled: bool,
+    _echo_guard: PrimaryEchoGuard,
+) {
+    let blacklist = AppBlacklist::new(exclusion_patterns);
+    let action_matcher = if builtin_actions_enabled {
+        ActionMatcher::new(storage.load_actions().unwrap_or_default())
+    } else {
+        ActionMatcher::new(vec![])
+    };
+    let action_executor = ActionExecutor::new();
     let mut last_seen = String::new();
     let mut last_image_fingerprint = String::new();
     let mut last_html_fingerprint = String::new();
@@ -83,6 +238,20 @@ fn watch_loop(sender: Sender<ClipboardEvent>) {
         }
         let mut handled = false;
         if let Some(clipboard) = clipboard.as_mut() {
+            // Private mode short-circuits all capture paths: while the
+            // user has it on, we never even probe the clipboard (the
+            // probes below are skipped to avoid producing fingerprints
+            // the user does not want captured, and to save CPU).
+            if private_mode.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(700));
+                continue;
+            }
+            if let Some(active_class) = platform::active_window_class()
+                && blacklist.is_match(&active_class)
+            {
+                thread::sleep(Duration::from_millis(700));
+                continue;
+            }
             if let Ok(paths) = clipboard.get().file_list() {
                 handled = true;
                 let paths = paths
@@ -152,10 +321,15 @@ fn watch_loop(sender: Sender<ClipboardEvent>) {
                         None => true,
                     };
                     if sent_or_skipped {
-                        last_seen = text;
+                        last_seen = text.clone();
                         last_image_fingerprint.clear();
                         last_file_fingerprint.clear();
                         last_html_fingerprint.clear();
+                        if builtin_actions_enabled
+                            && let Some(matched) = action_matcher.find_first_auto_trigger(&text)
+                        {
+                            action_executor.execute_async(&matched.action, &text);
+                        }
                     }
                 }
             }
@@ -178,7 +352,7 @@ fn image_fingerprint(width: usize, height: usize, bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn string_fingerprint(value: &str) -> String {
+pub(crate) fn string_fingerprint(value: &str) -> String {
     if value.is_empty() {
         return String::new();
     }
@@ -408,7 +582,7 @@ fn decode_base64_byte(byte: u8) -> Result<u8, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::ClipboardEvent;
+    use super::*;
     use crossbeam_channel::{TrySendError, bounded};
 
     #[test]
@@ -425,5 +599,44 @@ mod tests {
         let drained = rx.try_recv().expect("drain first event");
         assert!(matches!(drained, ClipboardEvent::ToggleWindow));
         tx.try_send(ClipboardEvent::Quit).expect("send after drain");
+    }
+
+    #[test]
+    fn test_echo_suppression() {
+        let guard = PrimaryEchoGuard::new();
+        let hash = string_fingerprint("test content");
+
+        assert!(
+            !guard.should_suppress(&hash),
+            "should not suppress before any write"
+        );
+
+        guard.mark_write(hash.clone());
+
+        assert!(
+            guard.should_suppress(&hash),
+            "should suppress within window after write"
+        );
+
+        let other_hash = string_fingerprint("other content");
+        assert!(
+            !guard.should_suppress(&other_hash),
+            "should not suppress different content"
+        );
+    }
+
+    #[test]
+    fn test_echo_guard_independent_instances() {
+        let guard1 = PrimaryEchoGuard::new();
+        let guard2 = PrimaryEchoGuard::new();
+        let hash = string_fingerprint("shared content");
+
+        guard1.mark_write(hash.clone());
+
+        assert!(guard1.should_suppress(&hash));
+        assert!(
+            !guard2.should_suppress(&hash),
+            "separate guard instances should be independent"
+        );
     }
 }
