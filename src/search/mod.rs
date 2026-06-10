@@ -156,7 +156,7 @@ impl SearchEngine for SubstringEngine {
             }
         }
 
-        hits.sort_by(|a, b| b.entry.is_pinned.cmp(&a.entry.is_pinned));
+        hits.sort_by_key(|h| std::cmp::Reverse(h.entry.is_pinned));
         hits
     }
 }

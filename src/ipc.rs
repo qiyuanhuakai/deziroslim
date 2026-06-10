@@ -126,14 +126,15 @@ pub struct IpcServer {
 
 impl IpcServer {
     /// Resolve the default socket path:
-    /// 1. `$XDG_RUNTIME_DIR/tiez-slim-linux.sock`
+    /// 1. `$XDG_RUNTIME_DIR/tiez-slim-linux.sock` (when the env var is set,
+    ///    per XDG Base Directory spec; callers are expected to ensure the
+    ///    directory exists)
     /// 2. `/tmp/tiez-slim-$UID.sock`
     pub fn socket_path_default() -> PathBuf {
-        if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {
-            let p = PathBuf::from(runtime).join("tiez-slim-linux.sock");
-            if p.parent().is_some_and(|d| d.exists()) {
-                return p;
-            }
+        if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR")
+            && !runtime.is_empty()
+        {
+            return PathBuf::from(runtime).join("tiez-slim-linux.sock");
         }
         let uid = unsafe { libc::getuid() };
         PathBuf::from(format!("/tmp/tiez-slim-{uid}.sock"))
@@ -634,14 +635,18 @@ mod tests {
 
     #[test]
     fn socket_path_default_uses_xdg_runtime() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let runtime = dir.path().to_str().expect("utf8 path").to_string();
+        let expected = dir.path().join("tiez-slim-linux.sock");
+
         let old = std::env::var("XDG_RUNTIME_DIR").ok();
 
         // SAFETY: test runs single-threaded in a temp context.
         unsafe {
-            std::env::set_var("XDG_RUNTIME_DIR", "/run/user/1000");
+            std::env::set_var("XDG_RUNTIME_DIR", &runtime);
         }
         let path = IpcServer::socket_path_default();
-        assert_eq!(path, PathBuf::from("/run/user/1000/tiez-slim-linux.sock"));
+        assert_eq!(path, expected);
 
         match old {
             Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
