@@ -229,7 +229,7 @@ pub fn draw_tags_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
             });
         });
     });
-    if expanded == prev {
+    if expanded != prev {
         app.settings_panel_collapsed[5] = !expanded;
         app.persist_preferences();
     }

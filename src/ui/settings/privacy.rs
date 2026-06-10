@@ -32,7 +32,7 @@ pub fn draw_privacy_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui
     );
     let collapsed_ref = app.settings_panel_collapsed.get_mut(PRIVACY_PANEL_INDEX);
     if let Some(collapsed) = collapsed_ref
-        && expanded == *collapsed
+        && expanded != *collapsed
     {
         *collapsed = !expanded;
         app.persist_preferences();

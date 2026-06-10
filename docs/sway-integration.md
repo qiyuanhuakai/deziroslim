@@ -6,6 +6,8 @@
 
 `tiez-slim` must be running in the background for `tiez-cli` to work. Start `tiez-slim` in your window manager config before using `tiez-cli` for script integration.
 
+**Note:** 集成示例使用 `python3` 解析 JSON，请确保系统已安装 Python 3。 / The integration examples use `python3` for JSON parsing. Ensure Python 3 is installed.
+
 ## 安装 rofi 脚本
 
 将 `rofi-script.sh` 复制到你的配置目录：
@@ -107,7 +109,7 @@ for e in json.load(sys.stdin):
 " | dmenu -i -p "Clipboard:" -l 15)
 
 [ -z "$selection" ] && exit 0
-entry_id=$(echo "$selection" | grep -oP '#\K[0-9]+')
+entry_id=$(echo "$selection" | sed -n 's/.*#\([0-9]\+\)$/\1/p')
 tiez-cli paste "$entry_id"
 ```
 

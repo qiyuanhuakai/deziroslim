@@ -490,6 +490,8 @@ settings:
     no_devices: "No devices yet"
     paired: "Paired"
 
+  panel_not_implemented: "This panel will be implemented in a future phase"
+
 emoji:
   group:
     smileys_emotion: "Smileys & Emotion"

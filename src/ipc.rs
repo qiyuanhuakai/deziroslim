@@ -180,12 +180,15 @@ impl IpcServer {
             match stream {
                 Ok(stream) => {
                     let storage = storage.clone();
-                    thread::Builder::new()
-                        .name("ipc-handler".into())
-                        .spawn(move || {
-                            Self::handle_connection(stream, &storage);
-                        })
-                        .ok();
+                    if let Err(e) =
+                        thread::Builder::new()
+                            .name("ipc-handler".into())
+                            .spawn(move || {
+                                Self::handle_connection(stream, &storage);
+                            })
+                    {
+                        eprintln!("[ipc] handler spawn failed: {e}");
+                    }
                 }
                 Err(e) => {
                     eprintln!("[ipc] accept error: {e}");
@@ -196,6 +199,9 @@ impl IpcServer {
 
     /// Read one JSON Lines request, dispatch, write one JSON Lines response.
     fn handle_connection(stream: UnixStream, storage: &Storage) {
+        // Prevent indefinite blocking on slow/malicious clients.
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+
         let peer = stream.peer_addr().ok();
         let mut reader = BufReader::new(&stream);
         let mut line = String::new();
@@ -205,7 +211,13 @@ impl IpcServer {
             Ok(0) => return, // EOF
             Ok(_) => {}
             Err(e) => {
-                eprintln!("[ipc] read error from {peer:?}: {e}");
+                if e.kind() == std::io::ErrorKind::TimedOut
+                    || e.kind() == std::io::ErrorKind::WouldBlock
+                {
+                    eprintln!("[ipc] read timeout from {peer:?}");
+                } else {
+                    eprintln!("[ipc] read error from {peer:?}: {e}");
+                }
                 return;
             }
         }
@@ -498,7 +510,7 @@ impl IpcServer {
             .get("var")
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
-        let mut all_vars = crate::snippets::interpolate::resolve_builtins(None);
+        let mut all_vars = crate::snippets::interpolate::resolve_builtins(None, None);
         all_vars.extend(vars);
         match crate::snippets::interpolate::interpolate(&snippet.template, &all_vars) {
             Ok(text) => {

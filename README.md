@@ -1,6 +1,6 @@
 <a name="chinese"></a>
 
-![i18n](https://img.shields.io/badge/i18n-374%20keys%20%7C%20zh--CN%20100%25%20%7C%20en--US%20100%25-blue)
+![i18n](https://img.shields.io/badge/i18n-753%20keys%20%7C%20zh--CN%20100%25%20%7C%20en--US%20100%25-blue)
 [English](#i18n) | [中文](#tiez-slim-linux)
 
 # tiez-slim-linux
@@ -29,7 +29,7 @@ Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/tiez-clipboar
 - 模糊搜索：基于 nucleo-matcher 的高性能模糊搜索，支持拼写纠错（如 `cllpboard` 匹配 `clipboard`）和中文模糊匹配；搜索结果按相关度排序，匹配字符高亮显示；可在设置中切换回传统子串搜索。
 - 数据库加密（opt-in）：通过 `secure_storage` feature gate 启用，使用 AES-256-GCM 加密敏感条目；密钥通过系统 keyring（GNOME Keyring / KWallet）管理；启用后标记为敏感的条目自动加密存储，读取时自动解密；支持批量加密/解密迁移，带 LRU 缓存优化读取性能。
 - KDE Connect 同步：默认编译启用，支持与 Android 设备通过 KDE Connect 协议同步剪贴板；设置面板含启用开关、设备 ID 显示、QR 码配对、已发现设备列表；配对后双向同步，带 echo 防重复机制。
-- 国际化（i18n）：完整双语支持（zh-CN + en-US），752 个翻译键，100% 覆盖率；使用 rust-i18n v4，启动时自动检测系统语言，支持手动切换；所有用户可见字符串均通过 `t!()` 宏引用，无硬编码。
+- 国际化（i18n）：完整双语支持（zh-CN + en-US），753 个翻译键，100% 覆盖率；使用 rust-i18n v4，启动时自动检测系统语言，支持手动切换；所有用户可见字符串均通过 `t!()` 宏引用，无硬编码。
 
 ## 使用方法
 

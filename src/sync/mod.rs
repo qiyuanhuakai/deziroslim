@@ -83,6 +83,7 @@ pub struct SyncManager {
     device_id: String,
     state: SyncState,
     discovered_devices: Vec<DiscoveredDevice>,
+    pending_pair_requests: Vec<DiscoveredDevice>,
     cmd_tx: Option<crossbeam_channel::Sender<SyncCmd>>,
     event_rx: Option<crossbeam_channel::Receiver<SyncEvent>>,
     echo_guard: SyncEchoGuard,
@@ -97,6 +98,7 @@ impl SyncManager {
             device_id,
             state: SyncState::Disabled,
             discovered_devices: Vec::new(),
+            pending_pair_requests: Vec::new(),
             cmd_tx: None,
             event_rx: None,
             echo_guard: SyncEchoGuard::new(),
@@ -113,6 +115,34 @@ impl SyncManager {
 
     pub fn discovered_devices(&self) -> &[DiscoveredDevice] {
         &self.discovered_devices
+    }
+
+    /// Devices that have requested pairing and are awaiting explicit user confirmation.
+    pub fn pending_pair_requests(&self) -> &[DiscoveredDevice] {
+        &self.pending_pair_requests
+    }
+
+    /// Accept a pending pair request and dispatch the underlying pair command.
+    /// Removes the request from the pending list regardless of cmd_tx availability.
+    pub fn accept_pair_request(&mut self, device_id: &str) {
+        if let Some(pos) = self
+            .pending_pair_requests
+            .iter()
+            .position(|d| d.id == device_id)
+        {
+            let device = self.pending_pair_requests.remove(pos);
+            self.state = SyncState::Pairing {
+                device_name: device.name.clone(),
+            };
+            if let Some(tx) = &self.cmd_tx {
+                let _ = tx.send(SyncCmd::Pair(device.id));
+            }
+        }
+    }
+
+    /// Reject a pending pair request without pairing.
+    pub fn reject_pair_request(&mut self, device_id: &str) {
+        self.pending_pair_requests.retain(|d| d.id != device_id);
     }
 
     /// Enable sync: start the background runtime with mDNS discovery + TLS.
@@ -189,12 +219,12 @@ impl SyncManager {
                     }
                 }
                 SyncEvent::PairRequested { id, name } => {
-                    self.state = SyncState::Pairing {
-                        device_name: name.clone(),
-                    };
-                    // Auto-accept pair requests for now
-                    if let Some(tx) = &self.cmd_tx {
-                        let _ = tx.send(SyncCmd::Pair(id));
+                    if !self.pending_pair_requests.iter().any(|d| d.id == id) {
+                        self.pending_pair_requests.push(DiscoveredDevice {
+                            id,
+                            name,
+                            paired: false,
+                        });
                     }
                 }
                 SyncEvent::PairComplete { id } => {
@@ -233,6 +263,10 @@ impl SyncManager {
         }
     }
 
+    /// Drain queued `ClipboardReceived` events. Returns the **most recent**
+    /// clipboard content; earlier events received between polls are
+    /// intentionally discarded because a single coalesced update is what the
+    /// caller (clipboard watcher) actually wants to apply.
     pub fn take_clipboard_received(&mut self) -> Option<String> {
         let rx = self.event_rx.as_ref()?;
         let mut last = None;
@@ -492,8 +526,17 @@ fn generate_tls_certificate(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8
     let cert_p = dir.join("cert.pem");
     let key_p = dir.join("private_key.pem");
 
+    let key_arg = key_p
+        .to_str()
+        .ok_or_else(|| std::io::Error::other("non-UTF8 key path"))?
+        .to_string();
+    let cert_arg = cert_p
+        .to_str()
+        .ok_or_else(|| std::io::Error::other("non-UTF8 cert path"))?
+        .to_string();
+
     // Use openssl to generate a self-signed EC certificate.
-    let status = std::process::Command::new("openssl")
+    let output = std::process::Command::new("openssl")
         .args([
             "req",
             "-x509",
@@ -502,7 +545,7 @@ fn generate_tls_certificate(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8
             "-pkeyopt",
             "ec_paramgen_curve:prime256v1",
             "-keyout",
-            key_p.to_str().unwrap(),
+            &key_arg,
             "-addext",
             "basicConstraints=critical,CA:FALSE",
             "-days",
@@ -511,14 +554,15 @@ fn generate_tls_certificate(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8
             "-subj",
             &format!("/O=KDE/OU=KDE Connect/CN={device_id}"),
             "-out",
-            cert_p.to_str().unwrap(),
+            &cert_arg,
         ])
-        .status()?;
+        .output()?;
 
-    if !status.success() {
-        return Err(std::io::Error::other(
-            "openssl certificate generation failed",
-        ));
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(std::io::Error::other(format!(
+            "openssl certificate generation failed: {stderr}"
+        )));
     }
 
     let cert = std::fs::read(&cert_p)?;
@@ -558,10 +602,16 @@ impl FileTrustHandler {
                     .into_iter()
                     .flatten()
                     .filter_map(Result::ok)
-                    .map(|f| {
-                        let device_id = f.path().file_stem().unwrap().to_string_lossy().to_string();
-                        let cert = std::fs::read(f.path()).unwrap_or_default();
-                        (device_id, cert)
+                    .filter_map(|f| {
+                        let device_id = f
+                            .path()
+                            .file_stem()
+                            .map(|s| s.to_string_lossy().to_string())?;
+                        let cert = std::fs::read(f.path()).ok()?;
+                        if cert.is_empty() {
+                            return None;
+                        }
+                        Some((device_id, cert))
                     }),
             )
         } else {
@@ -640,12 +690,14 @@ fn sync_runtime(
 
     let event_tx_mdns = event_tx.clone();
     let device_id_mdns = device_id.clone();
-    std::thread::Builder::new()
+    if let Err(e) = std::thread::Builder::new()
         .name("mdns-monitor".into())
         .spawn(move || {
             mdns_monitor_loop(&device_id_mdns, event_tx_mdns);
         })
-        .ok();
+    {
+        eprintln!("[sync] mdns-monitor spawn failed: {e}");
+    }
 
     let rt = tokio::runtime::Runtime::new().expect("create sync tokio runtime");
     rt.block_on(async move {

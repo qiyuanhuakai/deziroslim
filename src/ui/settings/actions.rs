@@ -228,16 +228,10 @@ fn draw_test_pattern(ui: &mut egui::Ui, app: &mut ClipboardApp) {
         let test_result = if text.is_empty() {
             t!("settings.actions.test_result_no_match").to_string()
         } else {
-            let mut matched_count = 0;
-            for action in &app.actions {
-                if !action.enabled {
-                    continue;
-                }
-                let matcher = crate::actions::matcher::ActionMatcher::new(vec![action.clone()]);
-                if matcher.find_first_match(&text).is_some() {
-                    matched_count += 1;
-                }
-            }
+            let enabled_actions: Vec<_> =
+                app.actions.iter().filter(|a| a.enabled).cloned().collect();
+            let matcher = crate::actions::matcher::ActionMatcher::new(enabled_actions);
+            let matched_count = matcher.find_matching(&text).len();
             if matched_count > 0 {
                 t!("settings.actions.test_result_match", count = matched_count).to_string()
             } else {

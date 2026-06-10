@@ -33,6 +33,24 @@ pub enum ActionKind {
     ShellCommand,
 }
 
+impl std::fmt::Display for ActionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = serde_json::to_string(self)
+            .map_err(|_| std::fmt::Error)?
+            .trim_matches('"')
+            .to_string();
+        f.write_str(&s)
+    }
+}
+
+impl std::str::FromStr for ActionKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(&format!("\"{}\"", s))
+            .map_err(|e| format!("Unknown ActionKind '{}': {}", s, e))
+    }
+}
+
 /// A user-defined or built-in action that operates on clipboard entries.
 ///
 /// Actions define a `pattern` (regex or glob) to match clipboard content,

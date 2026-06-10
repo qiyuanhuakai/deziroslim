@@ -71,7 +71,7 @@ pub fn dispatch_panel(
         SettingsTab::Sync => sync::draw_sync_panel(ui, app, ctx),
         SettingsTab::Snippets => snippets::draw_snippets_panel(ui, app, ctx),
         _ => {
-            ui.label("此面板将在后续 Phase 实现");
+            ui.label(t!("settings.panel_not_implemented"));
         }
     }
 }
@@ -528,7 +528,14 @@ pub(crate) fn pick_database_save_dir_with_dialog(
             Ok((!value.is_empty()).then(|| PathBuf::from(value)))
         }
         Ok(_) => Ok(None),
-        Err(_) => Err(t!("error.dialog_not_found").to_string()),
+        Err(_) => {
+            let fallback = Storage::default_path();
+            Err(format!(
+                "{} ({})",
+                t!("error.dialog_not_found"),
+                fallback.display()
+            ))
+        }
     }
 }
 

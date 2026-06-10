@@ -41,13 +41,26 @@ impl AppBlacklist {
                 compiled: GlobSet::empty(),
             };
         }
+        let mut errors: Vec<String> = Vec::new();
         let mut builder = GlobSetBuilder::new();
         for pat in &patterns {
-            if let Ok(glob) = Glob::new(pat) {
-                builder.add(glob);
+            match Glob::new(pat) {
+                Ok(glob) => {
+                    builder.add(glob);
+                }
+                Err(err) => errors.push(format!("{pat}: {err}")),
             }
         }
-        let compiled = builder.build().unwrap_or_else(|_| GlobSet::empty());
+        if !errors.is_empty() {
+            eprintln!(
+                "[blacklist] Warning: invalid glob patterns skipped: {}",
+                errors.join(", ")
+            );
+        }
+        let compiled = builder.build().unwrap_or_else(|err| {
+            eprintln!("[blacklist] Warning: glob build failed: {err}");
+            GlobSet::empty()
+        });
         Self { patterns, compiled }
     }
 

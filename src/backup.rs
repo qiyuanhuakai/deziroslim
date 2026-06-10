@@ -20,11 +20,11 @@ struct BackupFile {
 
 pub struct AutoBackup {
     data_dir: PathBuf,
-    retention: i32,
+    retention: u32,
 }
 
 impl AutoBackup {
-    pub fn new(data_dir: PathBuf, retention: i32) -> Self {
+    pub fn new(data_dir: PathBuf, retention: u32) -> Self {
         Self {
             data_dir,
             retention,
@@ -81,7 +81,7 @@ impl AutoBackup {
             return Ok(());
         }
 
-        let mut entries: Vec<_> = fs::read_dir(&backup_dir)?
+        let entries: Vec<_> = fs::read_dir(&backup_dir)?
             .filter_map(Result::ok)
             .filter(|e| {
                 e.path().extension().is_some_and(|ext| ext == "json")
@@ -92,14 +92,22 @@ impl AutoBackup {
             })
             .collect();
 
-        if entries.len() <= self.retention as usize {
+        let mut valid: Vec<_> = entries
+            .into_iter()
+            .filter_map(|e| {
+                let mtime = e.metadata().ok()?.modified().ok()?;
+                Some((e, mtime))
+            })
+            .collect();
+
+        if valid.len() <= self.retention as usize {
             return Ok(());
         }
 
-        entries.sort_by_key(|e| e.metadata().ok().and_then(|m| m.modified().ok()));
+        valid.sort_by_key(|(_, mtime)| *mtime);
 
-        let to_delete = entries.len() - self.retention as usize;
-        for entry in entries.iter().take(to_delete) {
+        let to_delete = valid.len() - self.retention as usize;
+        for (entry, _) in valid.iter().take(to_delete) {
             let _ = fs::remove_file(entry.path());
         }
 

@@ -504,6 +504,8 @@ settings:
     no_devices: "暂无设备"
     paired: "已配对"
 
+  panel_not_implemented: "此面板将在后续 Phase 实现"
+
 emoji:
   group:
     smileys_emotion: "表情与情感"

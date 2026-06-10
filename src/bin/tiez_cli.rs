@@ -286,7 +286,7 @@ fn cmd_paste(socket_path: &std::path::Path, id: i64, rich: bool, json_output: bo
     0
 }
 
-fn cmd_pin(socket_path: &std::path::Path, id: i64, _unpin: bool) -> i32 {
+fn cmd_pin(socket_path: &std::path::Path, id: i64, unpin: bool) -> i32 {
     let args = serde_json::json!({ "id": id });
 
     let resp = match send_ipc(socket_path, "pin", args) {
@@ -298,7 +298,7 @@ fn cmd_pin(socket_path: &std::path::Path, id: i64, _unpin: bool) -> i32 {
         return handle_ipc_response_error(&resp);
     }
 
-    let action = if _unpin {
+    let action = if unpin {
         t!("common.unpin")
     } else {
         t!("common.pin")

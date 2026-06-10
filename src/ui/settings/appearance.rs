@@ -165,7 +165,7 @@ pub fn draw_appearance_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &eg
             ui.label(t!("settings.appearance.interaction_hint"));
         },
     );
-    if expanded == prev {
+    if expanded != prev {
         app.settings_panel_collapsed[3] = !expanded;
         app.persist_preferences();
     }

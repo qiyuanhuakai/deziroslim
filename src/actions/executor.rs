@@ -187,9 +187,10 @@ impl ActionExecutor {
     }
 
     fn is_command_allowed(&self, command: &str) -> bool {
-        let Ok(guard) = self.allowlist.lock() else {
-            return true;
-        };
+        let guard = self
+            .allowlist
+            .lock()
+            .expect("allowlist mutex poisoned in is_command_allowed");
         if guard.is_empty() {
             return true;
         }
@@ -299,7 +300,11 @@ fn kill_process(pid: u32) -> Result<(), String> {
     #[cfg(unix)]
     {
         unsafe {
-            libc::kill(-(pid as i32), libc::SIGKILL);
+            let ret = libc::kill(-(pid as i32), libc::SIGKILL);
+            if ret != 0 {
+                let err = std::io::Error::last_os_error();
+                return Err(format!("kill failed: {}", err));
+            }
         }
         Ok(())
     }
@@ -311,7 +316,7 @@ fn kill_process(pid: u32) -> Result<(), String> {
 }
 
 fn split_command(command: &str) -> Vec<String> {
-    command.split_whitespace().map(String::from).collect()
+    shlex::split(command).unwrap_or_default()
 }
 
 #[cfg(test)]

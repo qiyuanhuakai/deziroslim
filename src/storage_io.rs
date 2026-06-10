@@ -196,8 +196,11 @@ impl Storage {
         if let serde_json::Value::Object(map) = &bundle.settings {
             let now = chrono::Local::now().timestamp_millis();
             for (key, value) in map {
-                let json_str = value.to_string();
-                tx.execute("INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", params![key, json_str, now])?;
+                let stored_value = match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                tx.execute("INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", params![key, stored_value, now])?;
             }
         }
         for tag in &bundle.tags {

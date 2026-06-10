@@ -137,7 +137,15 @@ pub enum Token {
     Variable(InterpSegment),
 }
 
-pub fn resolve_builtins(clipboard_content: Option<&str>) -> HashMap<String, String> {
+/// Resolve builtin template variables for snippet interpolation.
+///
+/// `fixed_uuid`, if provided, is used for the `uuid` builtin so that repeated
+/// interpolations of the same template stay deterministic. When `None`, a
+/// fresh `Uuid::new_v4()` is generated on every call.
+pub fn resolve_builtins(
+    clipboard_content: Option<&str>,
+    fixed_uuid: Option<Uuid>,
+) -> HashMap<String, String> {
     let now = Local::now();
     let mut map = HashMap::new();
     map.insert("date".into(), now.format("%Y-%m-%d").to_string());
@@ -146,7 +154,8 @@ pub fn resolve_builtins(clipboard_content: Option<&str>) -> HashMap<String, Stri
         "datetime".into(),
         now.format("%Y-%m-%d %H:%M:%S").to_string(),
     );
-    map.insert("uuid".into(), Uuid::new_v4().to_string());
+    let uuid = fixed_uuid.unwrap_or_else(Uuid::new_v4);
+    map.insert("uuid".into(), uuid.to_string());
     if let Some(clip) = clipboard_content {
         let truncated: String = clip.chars().take(MAX_CLIPBOARD_LEN).collect();
         map.insert("clipboard".into(), truncated);
@@ -280,7 +289,7 @@ mod tests {
 
     #[test]
     fn builtin_date_is_yyyy_mm_dd() {
-        let builtins = resolve_builtins(None);
+        let builtins = resolve_builtins(None, None);
         let date = builtins.get("date").expect("date builtin missing");
         assert_eq!(date.len(), 10);
         assert_eq!(&date[4..5], "-");
@@ -289,7 +298,7 @@ mod tests {
 
     #[test]
     fn builtin_time_is_hh_mm_ss() {
-        let builtins = resolve_builtins(None);
+        let builtins = resolve_builtins(None, None);
         let time = builtins.get("time").expect("time builtin missing");
         assert_eq!(time.len(), 8);
         assert_eq!(&time[2..3], ":");
@@ -298,7 +307,7 @@ mod tests {
 
     #[test]
     fn builtin_datetime_format() {
-        let builtins = resolve_builtins(None);
+        let builtins = resolve_builtins(None, None);
         let dt = builtins.get("datetime").expect("datetime builtin missing");
         assert_eq!(dt.len(), 19);
         assert_eq!(&dt[10..11], " ");
@@ -306,7 +315,7 @@ mod tests {
 
     #[test]
     fn builtin_uuid_format() {
-        let builtins = resolve_builtins(None);
+        let builtins = resolve_builtins(None, None);
         let uuid = builtins.get("uuid").expect("uuid builtin missing");
         assert_eq!(uuid.len(), 36);
         assert_eq!(uuid.chars().filter(|c| *c == '-').count(), 4);
@@ -315,7 +324,7 @@ mod tests {
     #[test]
     fn builtin_clipboard_truncated() {
         let long_text = "a".repeat(500);
-        let builtins = resolve_builtins(Some(&long_text));
+        let builtins = resolve_builtins(Some(&long_text), None);
         let clip = builtins
             .get("clipboard")
             .expect("clipboard builtin missing");
@@ -324,7 +333,7 @@ mod tests {
 
     #[test]
     fn builtin_clipboard_short_not_truncated() {
-        let builtins = resolve_builtins(Some("hello"));
+        let builtins = resolve_builtins(Some("hello"), None);
         let clip = builtins
             .get("clipboard")
             .expect("clipboard builtin missing");
@@ -333,13 +342,13 @@ mod tests {
 
     #[test]
     fn builtin_clipboard_none_not_present() {
-        let builtins = resolve_builtins(None);
+        let builtins = resolve_builtins(None, None);
         assert!(!builtins.contains_key("clipboard"));
     }
 
     #[test]
     fn interpolate_with_builtins() {
-        let builtins = resolve_builtins(None);
+        let builtins = resolve_builtins(None, None);
         let result = interpolate("Today is {{date}}", &builtins).unwrap();
         assert!(result.starts_with("Today is "));
         assert_eq!(result.len(), "Today is ".len() + 10);

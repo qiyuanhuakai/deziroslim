@@ -422,7 +422,7 @@ struct AppPreferences {
     #[serde(default = "default_auto_backup_enabled")]
     auto_backup_enabled: bool,
     #[serde(default = "default_backup_retention_count")]
-    backup_retention_count: i32,
+    backup_retention_count: u32,
     #[serde(default)]
     last_backup_at: Option<i64>,
 
@@ -520,7 +520,7 @@ fn default_auto_backup_enabled() -> bool {
     true
 }
 
-fn default_backup_retention_count() -> i32 {
+fn default_backup_retention_count() -> u32 {
     10
 }
 
@@ -756,7 +756,7 @@ pub struct ClipboardApp {
     pub(crate) snippet_variable_dialog: Option<crate::snippets::SnippetVariableDialog>,
     pub(crate) exclusion_mode: crate::blacklist::ExclusionMode,
     pub(crate) auto_backup_enabled: bool,
-    pub(crate) backup_retention_count: i32,
+    pub(crate) backup_retention_count: u32,
     pub(crate) last_backup_at: Option<i64>,
     pub(crate) export_scope: String,
     pub(crate) import_mode: String,
@@ -4364,7 +4364,7 @@ impl ClipboardApp {
         let segments = crate::snippets::interpolate::extract_variables(&template);
 
         if segments.is_empty() {
-            let builtins = crate::snippets::interpolate::resolve_builtins(None);
+            let builtins = crate::snippets::interpolate::resolve_builtins(None, None);
             let result = crate::snippets::interpolate::interpolate(&template, &builtins);
             match result {
                 Ok(text) => {
@@ -4505,7 +4505,7 @@ impl ClipboardApp {
             if d.current_index + 1 < d.segments.len() {
                 d.current_index += 1;
             } else {
-                let mut all_vars = crate::snippets::interpolate::resolve_builtins(None);
+                let mut all_vars = crate::snippets::interpolate::resolve_builtins(None, None);
                 all_vars.extend(d.values.clone());
                 let result = crate::snippets::interpolate::interpolate(&d.template, &all_vars);
                 let snippet_id = d.snippet_id;

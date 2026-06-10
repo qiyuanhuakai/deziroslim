@@ -31,13 +31,13 @@ pub trait SearchEngine {
 /// Tolerates typos, character transpositions, and missing characters.
 /// CJK-friendly: operates on Unicode character level.
 pub struct FuzzyEngine {
-    matcher: std::cell::RefCell<Matcher>,
+    matcher: std::sync::Mutex<Matcher>,
 }
 
 impl FuzzyEngine {
     pub fn new() -> Self {
         Self {
-            matcher: std::cell::RefCell::new(Matcher::new(Config::DEFAULT)),
+            matcher: std::sync::Mutex::new(Matcher::new(Config::DEFAULT)),
         }
     }
 }
@@ -68,7 +68,7 @@ impl SearchEngine for FuzzyEngine {
             Normalization::Smart,
             AtomKind::Fuzzy,
         );
-        let mut matcher = self.matcher.borrow_mut();
+        let mut matcher = self.matcher.lock().expect("fuzzy matcher mutex poisoned");
         let mut indices_buf: Vec<u32> = Vec::new();
         let mut hits: Vec<SearchHit> = Vec::new();
 
@@ -128,7 +128,15 @@ impl SearchEngine for SubstringEngine {
             let source_lower = entry.source_app.to_lowercase();
 
             if let Some(pos) = preview_lower.find(&query) {
-                let matched_indices: Vec<usize> = (pos..pos + query.len()).collect();
+                let char_start = preview_lower[..pos].chars().count();
+                let char_len = query.chars().count();
+                let matched_indices: Vec<usize> = entry
+                    .preview
+                    .char_indices()
+                    .skip(char_start)
+                    .take(char_len)
+                    .map(|(byte_idx, _)| byte_idx)
+                    .collect();
                 hits.push(SearchHit {
                     entry: entry.clone(),
                     score: 0,

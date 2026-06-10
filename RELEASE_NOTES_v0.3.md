@@ -18,7 +18,7 @@ tiez-slim v0.3.0 brings 9 major features across privacy, automation, sync, and d
 | **Database Encryption** | AES-256-GCM for sensitive entries; system keyring key management (opt-in) |
 | **KDE Connect Sync** | Bidirectional clipboard sync with Android (opt-in) |
 | **CLI (tiez-cli)** | 8 subcommands for scripting; Unix socket IPC; Sway/Hyprland integration |
-| **i18n** | Full zh-CN + en-US support, 374 keys, 100% coverage |
+| **i18n** | Full zh-CN + en-US support, 752 keys, 100% coverage |
 
 ### Opt-in Features
 
@@ -67,7 +67,7 @@ tiez-cli status [--json]
 
 ## Stats
 
-- **i18n keys**: 374 (zh-CN 100% | en-US 100%)
+- **i18n keys**: 752 (zh-CN 100% | en-US 100%)
 - **Settings panels**: 10 implemented
 - **CLI subcommands**: 8
 - **Unit tests**: 203+

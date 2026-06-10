@@ -43,17 +43,6 @@ impl HotkeyManager {
 
     pub fn register(&mut self, name: &str, combo: &str) -> Result<(), HotkeyError> {
         let combo = combo.trim().to_string();
-        if combo.is_empty() {
-            self.unregister(name);
-            self.registered.insert(
-                name.to_string(),
-                HotkeyEntry {
-                    name: name.to_string(),
-                    combo: combo.clone(),
-                },
-            );
-            return Ok(());
-        }
 
         if let Some(old) = self.registered.get(name) {
             if old.combo == combo {
@@ -64,7 +53,8 @@ impl HotkeyManager {
             }
         }
 
-        if let Some(existing) = self.combo_index.get(&combo)
+        if !combo.is_empty()
+            && let Some(existing) = self.combo_index.get(&combo)
             && existing != name
         {
             return Err(HotkeyError::ComboConflict {
@@ -73,7 +63,9 @@ impl HotkeyManager {
             });
         }
 
-        self.combo_index.insert(combo.clone(), name.to_string());
+        if !combo.is_empty() {
+            self.combo_index.insert(combo.clone(), name.to_string());
+        }
         self.registered.insert(
             name.to_string(),
             HotkeyEntry {

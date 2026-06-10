@@ -157,6 +157,9 @@ impl Storage {
             return raw.to_string();
         };
         if let Ok(mut cache) = self.decrypted_cache.lock() {
+            if let Some(cached) = cache.get(&id) {
+                return cached.clone();
+            }
             cache.put(id, text.clone());
         }
         text

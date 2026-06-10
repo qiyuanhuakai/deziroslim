@@ -53,7 +53,7 @@ impl ActionEditor {
         self.pattern = action.pattern.clone();
         self.command = action.command.clone();
         self.icon = action.icon.clone();
-        self.kind = format!("{:?}", action.kind).to_lowercase();
+        self.kind = action.kind.to_string();
         self.auto_trigger = action.auto_trigger;
         self.auto_trigger_primary = action.auto_trigger_primary;
         self.toolbar_button = action.toolbar_button;
@@ -149,49 +149,43 @@ pub fn draw_action_editor_dialog(
             });
             ui.add_space(8.0);
 
+            let is_valid = !app.action_editor.name.trim().is_empty()
+                && !app.action_editor.pattern.trim().is_empty()
+                && !app.action_editor.command.trim().is_empty();
+
             ui.horizontal(|ui| {
-                if ui
-                    .add_sized(
-                        [100.0, 30.0],
-                        egui::Button::new(
-                            egui::RichText::new(t!("common.save")).size(12.5).strong(),
-                        )
+                let btn =
+                    egui::Button::new(egui::RichText::new(t!("common.save")).size(12.5).strong())
                         .rounding(egui::Rounding::same(6.0))
-                        .fill(theme.accent),
-                    )
+                        .min_size(egui::vec2(100.0, 30.0))
+                        .fill(if is_valid { theme.accent } else { theme.muted });
+                if ui
+                    .add_enabled(is_valid, btn)
                     .on_disabled_hover_text(t!("settings.actions.name_empty"))
                     .clicked()
                 {
-                    if app.action_editor.name.trim().is_empty()
-                        || app.action_editor.pattern.trim().is_empty()
-                        || app.action_editor.command.trim().is_empty()
-                    {
-                        app.status = t!("settings.actions.name_empty").to_string();
-                    } else {
-                        let kind = match app.action_editor.kind.as_str() {
-                            "open" => crate::actions::ActionKind::Open,
-                            "open_with" => crate::actions::ActionKind::OpenWith,
-                            "copy" => crate::actions::ActionKind::Copy,
-                            _ => crate::actions::ActionKind::ShellCommand,
-                        };
-                        let mut action = crate::actions::Action::new(
-                            app.action_editor.name.trim(),
-                            app.action_editor.pattern.trim(),
-                            app.action_editor.command.trim(),
-                        );
-                        action.kind = kind;
-                        action.icon = app.action_editor.icon.clone();
-                        action.enabled = app.action_editor.enabled;
-                        action.auto_trigger = app.action_editor.auto_trigger;
-                        action.auto_trigger_primary = app.action_editor.auto_trigger_primary;
-                        action.toolbar_button = app.action_editor.toolbar_button;
-                        action.sort_order = app.action_editor.sort_order;
-                        if let Some(id) = app.action_editor.editing_id {
-                            action.id = id;
-                        }
-                        result = Some(EditorResult::Save(action));
-                        close = true;
+                    let kind: crate::actions::ActionKind = app
+                        .action_editor
+                        .kind
+                        .parse()
+                        .unwrap_or(crate::actions::ActionKind::ShellCommand);
+                    let mut action = crate::actions::Action::new(
+                        app.action_editor.name.trim(),
+                        app.action_editor.pattern.trim(),
+                        app.action_editor.command.trim(),
+                    );
+                    action.kind = kind;
+                    action.icon = app.action_editor.icon.clone();
+                    action.enabled = app.action_editor.enabled;
+                    action.auto_trigger = app.action_editor.auto_trigger;
+                    action.auto_trigger_primary = app.action_editor.auto_trigger_primary;
+                    action.toolbar_button = app.action_editor.toolbar_button;
+                    action.sort_order = app.action_editor.sort_order;
+                    if let Some(id) = app.action_editor.editing_id {
+                        action.id = id;
                     }
+                    result = Some(EditorResult::Save(action));
+                    close = true;
                 }
 
                 if app.action_editor.editing_id.is_some()

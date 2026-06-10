@@ -93,14 +93,13 @@ fn compile_action(action: Action) -> CompiledAction {
             },
             Err(err) => {
                 eprintln!(
-                    "action compile warning: action '{}' regex invalid: {}, falling back to match-all",
+                    "action compile warning: action '{}' regex invalid: {}, will never match",
                     action.name, err
                 );
-                // Fallback: match everything (safe degradation, no panic).
-                let fallback = Regex::new("^.*$").expect("fallback regex is always valid");
+                // Invalid patterns must never match to avoid accidental triggers.
                 CompiledAction {
                     action,
-                    regex: Some(fallback),
+                    regex: None,
                     glob: None,
                 }
             }
@@ -110,12 +109,15 @@ fn compile_action(action: Action) -> CompiledAction {
 
 impl ActionMatcher {
     /// Create a matcher from a list of actions. Only enabled actions are compiled.
+    /// Actions are sorted by `sort_order` ascending before compilation so that
+    /// `find_first_match` / `find_matching` honour the user-configured priority.
     pub fn new(actions: Vec<Action>) -> Self {
-        let compiled = actions
+        let mut actions = actions
             .into_iter()
             .filter(|a| a.enabled)
-            .map(compile_action)
-            .collect();
+            .collect::<Vec<_>>();
+        actions.sort_by_key(|a| a.sort_order);
+        let compiled = actions.into_iter().map(compile_action).collect();
         Self { compiled }
     }
 
@@ -252,20 +254,19 @@ mod tests {
         let matcher = ActionMatcher::new(vec![a2, a1]); // reversed order input
         let m = matcher.find_first_match("https://example.com");
         assert!(m.is_some());
-        // find_first_match iterates in compilation order (sort_order ASC),
-        // but we inserted a2 first then a1; new() doesn't re-sort.
-        // The test verifies find_first_match returns the first match in vec order.
-        assert_eq!(m.unwrap().action.name, "Second");
+        // find_first_match iterates in sort_order ASC order, so the
+        // lowest sort_order action is returned first.
+        assert_eq!(m.unwrap().action.name, "First");
     }
 
     #[test]
-    fn invalid_regex_does_not_panic_and_falls_back() {
+    fn invalid_regex_does_not_panic_and_never_matches() {
         let actions = vec![make_action("Bad Regex", "[invalid(", true)];
         let matcher = ActionMatcher::new(actions);
-        // Should not panic; fallback regex ^.*$ matches everything.
+        // Should not panic; invalid patterns must never match to avoid
+        // accidental triggers on arbitrary clipboard content.
         let m = matcher.find_first_match("anything");
-        assert!(m.is_some(), "fallback regex should match any text");
-        assert_eq!(m.unwrap().action.name, "Bad Regex");
+        assert!(m.is_none(), "invalid regex should never match");
     }
 
     #[test]

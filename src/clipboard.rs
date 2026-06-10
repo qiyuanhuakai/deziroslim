@@ -84,7 +84,7 @@ pub fn start_watcher(
     private_mode: Arc<AtomicBool>,
     storage: Storage,
     builtin_actions_enabled: bool,
-    _echo_guard: PrimaryEchoGuard,
+    echo_guard: PrimaryEchoGuard,
 ) {
     thread::Builder::new()
         .name("clipboard-watcher".to_string())
@@ -95,7 +95,7 @@ pub fn start_watcher(
                 private_mode,
                 storage,
                 builtin_actions_enabled,
-                _echo_guard,
+                echo_guard,
             )
         })
         .expect("spawn clipboard watcher");

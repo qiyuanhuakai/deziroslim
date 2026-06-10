@@ -122,6 +122,23 @@ fn run_dev_command(command: DevCommand) -> anyhow::Result<()> {
 }
 
 fn run_ci() -> anyhow::Result<()> {
+    let script = std::path::Path::new("scripts/i18n-check.sh");
+    if !script.exists() {
+        anyhow::bail!("`scripts/i18n-check.sh` not found; run `cargo ci` from the repository root");
+    }
+
+    // The i18n script uses `set -o pipefail` and `#!/usr/bin/env bash`, so it
+    // must be executed with bash. Fall back to sh only as a last resort so the
+    // i18n step runs on minimal environments; on shells without pipefail the
+    // step will fail loudly, which is the correct behavior.
+    let script_interpreter = if which("bash").is_some() {
+        "bash"
+    } else if which("sh").is_some() {
+        "sh"
+    } else {
+        anyhow::bail!("neither `bash` nor `sh` is available in PATH");
+    };
+
     let steps: &[(&str, &[&str])] = &[
         ("cargo", &["fmt", "--all", "--", "--check"]),
         ("cargo", &["check"]),
@@ -130,7 +147,7 @@ fn run_ci() -> anyhow::Result<()> {
             "cargo",
             &["clippy", "--all-targets", "--", "-D", "warnings"],
         ),
-        ("bash", &["scripts/i18n-check.sh"]),
+        (script_interpreter, &["scripts/i18n-check.sh"]),
     ];
 
     for (program, args) in steps {
@@ -149,6 +166,18 @@ fn run_ci() -> anyhow::Result<()> {
 
     println!("ci passed");
     Ok(())
+}
+
+fn which(program: &str) -> Option<std::path::PathBuf> {
+    std::env::var_os("PATH").and_then(|paths| {
+        for path in std::env::split_paths(&paths) {
+            let candidate = path.join(program);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        None
+    })
 }
 
 fn format_command(program: &str, args: &[&str]) -> String {
