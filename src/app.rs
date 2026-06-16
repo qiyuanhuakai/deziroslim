@@ -777,7 +777,6 @@ pub struct ClipboardApp {
     pub(crate) kde_connect_device_id: Option<String>,
     pub(crate) kde_connect_device_name: String,
     pub(crate) sync_enabled: bool,
-    pub(crate) show_sync_qr: bool,
     #[cfg(feature = "kde_connect")]
     pub(crate) sync_manager: crate::sync::SyncManager,
     pub(crate) cli_socket_path: Option<String>,
@@ -1019,7 +1018,6 @@ impl ClipboardApp {
             kde_connect_device_id: preferences.kde_connect_device_id,
             kde_connect_device_name: preferences.kde_connect_device_name,
             sync_enabled: preferences.sync_enabled,
-            show_sync_qr: false,
             #[cfg(feature = "kde_connect")]
             sync_manager: crate::sync::SyncManager::new(sync_storage),
             cli_socket_path: preferences.cli_socket_path,
@@ -1086,6 +1084,10 @@ impl ClipboardApp {
         #[cfg(feature = "log-miss-tr")]
         crate::i18n::log_locale_info();
         app.configure_style(&cc.egui_ctx);
+        #[cfg(feature = "kde_connect")]
+        if app.sync_enabled {
+            app.sync_manager.enable();
+        }
         app.refresh_entries();
         app
     }
@@ -1306,6 +1308,7 @@ impl ClipboardApp {
                                     if self.should_play_copy_sound() {
                                         self.play_sound(SoundEffect::Copy);
                                     }
+                                    self.sync_captured_entry(&text_entry);
                                     changed = true;
                                 }
                                 Err(err) => {
@@ -1331,6 +1334,7 @@ impl ClipboardApp {
                             if self.should_play_copy_sound() {
                                 self.play_sound(SoundEffect::Copy);
                             }
+                            self.sync_captured_entry(&entry);
                             changed = true;
                         }
                         Err(err) => {
@@ -1377,6 +1381,49 @@ impl ClipboardApp {
             self.refresh_entries();
         }
     }
+
+    fn sync_captured_entry(&self, entry: &ClipboardEntry) {
+        #[cfg(feature = "kde_connect")]
+        {
+            if !self.sync_enabled {
+                return;
+            }
+            if matches!(
+                entry.kind,
+                ClipboardKind::Text
+                    | ClipboardKind::Url
+                    | ClipboardKind::Code
+                    | ClipboardKind::RichText
+            ) {
+                self.sync_manager.send_clipboard(&entry.content);
+            }
+        }
+        #[cfg(not(feature = "kde_connect"))]
+        let _ = entry;
+    }
+
+    #[cfg(feature = "kde_connect")]
+    fn process_sync_events(&mut self, ctx: &egui::Context) {
+        if !self.sync_enabled {
+            return;
+        }
+        self.sync_manager.poll_events();
+        if let Some(content) = self.sync_manager.take_clipboard_received() {
+            match clipboard::set_text(&content) {
+                Ok(()) => {
+                    self.status = t!("settings.sync.clipboard_received").to_string();
+                    ctx.request_repaint();
+                }
+                Err(err) => {
+                    self.error_count += 1;
+                    self.status = err;
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "kde_connect"))]
+    fn process_sync_events(&mut self, _ctx: &egui::Context) {}
 
     fn paste_entry(
         &mut self,
@@ -5123,6 +5170,7 @@ impl eframe::App for ClipboardApp {
         self.apply_debug_overlays(ctx);
         self.handle_shortcuts(ctx);
         self.handle_search_box_scroll(ctx);
+        self.process_sync_events(ctx);
         self.drain_events(ctx);
         self.process_pending_search_refresh(ctx);
         self.process_pending_paste(ctx);
