@@ -85,8 +85,9 @@ pub fn draw_shortcuts_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &eg
             );
         },
     );
-    if expanded != prev {
-        app.settings_panel_collapsed[1] = !expanded;
+    let collapsed = !expanded;
+    if collapsed != prev {
+        app.settings_panel_collapsed[1] = collapsed;
         app.persist_preferences();
     }
 }
