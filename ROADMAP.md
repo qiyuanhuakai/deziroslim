@@ -187,7 +187,7 @@ cba4f1b style: apply cargo fmt across codebase
 #### 实现规划
 
 **Phase A：i18n 框架选型与集成（1 天）**
-- `Cargo.toml` 添加 `rust-i18n = "3"` （YAML 配置，零运行时依赖）
+- `Cargo.toml` 添加 `rust-i18n = "4"` （YAML 配置，零运行时依赖）
 - 初始化：
   ```rust
   // src/i18n.rs
