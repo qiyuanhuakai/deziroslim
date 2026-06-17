@@ -227,8 +227,9 @@ pub fn draw_general_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &egui:
             }
         },
     );
-    if expanded != prev {
-        app.settings_panel_collapsed[0] = !expanded;
+    let collapsed = !expanded;
+    if collapsed != prev {
+        app.settings_panel_collapsed[0] = collapsed;
         app.persist_preferences();
     }
 }

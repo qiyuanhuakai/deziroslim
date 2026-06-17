@@ -80,8 +80,9 @@ pub fn draw_default_apps_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: 
             }
         },
     );
-    if expanded != prev {
-        app.settings_panel_collapsed[4] = !expanded;
+    let collapsed = !expanded;
+    if collapsed != prev {
+        app.settings_panel_collapsed[4] = collapsed;
         app.persist_preferences();
     }
 }
