@@ -3052,21 +3052,15 @@ impl ClipboardApp {
 
     fn draw_type_filters(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
-            ui.spacing_mut().item_spacing.y = 3.0;
+            ui.spacing_mut().item_spacing.y = 4.0;
+            filter_section_label(ui, t!("history.kind_label"), &self.theme);
             ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
                 let all_selected = self.kind_filter.is_none();
                 if filter_chip(ui, t!("history.filter_all"), all_selected, &self.theme).clicked() {
                     self.set_kind_filter(None);
                 }
-                for kind in ClipboardKind::ALL.iter().take(3).cloned() {
-                    let selected = self.kind_filter.as_ref() == Some(&kind);
-                    if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
-                        self.set_kind_filter(Some(kind));
-                    }
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                for kind in ClipboardKind::ALL.iter().skip(3).cloned() {
+                for kind in ClipboardKind::ALL.iter().cloned() {
                     let selected = self.kind_filter.as_ref() == Some(&kind);
                     if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
                         self.set_kind_filter(Some(kind));
@@ -3074,7 +3068,10 @@ impl ClipboardApp {
                 }
             });
             if self.primary_selection_enabled {
+                ui.add_space(3.0);
+                filter_section_label(ui, t!("history.source_label"), &self.theme);
                 ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
                     let src_all = self.source_filter.is_none();
                     if filter_chip(ui, t!("history.filter_all"), src_all, &self.theme).clicked() {
                         self.source_filter = None;
@@ -3115,11 +3112,7 @@ impl ClipboardApp {
     fn draw_tag_filters(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
-            ui.label(
-                egui::RichText::new(t!("history.tag_label"))
-                    .size(11.0)
-                    .color(self.theme.muted),
-            );
+            filter_section_label(ui, t!("history.tag_label"), &self.theme);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
                 let all_selected = self.tag_filter.is_none();
@@ -5606,6 +5599,15 @@ fn limited_tag_chips(ui: &mut egui::Ui, tags: &[String], theme: &MacosTokens, li
     if tags.len() > limit {
         tag_chip(ui, &format!("+{}", tags.len() - limit), theme);
     }
+}
+
+fn filter_section_label(ui: &mut egui::Ui, label: impl AsRef<str>, theme: &MacosTokens) {
+    ui.label(
+        egui::RichText::new(label.as_ref())
+            .size(10.5)
+            .strong()
+            .color(theme.muted),
+    );
 }
 
 fn card_action_bar_width(has_matching_actions: bool) -> f32 {

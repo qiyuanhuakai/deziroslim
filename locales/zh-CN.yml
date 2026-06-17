@@ -36,6 +36,8 @@ history:
   no_match_without_tag: "当前搜索或类型过滤没有命中；清除过滤后可查看全部历史。"
   count: "显示 %{count} 条"
   filter_all: "全部"
+  kind_label: "内容类型"
+  source_label: "来源"
   tag_label: "标签"
   load_failed: "读取历史失败: %{err}"
   deleted_record: "已删除记录"

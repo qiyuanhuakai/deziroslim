@@ -32,6 +32,8 @@ history:
   no_match_without_tag: "Current search or type filter has no matches; clear filters to see all history."
   count: "Showing %{count} items"
   filter_all: "All"
+  kind_label: "Content type"
+  source_label: "Source"
   tag_label: "Tags"
   load_failed: "Failed to load history: %{err}"
   deleted_record: "Record deleted"
