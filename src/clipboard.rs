@@ -66,6 +66,7 @@ impl PrimaryEchoGuard {
 #[derive(Debug, Clone)]
 pub enum ClipboardEvent {
     Captured(ClipboardEntry),
+    SyncClipboard(String),
     ToggleWindow,
     FocusSearch,
     PasteLatestRich,

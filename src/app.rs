@@ -1347,6 +1347,15 @@ impl ClipboardApp {
                     self.error_count += 1;
                     self.status = format!("{}: {err}", t!("status.clipboard_unavailable"));
                 }
+                ClipboardEvent::SyncClipboard(content) => match clipboard::set_text(&content) {
+                    Ok(()) => {
+                        self.status = t!("settings.sync.clipboard_received").to_string();
+                    }
+                    Err(err) => {
+                        self.error_count += 1;
+                        self.status = err;
+                    }
+                },
                 ClipboardEvent::Status(message) => self.status = message,
                 ClipboardEvent::ToggleWindow => self.toggle_window_visibility(ctx),
                 ClipboardEvent::FocusSearch => self.focus_search_from_hotkey(ctx),
@@ -1409,16 +1418,10 @@ impl ClipboardApp {
         }
         self.sync_manager.poll_events();
         if let Some(content) = self.sync_manager.take_clipboard_received() {
-            match clipboard::set_text(&content) {
-                Ok(()) => {
-                    self.status = t!("settings.sync.clipboard_received").to_string();
-                    ctx.request_repaint();
-                }
-                Err(err) => {
-                    self.error_count += 1;
-                    self.status = err;
-                }
-            }
+            let _ = self
+                .event_sender
+                .try_send(ClipboardEvent::SyncClipboard(content));
+            ctx.request_repaint();
         }
     }
 
@@ -2510,6 +2513,15 @@ impl ClipboardApp {
         self.kde_connect_enabled = preferences.kde_connect_enabled;
         self.kde_connect_device_id = preferences.kde_connect_device_id;
         self.kde_connect_device_name = preferences.kde_connect_device_name;
+        if self.sync_enabled != preferences.sync_enabled {
+            self.sync_enabled = preferences.sync_enabled;
+            #[cfg(feature = "kde_connect")]
+            if self.sync_enabled {
+                self.sync_manager.enable();
+            } else {
+                self.sync_manager.disable();
+            }
+        }
         self.cli_socket_path = preferences.cli_socket_path;
         self.builtin_actions_enabled = preferences.builtin_actions_enabled;
         self.action_command_allowlist = preferences.action_command_allowlist;
