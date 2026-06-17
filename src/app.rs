@@ -36,7 +36,7 @@ const DEFAULT_WINDOW_SIZE: egui::Vec2 = egui::vec2(480.0, 680.0);
 const MIN_NORMAL_WINDOW_SIZE: egui::Vec2 = egui::vec2(320.0, 400.0);
 const RESIZE_HIT_SIZE: f32 = 8.0;
 const COMPACT_CARD_TAG_LIMIT: usize = 2;
-const REGULAR_CARD_TAG_LIMIT: usize = 5;
+const REGULAR_CARD_TAG_LIMIT: usize = 2;
 const TOOLBAR_BUTTON_SIZE: f32 = 32.0;
 const TOOLBAR_ICON_SIZE: f32 = 16.0;
 const TOOLBAR_BUTTON_RADIUS: f32 = 9.0;
@@ -3309,7 +3309,8 @@ impl ClipboardApp {
                                 let row_width = ui.available_width().max(0.0);
                                 let action_width = action_bar_width.min(row_width);
                                 let meta_width = (row_width - action_width).max(0.0);
-                                ui.allocate_ui_with_layout(
+                                allocate_clipped_ui_with_layout(
+                                    ui,
                                     egui::vec2(meta_width, 24.0),
                                     egui::Layout::left_to_right(egui::Align::Center),
                                     |ui| {
@@ -3334,7 +3335,8 @@ impl ClipboardApp {
                                             );
                                         }
                                         if sensitive {
-                                            sensitive_badge(ui, &self.theme);
+                                            let compact_sensitive = ui.available_width() < 112.0;
+                                            sensitive_badge(ui, &self.theme, compact_sensitive);
                                         }
                                     },
                                 );
@@ -3384,7 +3386,8 @@ impl ClipboardApp {
                                 let tag_width =
                                     (available - action_bar_width - 12.0).clamp(0.0, available);
                                 if tag_width > 24.0 {
-                                    ui.allocate_ui_with_layout(
+                                    allocate_clipped_ui_with_layout(
+                                        ui,
                                         egui::vec2(tag_width, 24.0),
                                         egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
@@ -5610,6 +5613,19 @@ fn filter_section_label(ui: &mut egui::Ui, label: impl AsRef<str>, theme: &Macos
     );
 }
 
+fn allocate_clipped_ui_with_layout(
+    ui: &mut egui::Ui,
+    size: egui::Vec2,
+    layout: egui::Layout,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    let parent_clip = ui.clip_rect();
+    ui.allocate_ui_with_layout(size, layout, |ui| {
+        ui.set_clip_rect(parent_clip.intersect(ui.max_rect()));
+        add_contents(ui);
+    });
+}
+
 fn card_action_bar_width(has_matching_actions: bool) -> f32 {
     let button_count = if has_matching_actions { 4.0 } else { 3.0 };
     let gap_count = button_count - 1.0;
@@ -6024,7 +6040,7 @@ fn kind_badge(ui: &mut egui::Ui, label: &str, theme: &MacosTokens) {
 }
 
 fn source_app_badge(ui: &mut egui::Ui, source: &str, theme: &MacosTokens) {
-    let label = clipped_chip_label(source.trim(), 18);
+    let label = clipped_chip_label(source.trim(), 8);
     egui::Frame::none()
         .fill(theme.data_bg)
         .stroke(egui::Stroke::new(1.0, theme.data_border))
@@ -6060,20 +6076,22 @@ fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
         });
 }
 
-fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
+fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens, compact: bool) {
+    let label = if compact { "🔒" } else { "sensitive" };
+    let horizontal_margin = if compact { 6.0 } else { 8.0 };
     egui::Frame::none()
         .fill(theme.sensitive_bg)
         .stroke(egui::Stroke::new(1.0, theme.sensitive))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
-            left: 8.0,
-            right: 8.0,
+            left: horizontal_margin,
+            right: horizontal_margin,
             top: 3.0,
             bottom: 3.0,
         })
         .show(ui, |ui| {
             ui.label(
-                egui::RichText::new("sensitive")
+                egui::RichText::new(label)
                     .size(13.0)
                     .strong()
                     .color(egui::Color32::WHITE),
