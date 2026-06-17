@@ -743,20 +743,22 @@ fn sync_runtime(
                         let _ = event_tx.send(SyncEvent::PairComplete { id: id.clone() });
                     }
                     device.accept_pair(&link_id).await;
-                    let device_for_pair = Arc::clone(&device);
-                    let event_tx_for_pair = event_tx.clone();
-                    let link_id_for_pair = link_id.clone();
-                    tokio::spawn(async move {
-                        for _ in 0..40 {
-                            tokio::time::sleep(core::time::Duration::from_millis(250)).await;
-                            let (id, _, paired) =
-                                link_device_info(&device_for_pair, &link_id_for_pair).await;
-                            if paired {
-                                let _ = event_tx_for_pair.send(SyncEvent::PairComplete { id });
-                                break;
+                    if !paired {
+                        let device_for_pair = Arc::clone(&device);
+                        let event_tx_for_pair = event_tx.clone();
+                        let link_id_for_pair = link_id.clone();
+                        tokio::spawn(async move {
+                            for _ in 0..40 {
+                                tokio::time::sleep(core::time::Duration::from_millis(250)).await;
+                                let (id, _, paired) =
+                                    link_device_info(&device_for_pair, &link_id_for_pair).await;
+                                if paired {
+                                    let _ = event_tx_for_pair.send(SyncEvent::PairComplete { id });
+                                    break;
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
                 cmd = tokio_cmd_rx.recv() => {
                     match cmd {
@@ -953,6 +955,34 @@ mod tests {
 
         mgr.poll_events();
         assert_eq!(mgr.take_clipboard_received(), Some("from phone".into()));
+        assert_eq!(mgr.take_clipboard_received(), None);
+    }
+
+    #[test]
+    #[cfg(feature = "kde_connect")]
+    fn test_poll_events_coalesces_clipboard_received() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test_sync_clipboard_coalesce.db");
+        let storage = Storage::open(db_path).unwrap();
+        let mut mgr = SyncManager::new(storage);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        mgr.event_rx = Some(rx);
+
+        tx.send(SyncEvent::ClipboardReceived {
+            content: "first".into(),
+        })
+        .unwrap();
+        tx.send(SyncEvent::ClipboardReceived {
+            content: "second".into(),
+        })
+        .unwrap();
+        tx.send(SyncEvent::ClipboardReceived {
+            content: "third".into(),
+        })
+        .unwrap();
+
+        mgr.poll_events();
+        assert_eq!(mgr.take_clipboard_received(), Some("third".into()));
         assert_eq!(mgr.take_clipboard_received(), None);
     }
 
