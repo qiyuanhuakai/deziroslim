@@ -90,8 +90,9 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
             }
         }
     });
-    if expanded == prev {
-        app.settings_panel_collapsed[6] = !expanded;
+    let collapsed = !expanded;
+    if collapsed != prev {
+        app.settings_panel_collapsed[6] = collapsed;
         app.persist_preferences();
     }
 }
