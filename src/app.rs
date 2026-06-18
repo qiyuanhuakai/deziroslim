@@ -3352,9 +3352,16 @@ impl ClipboardApp {
                                             source_app_badge(ui, &entry.source_app, &self.theme);
                                         }
                                         if entry.source == SelectionSource::Primary {
-                                            primary_source_badge(ui, &self.theme);
+                                            let compact_primary = ui.available_width() < 128.0;
+                                            primary_source_badge(ui, &self.theme, compact_primary);
                                         }
-                                        kind_badge(ui, entry.kind.label(), &self.theme);
+                                        let reserve_for_priority_badges =
+                                            if entry.is_pinned { 18.0 } else { 0.0 }
+                                                + if sensitive { 58.0 } else { 0.0 };
+                                        if ui.available_width() > reserve_for_priority_badges + 58.0
+                                        {
+                                            kind_badge(ui, entry.kind.label(), &self.theme);
+                                        }
                                         if entry.is_pinned {
                                             ui.label(
                                                 egui::RichText::new("⚑")
@@ -6088,23 +6095,25 @@ fn source_app_badge(ui: &mut egui::Ui, source: &str, theme: &MacosTokens) {
         });
 }
 
-fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
+fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens, compact: bool) {
+    let label = if compact {
+        "\u{1F5B1}"
+    } else {
+        "\u{1F5B1} Primary"
+    };
+    let horizontal_margin = if compact { 6.0 } else { 7.0 };
     egui::Frame::none()
         .fill(theme.accent_soft)
         .stroke(egui::Stroke::new(1.0, theme.accent))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
-            left: 7.0,
-            right: 7.0,
+            left: horizontal_margin,
+            right: horizontal_margin,
             top: 3.0,
             bottom: 3.0,
         })
         .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new("\u{1F5B1} Primary")
-                    .size(10.0)
-                    .color(theme.accent),
-            );
+            ui.label(egui::RichText::new(label).size(10.0).color(theme.accent));
         });
 }
 
