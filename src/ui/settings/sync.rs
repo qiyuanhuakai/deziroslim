@@ -46,7 +46,6 @@ pub fn draw_sync_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
 
 #[cfg(feature = "kde_connect")]
 fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::ui::MacosTokens) {
-    use crate::ui::settings::settings_footer_button;
     use crate::ui::widgets::macos_toggle;
 
     let changed = ui
@@ -94,16 +93,8 @@ fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::u
         ui.monospace(&device_id);
     });
 
-    ui.add_space(12.0);
-
-    if settings_footer_button(ui, t!("settings.sync.show_qr"), theme, 160.0).clicked() {
-        app.show_sync_qr = !app.show_sync_qr;
-    }
-
-    if app.show_sync_qr {
-        ui.add_space(8.0);
-        draw_qr_code(ui, &device_id, theme);
-    }
+    ui.add_space(6.0);
+    ui.label(egui::RichText::new(t!("settings.sync.pairing_hint")).color(theme.muted));
 
     ui.add_space(12.0);
 
@@ -128,28 +119,6 @@ fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::u
                     ui.label(egui::RichText::new(t!("settings.sync.paired")).color(theme.accent));
                 }
             });
-        }
-    }
-}
-
-#[cfg(feature = "kde_connect")]
-fn draw_qr_code(ui: &mut egui::Ui, device_id: &str, theme: &crate::ui::MacosTokens) {
-    use qrcode::QrCode;
-    use qrcode::render::unicode;
-
-    let qr_data = format!("kdeconnect://{device_id}");
-    match QrCode::new(qr_data.as_bytes()) {
-        Ok(code) => {
-            let image = code.render::<unicode::Dense1x2>().build();
-            ui.label(
-                egui::RichText::new(image)
-                    .monospace()
-                    .size(8.0)
-                    .color(theme.fg),
-            );
-        }
-        Err(e) => {
-            ui.label(egui::RichText::new(format!("QR error: {e}")).color(theme.danger));
         }
     }
 }

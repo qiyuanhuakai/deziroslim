@@ -7,7 +7,7 @@ use crate::storage::Storage;
 use crate::ui::MacosTokens;
 use crate::ui::hotkey::HotkeyManager;
 use crate::ui::widgets::macos_toggle;
-use crossbeam_channel::{Receiver, Sender, bounded};
+use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
 use eframe::egui;
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
@@ -36,7 +36,7 @@ const DEFAULT_WINDOW_SIZE: egui::Vec2 = egui::vec2(480.0, 680.0);
 const MIN_NORMAL_WINDOW_SIZE: egui::Vec2 = egui::vec2(320.0, 400.0);
 const RESIZE_HIT_SIZE: f32 = 8.0;
 const COMPACT_CARD_TAG_LIMIT: usize = 2;
-const REGULAR_CARD_TAG_LIMIT: usize = 5;
+const REGULAR_CARD_TAG_LIMIT: usize = 2;
 const TOOLBAR_BUTTON_SIZE: f32 = 32.0;
 const TOOLBAR_ICON_SIZE: f32 = 16.0;
 const TOOLBAR_BUTTON_RADIUS: f32 = 9.0;
@@ -766,6 +766,7 @@ pub struct ClipboardApp {
     pub(crate) import_preview_entries: usize,
     pub(crate) import_preview_time: String,
     pub(crate) import_preview_has_settings: bool,
+    clear_unpinned_confirm_until: Option<Instant>,
     pub(crate) show_error_modal: bool,
     pub(crate) error_modal_message: String,
     pub(crate) primary_selection_enabled: bool,
@@ -777,7 +778,6 @@ pub struct ClipboardApp {
     pub(crate) kde_connect_device_id: Option<String>,
     pub(crate) kde_connect_device_name: String,
     pub(crate) sync_enabled: bool,
-    pub(crate) show_sync_qr: bool,
     #[cfg(feature = "kde_connect")]
     pub(crate) sync_manager: crate::sync::SyncManager,
     pub(crate) cli_socket_path: Option<String>,
@@ -992,6 +992,7 @@ impl ClipboardApp {
             import_preview_entries: 0,
             import_preview_time: String::new(),
             import_preview_has_settings: false,
+            clear_unpinned_confirm_until: None,
             show_error_modal: false,
             error_modal_message: String::new(),
             primary_font: preferences.primary_font.clone(),
@@ -1019,7 +1020,6 @@ impl ClipboardApp {
             kde_connect_device_id: preferences.kde_connect_device_id,
             kde_connect_device_name: preferences.kde_connect_device_name,
             sync_enabled: preferences.sync_enabled,
-            show_sync_qr: false,
             #[cfg(feature = "kde_connect")]
             sync_manager: crate::sync::SyncManager::new(sync_storage),
             cli_socket_path: preferences.cli_socket_path,
@@ -1086,6 +1086,10 @@ impl ClipboardApp {
         #[cfg(feature = "log-miss-tr")]
         crate::i18n::log_locale_info();
         app.configure_style(&cc.egui_ctx);
+        #[cfg(feature = "kde_connect")]
+        if app.sync_enabled {
+            app.sync_manager.enable();
+        }
         app.refresh_entries();
         app
     }
@@ -1306,6 +1310,7 @@ impl ClipboardApp {
                                     if self.should_play_copy_sound() {
                                         self.play_sound(SoundEffect::Copy);
                                     }
+                                    self.sync_captured_entry(&text_entry);
                                     changed = true;
                                 }
                                 Err(err) => {
@@ -1331,6 +1336,7 @@ impl ClipboardApp {
                             if self.should_play_copy_sound() {
                                 self.play_sound(SoundEffect::Copy);
                             }
+                            self.sync_captured_entry(&entry);
                             changed = true;
                         }
                         Err(err) => {
@@ -1343,6 +1349,15 @@ impl ClipboardApp {
                     self.error_count += 1;
                     self.status = format!("{}: {err}", t!("status.clipboard_unavailable"));
                 }
+                ClipboardEvent::SyncClipboard(content) => match clipboard::set_text(&content) {
+                    Ok(()) => {
+                        self.status = t!("settings.sync.clipboard_received").to_string();
+                    }
+                    Err(err) => {
+                        self.error_count += 1;
+                        self.status = err;
+                    }
+                },
                 ClipboardEvent::Status(message) => self.status = message,
                 ClipboardEvent::ToggleWindow => self.toggle_window_visibility(ctx),
                 ClipboardEvent::FocusSearch => self.focus_search_from_hotkey(ctx),
@@ -1377,6 +1392,53 @@ impl ClipboardApp {
             self.refresh_entries();
         }
     }
+
+    fn sync_captured_entry(&self, entry: &ClipboardEntry) {
+        #[cfg(feature = "kde_connect")]
+        {
+            if !self.sync_enabled {
+                return;
+            }
+            if matches!(
+                entry.kind,
+                ClipboardKind::Text
+                    | ClipboardKind::Url
+                    | ClipboardKind::Code
+                    | ClipboardKind::RichText
+            ) {
+                self.sync_manager.send_clipboard(&entry.content);
+            }
+        }
+        #[cfg(not(feature = "kde_connect"))]
+        let _ = entry;
+    }
+
+    #[cfg(feature = "kde_connect")]
+    fn process_sync_events(&mut self, ctx: &egui::Context) {
+        if !self.sync_enabled {
+            return;
+        }
+        self.sync_manager.poll_events();
+        if let Some(content) = self.sync_manager.take_clipboard_received() {
+            match self
+                .event_sender
+                .try_send(ClipboardEvent::SyncClipboard(content))
+            {
+                Ok(()) => ctx.request_repaint(),
+                Err(
+                    TrySendError::Full(ClipboardEvent::SyncClipboard(content))
+                    | TrySendError::Disconnected(ClipboardEvent::SyncClipboard(content)),
+                ) => {
+                    self.sync_manager.retain_clipboard_received(content);
+                    ctx.request_repaint_after(Duration::from_millis(120));
+                }
+                Err(_) => unreachable!("sent event variant must remain SyncClipboard"),
+            }
+        }
+    }
+
+    #[cfg(not(feature = "kde_connect"))]
+    fn process_sync_events(&mut self, _ctx: &egui::Context) {}
 
     fn paste_entry(
         &mut self,
@@ -2463,6 +2525,15 @@ impl ClipboardApp {
         self.kde_connect_enabled = preferences.kde_connect_enabled;
         self.kde_connect_device_id = preferences.kde_connect_device_id;
         self.kde_connect_device_name = preferences.kde_connect_device_name;
+        if self.sync_enabled != preferences.sync_enabled {
+            self.sync_enabled = preferences.sync_enabled;
+            #[cfg(feature = "kde_connect")]
+            if self.sync_enabled {
+                self.sync_manager.enable();
+            } else {
+                self.sync_manager.disable();
+            }
+        }
         self.cli_socket_path = preferences.cli_socket_path;
         self.builtin_actions_enabled = preferences.builtin_actions_enabled;
         self.action_command_allowlist = preferences.action_command_allowlist;
@@ -2873,18 +2944,33 @@ impl ClipboardApp {
                             {
                                 self.current_page = AppPage::Symbol;
                             }
-                            if toolbar_button(ui, "⌫", t!("tooltip.clear_unpinned"), &self.theme)
-                                .clicked()
-                            {
-                                match self.storage.clear_unpinned() {
-                                    Ok(()) => {
-                                        self.status = t!("history.cleared_unpinned").to_string();
-                                        self.refresh_entries();
+                            let now = Instant::now();
+                            let clear_confirm_active = self
+                                .clear_unpinned_confirm_until
+                                .is_some_and(|until| now <= until);
+                            let clear_tooltip = if clear_confirm_active {
+                                t!("tooltip.clear_unpinned_confirm")
+                            } else {
+                                t!("tooltip.clear_unpinned")
+                            };
+                            if toolbar_button(ui, "⌫", clear_tooltip, &self.theme).clicked() {
+                                if clear_confirm_active {
+                                    self.clear_unpinned_confirm_until = None;
+                                    match self.storage.clear_unpinned() {
+                                        Ok(()) => {
+                                            self.status =
+                                                t!("history.cleared_unpinned").to_string();
+                                            self.refresh_entries();
+                                        }
+                                        Err(err) => {
+                                            self.status =
+                                                format!("{}: {err}", t!("history.clear_failed"))
+                                        }
                                     }
-                                    Err(err) => {
-                                        self.status =
-                                            format!("{}: {err}", t!("history.clear_failed"))
-                                    }
+                                } else {
+                                    self.clear_unpinned_confirm_until =
+                                        Some(now + Duration::from_secs(5));
+                                    self.status = t!("history.clear_unpinned_confirm").to_string();
                                 }
                             }
                         }
@@ -2993,21 +3079,15 @@ impl ClipboardApp {
 
     fn draw_type_filters(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
-            ui.spacing_mut().item_spacing.y = 3.0;
+            ui.spacing_mut().item_spacing.y = 4.0;
+            filter_section_label(ui, t!("history.kind_label"), &self.theme);
             ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
                 let all_selected = self.kind_filter.is_none();
                 if filter_chip(ui, t!("history.filter_all"), all_selected, &self.theme).clicked() {
                     self.set_kind_filter(None);
                 }
-                for kind in ClipboardKind::ALL.iter().take(3).cloned() {
-                    let selected = self.kind_filter.as_ref() == Some(&kind);
-                    if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
-                        self.set_kind_filter(Some(kind));
-                    }
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                for kind in ClipboardKind::ALL.iter().skip(3).cloned() {
+                for kind in ClipboardKind::ALL.iter().cloned() {
                     let selected = self.kind_filter.as_ref() == Some(&kind);
                     if filter_chip(ui, kind.label(), selected, &self.theme).clicked() {
                         self.set_kind_filter(Some(kind));
@@ -3015,7 +3095,10 @@ impl ClipboardApp {
                 }
             });
             if self.primary_selection_enabled {
+                ui.add_space(3.0);
+                filter_section_label(ui, t!("history.source_label"), &self.theme);
                 ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
                     let src_all = self.source_filter.is_none();
                     if filter_chip(ui, t!("history.filter_all"), src_all, &self.theme).clicked() {
                         self.source_filter = None;
@@ -3056,11 +3139,7 @@ impl ClipboardApp {
     fn draw_tag_filters(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
-            ui.label(
-                egui::RichText::new(t!("history.tag_label"))
-                    .size(11.0)
-                    .color(self.theme.muted),
-            );
+            filter_section_label(ui, t!("history.tag_label"), &self.theme);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
                 let all_selected = self.tag_filter.is_none();
@@ -3192,7 +3271,8 @@ impl ClipboardApp {
             .show(ui, |ui| {
                 ui.set_width((card_width - 22.0).max(120.0));
                 ui.horizontal(|ui| {
-                    if matches!(entry.kind, crate::model::ClipboardKind::Image) {
+                    if self.compact_rows && matches!(entry.kind, crate::model::ClipboardKind::Image)
+                    {
                         self.draw_image_thumbnail(ui, entry);
                     }
                     ui.vertical(|ui| {
@@ -3257,7 +3337,8 @@ impl ClipboardApp {
                                 let row_width = ui.available_width().max(0.0);
                                 let action_width = action_bar_width.min(row_width);
                                 let meta_width = (row_width - action_width).max(0.0);
-                                ui.allocate_ui_with_layout(
+                                allocate_clipped_ui_with_layout(
+                                    ui,
                                     egui::vec2(meta_width, 24.0),
                                     egui::Layout::left_to_right(egui::Align::Center),
                                     |ui| {
@@ -3271,9 +3352,16 @@ impl ClipboardApp {
                                             source_app_badge(ui, &entry.source_app, &self.theme);
                                         }
                                         if entry.source == SelectionSource::Primary {
-                                            primary_source_badge(ui, &self.theme);
+                                            let compact_primary = ui.available_width() < 128.0;
+                                            primary_source_badge(ui, &self.theme, compact_primary);
                                         }
-                                        kind_badge(ui, entry.kind.label(), &self.theme);
+                                        let reserve_for_priority_badges =
+                                            if entry.is_pinned { 18.0 } else { 0.0 }
+                                                + if sensitive { 58.0 } else { 0.0 };
+                                        if ui.available_width() > reserve_for_priority_badges + 58.0
+                                        {
+                                            kind_badge(ui, entry.kind.label(), &self.theme);
+                                        }
                                         if entry.is_pinned {
                                             ui.label(
                                                 egui::RichText::new("⚑")
@@ -3282,7 +3370,8 @@ impl ClipboardApp {
                                             );
                                         }
                                         if sensitive {
-                                            sensitive_badge(ui, &self.theme);
+                                            let compact_sensitive = ui.available_width() < 112.0;
+                                            sensitive_badge(ui, &self.theme, compact_sensitive);
                                         }
                                     },
                                 );
@@ -3293,6 +3382,10 @@ impl ClipboardApp {
                             } else {
                                 self.theme.fg
                             };
+                            if matches!(entry.kind, crate::model::ClipboardKind::Image) {
+                                self.draw_image_thumbnail(ui, entry);
+                                ui.add_space(3.0);
+                            }
                             let match_indices = self.search_hits.get(&entry.id);
                             if let Some(indices) = match_indices {
                                 if !indices.is_empty() && !sensitive {
@@ -3332,7 +3425,8 @@ impl ClipboardApp {
                                 let tag_width =
                                     (available - action_bar_width - 12.0).clamp(0.0, available);
                                 if tag_width > 24.0 {
-                                    ui.allocate_ui_with_layout(
+                                    allocate_clipped_ui_with_layout(
+                                        ui,
                                         egui::vec2(tag_width, 24.0),
                                         egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
@@ -5123,6 +5217,7 @@ impl eframe::App for ClipboardApp {
         self.apply_debug_overlays(ctx);
         self.handle_shortcuts(ctx);
         self.handle_search_box_scroll(ctx);
+        self.process_sync_events(ctx);
         self.drain_events(ctx);
         self.process_pending_search_refresh(ctx);
         self.process_pending_paste(ctx);
@@ -5548,6 +5643,28 @@ fn limited_tag_chips(ui: &mut egui::Ui, tags: &[String], theme: &MacosTokens, li
     }
 }
 
+fn filter_section_label(ui: &mut egui::Ui, label: impl AsRef<str>, theme: &MacosTokens) {
+    ui.label(
+        egui::RichText::new(label.as_ref())
+            .size(10.5)
+            .strong()
+            .color(theme.muted),
+    );
+}
+
+fn allocate_clipped_ui_with_layout(
+    ui: &mut egui::Ui,
+    size: egui::Vec2,
+    layout: egui::Layout,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    let parent_clip = ui.clip_rect();
+    ui.allocate_ui_with_layout(size, layout, |ui| {
+        ui.set_clip_rect(parent_clip.intersect(ui.max_rect()));
+        add_contents(ui);
+    });
+}
+
 fn card_action_bar_width(has_matching_actions: bool) -> f32 {
     let button_count = if has_matching_actions { 4.0 } else { 3.0 };
     let gap_count = button_count - 1.0;
@@ -5962,7 +6079,7 @@ fn kind_badge(ui: &mut egui::Ui, label: &str, theme: &MacosTokens) {
 }
 
 fn source_app_badge(ui: &mut egui::Ui, source: &str, theme: &MacosTokens) {
-    let label = clipped_chip_label(source.trim(), 18);
+    let label = clipped_chip_label(source.trim(), 8);
     egui::Frame::none()
         .fill(theme.data_bg)
         .stroke(egui::Stroke::new(1.0, theme.data_border))
@@ -5978,40 +6095,48 @@ fn source_app_badge(ui: &mut egui::Ui, source: &str, theme: &MacosTokens) {
         });
 }
 
-fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
+fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens, compact: bool) {
+    let label = if compact {
+        "\u{1F5B1}"
+    } else {
+        "\u{1F5B1} Primary"
+    };
+    let horizontal_margin = if compact { 6.0 } else { 7.0 };
     egui::Frame::none()
         .fill(theme.accent_soft)
         .stroke(egui::Stroke::new(1.0, theme.accent))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
-            left: 7.0,
-            right: 7.0,
+            left: horizontal_margin,
+            right: horizontal_margin,
             top: 3.0,
             bottom: 3.0,
         })
         .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new("\u{1F5B1} Primary")
-                    .size(10.0)
-                    .color(theme.accent),
-            );
+            ui.label(egui::RichText::new(label).size(10.0).color(theme.accent));
         });
 }
 
-fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
+fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens, compact: bool) {
+    let label = if compact {
+        "🔒".to_string()
+    } else {
+        t!("history.sensitive_badge").to_string()
+    };
+    let horizontal_margin = if compact { 6.0 } else { 8.0 };
     egui::Frame::none()
         .fill(theme.sensitive_bg)
         .stroke(egui::Stroke::new(1.0, theme.sensitive))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
-            left: 8.0,
-            right: 8.0,
+            left: horizontal_margin,
+            right: horizontal_margin,
             top: 3.0,
             bottom: 3.0,
         })
         .show(ui, |ui| {
             ui.label(
-                egui::RichText::new("sensitive")
+                egui::RichText::new(label)
                     .size(13.0)
                     .strong()
                     .color(egui::Color32::WHITE),

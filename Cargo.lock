@@ -1406,6 +1406,7 @@ dependencies = [
  "objc2-foundation 0.2.2",
  "parking_lot",
  "percent-encoding",
+ "pollster",
  "raw-window-handle 0.5.2",
  "raw-window-handle 0.6.2",
  "static_assertions",
@@ -1413,6 +1414,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
+ "wgpu",
  "winapi",
  "winit",
 ]
@@ -3856,15 +3858,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
-name = "qrcode"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
-dependencies = [
- "image",
-]
-
-[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4822,7 +4815,6 @@ dependencies = [
  "mdns-sd",
  "nucleo-matcher",
  "open",
- "qrcode",
  "regex",
  "rfd",
  "rusqlite",
@@ -5649,6 +5641,7 @@ dependencies = [
  "document-features",
  "js-sys",
  "log",
+ "naga",
  "parking_lot",
  "profiling",
  "raw-window-handle 0.6.2",
@@ -5699,6 +5692,7 @@ dependencies = [
  "arrayvec",
  "ash",
  "bitflags 2.11.1",
+ "block",
  "cfg_aliases 0.1.1",
  "core-graphics-types",
  "glow",
