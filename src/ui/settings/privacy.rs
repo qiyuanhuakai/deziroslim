@@ -30,11 +30,12 @@ pub fn draw_privacy_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui
             draw_private_mode(ui, app);
         },
     );
+    let collapsed_state = !expanded;
     let collapsed_ref = app.settings_panel_collapsed.get_mut(PRIVACY_PANEL_INDEX);
     if let Some(collapsed) = collapsed_ref
-        && expanded != *collapsed
+        && collapsed_state != *collapsed
     {
-        *collapsed = !expanded;
+        *collapsed = collapsed_state;
         app.persist_preferences();
     }
 }
