@@ -21,7 +21,7 @@ arboard = "3.4"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 crossbeam-channel = "0.5"
 dirs = "5.0"
-eframe = "0.28"
+eframe = { version = "0.28", features = ["wgpu"] }
 egui = "0.28"
 egui_extras = { version = "0.28", features = ["svg"] }
 fontdb = "0.23"
