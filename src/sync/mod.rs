@@ -277,6 +277,10 @@ impl SyncManager {
     pub fn take_clipboard_received(&mut self) -> Option<String> {
         self.pending_clipboard.take()
     }
+
+    pub fn retain_clipboard_received(&mut self, content: String) {
+        self.pending_clipboard = Some(content);
+    }
 }
 
 // ── Discovery (wrapper for discovery info) ────────────────────────────

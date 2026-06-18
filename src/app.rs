@@ -7,7 +7,7 @@ use crate::storage::Storage;
 use crate::ui::MacosTokens;
 use crate::ui::hotkey::HotkeyManager;
 use crate::ui::widgets::macos_toggle;
-use crossbeam_channel::{Receiver, Sender, bounded};
+use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
 use eframe::egui;
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
@@ -1418,10 +1418,20 @@ impl ClipboardApp {
         }
         self.sync_manager.poll_events();
         if let Some(content) = self.sync_manager.take_clipboard_received() {
-            let _ = self
+            match self
                 .event_sender
-                .try_send(ClipboardEvent::SyncClipboard(content));
-            ctx.request_repaint();
+                .try_send(ClipboardEvent::SyncClipboard(content))
+            {
+                Ok(()) => ctx.request_repaint(),
+                Err(
+                    TrySendError::Full(ClipboardEvent::SyncClipboard(content))
+                    | TrySendError::Disconnected(ClipboardEvent::SyncClipboard(content)),
+                ) => {
+                    self.sync_manager.retain_clipboard_received(content);
+                    ctx.request_repaint_after(Duration::from_millis(120));
+                }
+                Err(_) => unreachable!("sent event variant must remain SyncClipboard"),
+            }
         }
     }
 
