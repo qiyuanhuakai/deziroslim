@@ -766,6 +766,7 @@ pub struct ClipboardApp {
     pub(crate) import_preview_entries: usize,
     pub(crate) import_preview_time: String,
     pub(crate) import_preview_has_settings: bool,
+    clear_unpinned_confirm_until: Option<Instant>,
     pub(crate) show_error_modal: bool,
     pub(crate) error_modal_message: String,
     pub(crate) primary_selection_enabled: bool,
@@ -991,6 +992,7 @@ impl ClipboardApp {
             import_preview_entries: 0,
             import_preview_time: String::new(),
             import_preview_has_settings: false,
+            clear_unpinned_confirm_until: None,
             show_error_modal: false,
             error_modal_message: String::new(),
             primary_font: preferences.primary_font.clone(),
@@ -2942,18 +2944,33 @@ impl ClipboardApp {
                             {
                                 self.current_page = AppPage::Symbol;
                             }
-                            if toolbar_button(ui, "⌫", t!("tooltip.clear_unpinned"), &self.theme)
-                                .clicked()
-                            {
-                                match self.storage.clear_unpinned() {
-                                    Ok(()) => {
-                                        self.status = t!("history.cleared_unpinned").to_string();
-                                        self.refresh_entries();
+                            let now = Instant::now();
+                            let clear_confirm_active = self
+                                .clear_unpinned_confirm_until
+                                .is_some_and(|until| now <= until);
+                            let clear_tooltip = if clear_confirm_active {
+                                t!("tooltip.clear_unpinned_confirm")
+                            } else {
+                                t!("tooltip.clear_unpinned")
+                            };
+                            if toolbar_button(ui, "⌫", clear_tooltip, &self.theme).clicked() {
+                                if clear_confirm_active {
+                                    self.clear_unpinned_confirm_until = None;
+                                    match self.storage.clear_unpinned() {
+                                        Ok(()) => {
+                                            self.status =
+                                                t!("history.cleared_unpinned").to_string();
+                                            self.refresh_entries();
+                                        }
+                                        Err(err) => {
+                                            self.status =
+                                                format!("{}: {err}", t!("history.clear_failed"))
+                                        }
                                     }
-                                    Err(err) => {
-                                        self.status =
-                                            format!("{}: {err}", t!("history.clear_failed"))
-                                    }
+                                } else {
+                                    self.clear_unpinned_confirm_until =
+                                        Some(now + Duration::from_secs(5));
+                                    self.status = t!("history.clear_unpinned_confirm").to_string();
                                 }
                             }
                         }

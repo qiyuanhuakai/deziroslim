@@ -47,6 +47,7 @@ history:
   pin_failed: "置顶失败: %{err}"
   clear_unpinned: "清空非置顶"
   cleared_unpinned: "已清空非置顶记录"
+  clear_unpinned_confirm: "再次点击确认清空非置顶记录"
   clear_failed: "清空失败: %{err}"
   clear_unpinned_history: "清空非置顶历史"
 
@@ -696,6 +697,7 @@ tooltip:
   emoji: "表情包"
   symbol: "符号"
   clear_unpinned: "清空非置顶"
+  clear_unpinned_confirm: "再次点击确认清空非置顶"
   pin_toggle: "窗口置顶/取消置顶"
   dev_tools: "开发工具"
   font_primary_auto: "自动（CJK 优先）"

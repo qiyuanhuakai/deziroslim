@@ -43,6 +43,7 @@ history:
   pin_failed: "Pin failed: %{err}"
   clear_unpinned: "Clear unpinned"
   cleared_unpinned: "Unpinned records cleared"
+  clear_unpinned_confirm: "Click again to clear unpinned records"
   clear_failed: "Clear failed: %{err}"
   clear_unpinned_history: "Clear unpinned history"
 search:
@@ -675,6 +676,7 @@ tooltip:
   emoji: "Emoji"
   symbol: "Symbols"
   clear_unpinned: "Clear unpinned"
+  clear_unpinned_confirm: "Click again to clear unpinned"
   pin_toggle: "Toggle always on top"
   dev_tools: "Developer tools"
   font_primary_auto: "Auto (CJK first)"
