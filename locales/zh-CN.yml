@@ -39,6 +39,7 @@ history:
   kind_label: "内容类型"
   source_label: "来源"
   tag_label: "标签"
+  sensitive_badge: "敏感"
   load_failed: "读取历史失败: %{err}"
   deleted_record: "已删除记录"
   deleted_selected: "已删除选中记录"

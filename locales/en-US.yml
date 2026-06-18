@@ -35,6 +35,7 @@ history:
   kind_label: "Content type"
   source_label: "Source"
   tag_label: "Tags"
+  sensitive_badge: "Sensitive"
   load_failed: "Failed to load history: %{err}"
   deleted_record: "Record deleted"
   deleted_selected: "Selected records deleted"

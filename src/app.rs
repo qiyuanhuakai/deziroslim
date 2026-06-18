@@ -6092,7 +6092,11 @@ fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens) {
 }
 
 fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens, compact: bool) {
-    let label = if compact { "🔒" } else { "sensitive" };
+    let label = if compact {
+        "🔒".to_string()
+    } else {
+        t!("history.sensitive_badge").to_string()
+    };
     let horizontal_margin = if compact { 6.0 } else { 8.0 };
     egui::Frame::none()
         .fill(theme.sensitive_bg)
