@@ -1,13 +1,13 @@
 # zh-CN 源 locale 文件
-# 这是 tiez-slim-linux 的源语言（简体中文），所有 UI 字符串从此文件提取。
+# 这是 deziroslim 的源语言（简体中文），所有 UI 字符串从此文件提取。
 # 任何对此文件的修改都需要同步到 en-US.yml 及其他翻译文件。
 # Generated from source code CJK string extraction.
 
 _version: 1
 
 app:
-  name: "tiez-slim"
-  title: "tiez-slim"
+  name: "deziroslim"
+  title: "deziroslim"
   version_prefix: "v"
 
 common:
@@ -30,7 +30,7 @@ common:
 
 history:
   empty_title: "暂无剪贴板历史"
-  empty_description: "复制一段文字后，它会以 tiez-slim 风格卡片显示在这里。"
+  empty_description: "复制一段文字后，它会以 deziroslim 风格卡片显示在这里。"
   no_match_title: "没有匹配结果"
   no_match_with_tag: "当前搜索、类型或标签过滤没有命中；清除过滤后可查看全部历史。"
   no_match_without_tag: "当前搜索或类型过滤没有命中；清除过滤后可查看全部历史。"
@@ -163,7 +163,7 @@ settings:
     sensitive_kind_password: "密码"
     custom_rules_label: "自定义规则（正则）"
     custom_rules_hint: "每行一个正则表达式"
-    clipboard_status_hint: "当前已落地：文本、富文本 HTML、图片、文件剪贴板捕获/写回；粘贴模拟按 tiez-slim 使用 Shift+Insert/Ctrl+V。"
+    clipboard_status_hint: "当前已落地：文本、富文本 HTML、图片、文件剪贴板捕获/写回；粘贴模拟按 deziroslim 使用 Shift+Insert/Ctrl+V。"
 
   appearance:
     title: "界面设置"
@@ -231,7 +231,7 @@ settings:
     restore_default: "恢复默认位置"
     restore_default_done: "已恢复默认数据库保存路径，重启后生效"
     restore_default_failed: "恢复默认位置失败: %{err}"
-    db_hint: "数据库连接已打开，新的保存路径会在重启后生效；也可用 --db-path 或 TIEZ_SLIM_LINUX_DB_PATH 临时覆盖。"
+    db_hint: "数据库连接已打开，新的保存路径会在重启后生效；也可用 --db-path 或 DEZIROS_LIM_DB_PATH 临时覆盖。"
 
   exclusion_list:
     title: "排除列表"
@@ -494,7 +494,7 @@ settings:
   sync:
     title: "同步 (KDE Connect)"
     feature_disabled: "KDE Connect 功能未启用"
-    enable_hint: "启用后，手机端可在 KDE Connect 设备列表中发现 tiez-slim"
+    enable_hint: "启用后，手机端可在 KDE Connect 设备列表中发现 deziroslim"
     enable: "启用同步"
     status: "状态："
     device_id: "设备 ID："
