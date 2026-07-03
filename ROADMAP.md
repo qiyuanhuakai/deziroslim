@@ -1,4 +1,4 @@
-# tiez-slim-linux 产品路线图（2026 H2）
+# deziroslim 产品路线图（2026 H2）
 
 > **生成日期**：2026-06-06  
 > **最新更新**：2026-06-09  
@@ -13,7 +13,7 @@
 
 ## 0. 执行摘要
 
-`tiez-slim-linux` 已经完成原生 UI、富文本/图片/文件历史、系统托盘、X11 快捷键、贴边隐藏、字体 fallback、emoji/符号页、音效和数据路径迁移等基础能力。下一阶段会持续新增大量设置项、菜单、状态提示和错误消息；如果继续硬编码中文，后续 Actions、Primary Selection、同步、CLI、Snippet 都会产生重复返工。因此本路线图确认 **i18n 是 Phase 0 首要前置**：先建立字符串治理，再推进功能扩张。
+`deziroslim` 已经完成原生 UI、富文本/图片/文件历史、系统托盘、X11 快捷键、贴边隐藏、字体 fallback、emoji/符号页、音效和数据路径迁移等基础能力。下一阶段会持续新增大量设置项、菜单、状态提示和错误消息；如果继续硬编码中文，后续 Actions、Primary Selection、同步、CLI、Snippet 都会产生重复返工。因此本路线图确认 **i18n 是 Phase 0 首要前置**：先建立字符串治理，再推进功能扩张。
 
 | 优先级 | 项 | 功能 | 价值 | 工作量 | 阶段 | 排序理由 |
 |---|---|---|---|---|---|---|
@@ -25,12 +25,12 @@
 | ✅ P1-5 | 10 | fuzzy search | 高 | S-M | **Phase 1 完成** | 已交付：nucleo fuzzy + 高亮；v0.3.2 加搜索 debounce |
 | ✅ P2-1 | 4 | KDE Connect 集成 | 中-高 | M-L | **Phase 2 完成** | 已交付：默认编译启用，设置页同步开关与状态 UI |
 | ✅ P2-2 | 7 | 数据库加密 | 中-高 | M | **Phase 2 完成** | 已交付：feature-gated secure storage 与敏感内容策略 |
-| ✅ P2-3 | 6 | CLI 配套（`tiez-cli`） | 中 | M | **Phase 2 完成** | 已交付：Unix socket IPC 与 CLI 子命令 |
+| ✅ P2-3 | 6 | CLI 配套（`dzc-slim`） | 中 | M | **Phase 2 完成** | 已交付：Unix socket IPC 与 CLI 子命令 |
 | ✅ P3-1 | 9 | Snippet 模板 | 中 | M | **Phase 3 完成** | 已交付：模板、变量插值、设置 UI、picker 热键、IPC |
 
 **总工作量估算**：约 **53 个工作日**（约 10.5 周全职）；截至 v0.3.2，10 项规划功能均已进入源码实现，后续重点转为稳定性、性能与真实设备 QA。
 
-**为什么 i18n 必须最先做**：tiez-slim 当前用户可见字符串仍以中文硬编码为主。ROADMAP 后续每个功能都会新增设置页、toast、错误提示、托盘菜单和 README 章节；若等功能做完再抽取，会同时重写 UI、文案和测试。Phase 0 投入 1-2 周建立 `tr!()`/locale/缺失键检查后，后续功能只需按规范新增 key。
+**为什么 i18n 必须最先做**：deziroslim 当前用户可见字符串仍以中文硬编码为主。ROADMAP 后续每个功能都会新增设置页、toast、错误提示、托盘菜单和 README 章节；若等功能做完再抽取，会同时重写 UI、文案和测试。Phase 0 投入 1-2 周建立 `tr!()`/locale/缺失键检查后，后续功能只需按规范新增 key。
 
 ---
 
@@ -699,7 +699,7 @@ cba4f1b style: apply cargo fmt across codebase
 - 增量同步触发器
 
 **Phase E：CLI 集成（与 #6 协同）**
-- `tiez-cli search <query>` 默认用 fuzzy
+- `dzc-slim search <query>` 默认用 fuzzy
 - `--mode=substring` 切换
 
 #### 验收标准
@@ -734,7 +734,7 @@ cba4f1b style: apply cargo fmt across codebase
 #### 价值
 - **零 Android 开发成本**：复用 50M+ 装机的 KDE Connect Android 应用
 - **成熟协议**：10+ 年生产验证，LAN 内安全（mDNS + TLS 自签名证书）
-- **X11 完美兼容**：Wayland GSConnect 的 `St.Clipboard` bug 与 X11 无关——**tiez-slim 的天然优势**
+- **X11 完美兼容**：Wayland GSConnect 的 `St.Clipboard` bug 与 X11 无关——**deziroslim 的天然优势**
 - **可演进路径**：先做剪贴板，后续可加 ping-pong、文件分享、通知镜像（不写 Android 端）
 - **限制**：剪贴板插件仅同步文本；Android 10+ 后台剪贴板需用户从通知/QS tile 手动点"Send Clipboard"
 
@@ -752,7 +752,7 @@ cba4f1b style: apply cargo fmt across codebase
 - 实现 KDE Connect 设备发现（multicast `_kdeconnect._tcp.local`）
 - 实现配对流程：
   1. tiez 广播 KDE Connect 设备身份与剪贴板能力
-  2. Android KDE Connect 在设备列表中发现 tiez-slim
+  2. Android KDE Connect 在设备列表中发现 deziroslim
   3. 用户在手机端确认配对请求，双方交换自签名证书
 - 复用 `kdeconnect-proto` 的 `NetworkPacket` / `PairPacket` 类型
 
@@ -765,7 +765,7 @@ cba4f1b style: apply cargo fmt across codebase
 **Phase D：UI 与状态（1-2 天）**
 - 设置面板「同步」分组
   - KDE Connect 状态：未配对 / 配对中 / 已连接（设备名）
-  - 配对提示 → 引导用户在 Android KDE Connect 设备列表中选择 tiez-slim
+  - 配对提示 → 引导用户在 Android KDE Connect 设备列表中选择 deziroslim
   - 设备列表：已配对设备、最后活跃时间
 - 状态栏徽章：已连接时显示「🔗 KDE Connect」chip
 - 托盘菜单：「同步状态」子菜单
@@ -824,7 +824,7 @@ cba4f1b style: apply cargo fmt across codebase
   pub struct KeyringBackend { /* AES-256-GCM */ }
   ```
 - AES-256-GCM（`aes-gcm` crate），每次加密随机 nonce
-- 主密钥派生：启动时若无 keyring 条目 → 生成 32 字节随机密钥 → 写入 keyring（service: `tiez-slim-linux`，account: `master`）
+- 主密钥派生：启动时若无 keyring 条目 → 生成 32 字节随机密钥 → 写入 keyring（service: `deziroslim`，account: `master`）
 
 **Phase B：存储层集成（1-2 天）**
 - `src/storage.rs` 改造 `insert_entry` / `get_entry` / `search`：
@@ -853,7 +853,7 @@ cba4f1b style: apply cargo fmt across codebase
 #### 验收标准
 - [ ] `cargo build --features secure_storage` 通过
 - [ ] 启用加密后给条目打 `sensitive` 标签 → DB 文件中 `content` 列是密文（`enc:linux:...` 前缀）
-- [ ] 删除 keyring 中 `tiez-slim-linux` 条目 → 启动后所有 sensitive 条目**不可读**（UI 显示「加密密钥缺失」）
+- [ ] 删除 keyring 中 `deziroslim` 条目 → 启动后所有 sensitive 条目**不可读**（UI 显示「加密密钥缺失」）
 - [ ] 启动时检测半加密状态 → 自动归一化
 - [ ] 加密/解密延迟 < 5ms（单条）/ 100ms（100 条批量）
 
@@ -877,13 +877,13 @@ cba4f1b style: apply cargo fmt across codebase
 
 ---
 
-### #6 CLI 配套（`tiez-cli`）
+### #6 CLI 配套（`dzc-slim`）
 
 #### 功能
-在同一 Cargo workspace 新增二进制 `tiez-cli`，通过 Unix domain socket 与运行中的 tiez-slim 主进程通信。提供读/写剪贴板、搜索、粘贴、查询状态等子命令。
+在同一 Cargo workspace 新增二进制 `dzc-slim`，通过 Unix domain socket 与运行中的 deziroslim 主进程通信。提供读/写剪贴板、搜索、粘贴、查询状态等子命令。
 
 #### 价值
-- **解锁 tiling WM 生态**：sway/hyprland/i3 用户可绑定 `Super+V` → `tiez-cli list | rofi -dmenu | tiez-cli paste`
+- **解锁 tiling WM 生态**：sway/hyprland/i3 用户可绑定 `Super+V` → `dzc-slim list | rofi -dmenu | dzc-slim paste`
 - **shell 脚本化**：cron、systemd timer、git hooks
 - **对标**：CopyQ / GPaste / Parcellite 都标配
 - **零重复逻辑**：所有数据通过 IPC 获取，与 GUI 共享同一份 storage
@@ -893,7 +893,7 @@ cba4f1b style: apply cargo fmt across codebase
 
 **Phase A：IPC 服务端（1-2 天）**
 - 新文件 `src/ipc.rs`
-- Unix domain socket 路径：`$XDG_RUNTIME_DIR/tiez-slim-linux.sock`（推荐，回退 `~/.local/share/tiez-slim-linux/ipc.sock`）
+- Unix domain socket 路径：`$XDG_RUNTIME_DIR/deziroslim.sock`（推荐，回退 `~/.local/share/deziroslim/ipc.sock`）
 - 协议：JSON Lines（每行一条消息），简单请求/响应
   ```json
   {"cmd": "list", "args": {"limit": 10}}
@@ -906,8 +906,8 @@ cba4f1b style: apply cargo fmt across codebase
 - 鉴权：socket 文件权限 `0600`（仅当前用户）；预留 token 机制（v1.1）
 
 **Phase B：CLI 二进制（1-2 天）**
-- `Cargo.toml` 新增 `[[bin]] name = "tiez-cli"` target
-- 新文件 `src/bin/tiez_cli.rs`
+- `Cargo.toml` 新增 `[[bin]] name = "dzc-slim"` target
+- 新文件 `src/bin/dzc_slim.rs`
 - 用 `clap` 派生参数解析
 - 人类可读 / `--json` 机器可读双输出模式
 - 退出码：0 成功 / 1 通用错误 / 2 网络错误 / 3 数据不存在
@@ -930,11 +930,11 @@ cba4f1b style: apply cargo fmt across codebase
 - `docs/rofi-script.sh`：rofi 集成示例
 
 #### 验收标准
-- [ ] `tiez-cli list` 打印最近 10 条
-- [ ] `tiez-cli search "github"` 列出所有匹配
-- [ ] `tiez-cli paste 42` 将条目 42 写入剪贴板（GUI 不在时也能工作）
-- [ ] GUI 未运行 → `tiez-cli status` 给出明确错误（不是 panic）
-- [ ] sway 绑定 `bindsym $mod+v exec tiez-cli list | rofi -dmenu | tiez-cli paste` 可用
+- [ ] `dzc-slim list` 打印最近 10 条
+- [ ] `dzc-slim search "github"` 列出所有匹配
+- [ ] `dzc-slim paste 42` 将条目 42 写入剪贴板（GUI 不在时也能工作）
+- [ ] GUI 未运行 → `dzc-slim status` 给出明确错误（不是 panic）
+- [ ] sway 绑定 `bindsym $mod+v exec dzc-slim list | rofi -dmenu | dzc-slim paste` 可用
 
 #### 风险与权衡
 | 风险 | 缓解 |
@@ -1034,7 +1034,7 @@ cba4f1b style: apply cargo fmt across codebase
 - 使用统计：显示 `usage_count` 排序
 
 **Phase E：CLI 集成（与 #6 协同）**
-- `tiez-cli snippet list / show <name> / use <name>` 子命令
+- `dzc-slim snippet list / show <name> / use <name>` 子命令
 - 便于 shell 脚本调用
 
 **Phase F：导入/导出（与 #5 协同）**

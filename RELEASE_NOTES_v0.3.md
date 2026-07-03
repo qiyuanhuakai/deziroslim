@@ -1,10 +1,10 @@
-# Release Notes — tiez-slim v0.3.0
+# Release Notes — deziroslim v0.3.0
 
 **Release Date**: 2026-06-08
 
 ## What's New
 
-tiez-slim v0.3.0 brings 9 major features across privacy, automation, sync, and developer tooling.
+deziroslim v0.3.0 brings 9 major features across privacy, automation, sync, and developer tooling.
 
 ### Highlights
 
@@ -17,7 +17,7 @@ tiez-slim v0.3.0 brings 9 major features across privacy, automation, sync, and d
 | **Fuzzy Search** | Typo-tolerant, relevance-ranked search with character highlighting |
 | **Database Encryption** | AES-256-GCM for sensitive entries; system keyring key management (opt-in) |
 | **KDE Connect Sync** | Bidirectional clipboard sync with Android (opt-in) |
-| **CLI (tiez-cli)** | 8 subcommands for scripting; Unix socket IPC; Sway/Hyprland integration |
+| **CLI (dzc-slim)** | 8 subcommands for scripting; Unix socket IPC; Sway/Hyprland integration |
 | **i18n** | Full zh-CN + en-US support, 752 keys, 100% coverage |
 
 ### Opt-in Features
@@ -35,11 +35,11 @@ cargo build --features kde_connect
 cargo build --features "secure_storage,kde_connect"
 ```
 
-## Migration Guide (from myclipboard / tiez-clipboard)
+## Migration Guide (from myclipboard / dzc-slimpboard)
 
-If migrating from the old `myclipboard` or `tiez-clipboard` (React + Tauri) version:
+If migrating from the old `myclipboard` or `dzc-slimpboard` (React + Tauri) version:
 
-1. **Database**: tiez-slim automatically reads the old `myclipboard` database location on first launch and migrates data. No manual export/import needed.
+1. **Database**: deziroslim automatically reads the old `myclipboard` database location on first launch and migrates data. No manual export/import needed.
 2. **Settings**: Old preferences are carried over where field names match. New fields use sensible defaults.
 3. **Hotkeys**: Global hotkey registration may conflict if the old app is still running. Close the old app first.
 4. **Features not yet available**: Snippet templates (#9) are planned for v0.4. Whitelist mode is deferred to v1.1.
@@ -47,14 +47,14 @@ If migrating from the old `myclipboard` or `tiez-clipboard` (React + Tauri) vers
 ## CLI Quick Reference
 
 ```bash
-tiez-cli list [--limit N] [--type text] [--tag work]
-tiez-cli search "query"
-tiez-cli paste 42 [--rich]
-tiez-cli pin 42 [--unpin]
-tiez-cli tag 42 work important
-tiez-cli delete 42
-tiez-cli add "text"
-tiez-cli status [--json]
+dzc-slim list [--limit N] [--type text] [--tag work]
+dzc-slim search "query"
+dzc-slim paste 42 [--rich]
+dzc-slim pin 42 [--unpin]
+dzc-slim tag 42 work important
+dzc-slim delete 42
+dzc-slim add "text"
+dzc-slim status [--json]
 ```
 
 ## Known Limitations
