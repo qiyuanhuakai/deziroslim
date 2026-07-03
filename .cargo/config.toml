@@ -5,5 +5,5 @@ rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 [alias]
-ci = "run --bin tiez-slim-linux -- ci"
-dev = "run --bin tiez-slim-linux -- dev"
+ci = "run --bin deziroslim -- ci"
+dev = "run --bin deziroslim -- dev"

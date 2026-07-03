@@ -1,8 +1,8 @@
-//! tiez-slim-linux library crate.
+//! deziroslim library crate.
 //!
-//! Exposes the GUI app modules so that the `tiez-cli` binary can use the
+//! Exposes the GUI app modules so that the `dzc-slim` binary can use the
 //! shared data model and storage. The GUI binary (`main.rs`) uses these
-//! modules via `use tiez_slim_linux::*`.
+//! modules via `use deziroslim::*`.
 
 rust_i18n::i18n!("locales", fallback = "en-US");
 

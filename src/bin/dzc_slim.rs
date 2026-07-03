@@ -1,19 +1,19 @@
-//! `tiez-cli` — command-line interface for the tiez-slim clipboard manager.
+//! `dzc-slim` — command-line interface for the deziroslim clipboard manager.
 //!
-//! Communicates with a running `tiez-slim` GUI instance over a Unix domain
+//! Communicates with a running `deziroslim` GUI instance over a Unix domain
 //! socket using the JSON Lines IPC protocol defined in `src/ipc.rs`.
 
 rust_i18n::i18n!("locales", fallback = "en-US");
 
 use clap::{Parser, Subcommand};
 use rust_i18n::t;
-use tiez_slim_linux::ipc::{IpcError, IpcRequest, IpcResponse, IpcServer};
-use tiez_slim_linux::model::ClipboardEntrySummary;
+use deziroslim::ipc::{IpcError, IpcRequest, IpcResponse, IpcServer};
+use deziroslim::model::ClipboardEntrySummary;
 
 // ── CLI definition ────────────────────────────────────────────────────
 
 #[derive(Parser, Debug)]
-#[command(name = "tiez-cli", about = "tiez-slim clipboard manager CLI", version)]
+#[command(name = "dzc-slim", about = "deziroslim clipboard manager CLI", version)]
 struct Cli {
     /// Output in JSON format (machine-readable, jq-parsable).
     #[arg(long, global = true)]
@@ -73,7 +73,7 @@ enum SubCommand {
         /// Entry ID.
         id: i64,
     },
-    /// Show tiez-slim server status.
+    /// Show deziroslim server status.
     Status,
     /// Add a new clipboard entry.
     Add {
@@ -147,7 +147,7 @@ fn main() {
 // ── Locale detection ──────────────────────────────────────────────────
 
 fn detect_locale() {
-    let lang = std::env::var("TIEZ_SLIM_LANG")
+    let lang = std::env::var("DEZIROS_LIM_LANG")
         .or_else(|_| std::env::var("LANG"))
         .or_else(|_| std::env::var("LC_MESSAGES"))
         .unwrap_or_default();
@@ -558,14 +558,14 @@ fn send_ipc(
         cmd: cmd.to_string(),
         args,
     };
-    tiez_slim_linux::ipc::send_request(socket_path, &request)
+    deziroslim::ipc::send_request(socket_path, &request)
 }
 
 fn handle_error(err: &IpcError) -> i32 {
     match err {
         IpcError::ConnectionRefused => {
             eprintln!("Error: connection refused – GUI not running.");
-            eprintln!("Start with: systemctl --user start tiez-slim-linux");
+            eprintln!("Start with: systemctl --user start deziroslim");
             2
         }
         IpcError::InvalidJson(detail) => {
@@ -612,7 +612,7 @@ fn handle_ipc_response_error(resp: &IpcResponse) -> i32 {
 
 /// Paste fallback: open the database directly when GUI is not running.
 fn paste_from_db(id: i64, rich: bool) -> i32 {
-    use tiez_slim_linux::storage::Storage;
+    use deziroslim::storage::Storage;
 
     let db_path = Storage::path_from_redirect_file().unwrap_or_else(Storage::default_path);
     let storage = match Storage::open(db_path) {
@@ -726,7 +726,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_list() {
-        let cli = Cli::parse_from(["tiez-cli", "list"]);
+        let cli = Cli::parse_from(["dzc-slim", "list"]);
         assert!(!cli.json);
         assert!(matches!(
             cli.command,
@@ -741,7 +741,7 @@ mod tests {
     #[test]
     fn cli_args_parse_list_with_filters() {
         let cli = Cli::parse_from([
-            "tiez-cli", "--json", "list", "--limit", "5", "--type", "text", "--tag", "work",
+            "dzc-slim", "--json", "list", "--limit", "5", "--type", "text", "--tag", "work",
         ]);
         assert!(cli.json);
         if let SubCommand::List { limit, type_, tag } = cli.command {
@@ -755,7 +755,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_search() {
-        let cli = Cli::parse_from(["tiez-cli", "search", "hello world"]);
+        let cli = Cli::parse_from(["dzc-slim", "search", "hello world"]);
         if let SubCommand::Search { query, mode } = cli.command {
             assert_eq!(query, "hello world");
             assert!(mode.is_none());
@@ -766,7 +766,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_search_with_mode() {
-        let cli = Cli::parse_from(["tiez-cli", "search", "test", "--mode", "fuzzy"]);
+        let cli = Cli::parse_from(["dzc-slim", "search", "test", "--mode", "fuzzy"]);
         if let SubCommand::Search { query, mode } = cli.command {
             assert_eq!(query, "test");
             assert_eq!(mode.as_deref(), Some("fuzzy"));
@@ -777,7 +777,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_paste() {
-        let cli = Cli::parse_from(["tiez-cli", "paste", "42", "--rich"]);
+        let cli = Cli::parse_from(["dzc-slim", "paste", "42", "--rich"]);
         if let SubCommand::Paste { id, rich } = cli.command {
             assert_eq!(id, 42);
             assert!(rich);
@@ -788,7 +788,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_pin_unpin() {
-        let cli = Cli::parse_from(["tiez-cli", "pin", "7", "--unpin"]);
+        let cli = Cli::parse_from(["dzc-slim", "pin", "7", "--unpin"]);
         if let SubCommand::Pin { id, unpin } = cli.command {
             assert_eq!(id, 7);
             assert!(unpin);
@@ -799,7 +799,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_tag() {
-        let cli = Cli::parse_from(["tiez-cli", "tag", "3", "work", "important"]);
+        let cli = Cli::parse_from(["dzc-slim", "tag", "3", "work", "important"]);
         if let SubCommand::Tag { id, tag } = cli.command {
             assert_eq!(id, 3);
             assert_eq!(tag, vec!["work", "important"]);
@@ -810,7 +810,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_delete() {
-        let cli = Cli::parse_from(["tiez-cli", "delete", "99"]);
+        let cli = Cli::parse_from(["dzc-slim", "delete", "99"]);
         if let SubCommand::Delete { id } = cli.command {
             assert_eq!(id, 99);
         } else {
@@ -820,14 +820,14 @@ mod tests {
 
     #[test]
     fn cli_args_parse_status() {
-        let cli = Cli::parse_from(["tiez-cli", "--json", "status"]);
+        let cli = Cli::parse_from(["dzc-slim", "--json", "status"]);
         assert!(cli.json);
         assert!(matches!(cli.command, SubCommand::Status));
     }
 
     #[test]
     fn cli_args_parse_add() {
-        let cli = Cli::parse_from(["tiez-cli", "add", "hello world", "--type", "text"]);
+        let cli = Cli::parse_from(["dzc-slim", "add", "hello world", "--type", "text"]);
         if let SubCommand::Add {
             content,
             entry_type,
@@ -885,7 +885,7 @@ mod tests {
         let resp = IpcResponse {
             ok: false,
             data: None,
-            error: Some(tiez_slim_linux::ipc::IpcErrorBody {
+            error: Some(deziroslim::ipc::IpcErrorBody {
                 code: 5,
                 message: "entry not found".into(),
             }),
@@ -899,7 +899,7 @@ mod tests {
         let resp = IpcResponse {
             ok: false,
             data: None,
-            error: Some(tiez_slim_linux::ipc::IpcErrorBody {
+            error: Some(deziroslim::ipc::IpcErrorBody {
                 code: 112,
                 message: "unknown command (code 112)".into(),
             }),
@@ -910,7 +910,7 @@ mod tests {
 
     #[test]
     fn help_shows_all_subcommands() {
-        let err = Cli::try_parse_from(["tiez-cli", "--help"]).unwrap_err();
+        let err = Cli::try_parse_from(["dzc-slim", "--help"]).unwrap_err();
         let help = err.to_string();
         for sub in &[
             "list", "search", "paste", "pin", "tag", "delete", "status", "add",

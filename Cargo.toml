@@ -1,8 +1,8 @@
 [package]
-name = "tiez-slim-linux"
+name = "deziroslim"
 version = "0.3.0"
 edition = "2024"
-default-run = "tiez-slim-linux"
+default-run = "deziroslim"
 
 [features]
 default = ["kde_connect"]
@@ -12,8 +12,8 @@ secure_storage = ["aes-gcm", "keyring", "base64", "getrandom"]
 kde_connect = ["dep:kdeconnect-proto", "dep:mdns-sd"]
 
 [[bin]]
-name = "tiez-cli"
-path = "src/bin/tiez_cli.rs"
+name = "dzc-slim"
+path = "src/bin/dzc_slim.rs"
 
 [dependencies]
 anyhow = "1.0"

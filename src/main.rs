@@ -7,12 +7,12 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use storage::Storage;
-use tiez_slim_linux::*;
+use deziroslim::*;
 
-const APP_DISPLAY_NAME: &str = "tiez-slim";
-const APP_ID: &str = "tiez-slim-linux";
-const DB_PATH_ENV: &str = "TIEZ_SLIM_LINUX_DB_PATH";
-const DEV_MODE_ENV: &str = "TIEZ_SLIM_LINUX_DEV";
+const APP_DISPLAY_NAME: &str = "deziroslim";
+const APP_ID: &str = "deziroslim";
+const DB_PATH_ENV: &str = "DEZIROS_LIM_DB_PATH";
+const DEV_MODE_ENV: &str = "DEZIROS_LIM_DEV";
 const LEGACY_DB_PATH_ENV: &str = "MYCLIPBOARD_DB_PATH";
 const LEGACY_DEV_MODE_ENV: &str = "MYCLIPBOARD_DEV";
 
@@ -244,7 +244,7 @@ where
 }
 
 fn load_window_icon() -> Option<Arc<egui::IconData>> {
-    let image = image::load_from_memory(include_bytes!("../assets/icons/tiez-slim-linux.png"))
+    let image = image::load_from_memory(include_bytes!("../assets/icons/deziroslim.png"))
         .ok()?
         .into_rgba8();
     let (width, height) = image.dimensions();
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn ci_arg_is_dev_command() {
         assert_eq!(
-            dev_command_from_args(["tiez-slim-linux", "ci"]),
+            dev_command_from_args(["deziroslim", "ci"]),
             Some(DevCommand::Ci)
         );
     }
