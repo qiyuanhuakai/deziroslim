@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 env:
-  APP_NAME: tiez-slim-linux
-  DISPLAY_NAME: tiez-slim
+  APP_NAME: deziroslim
+  DISPLAY_NAME: deziroslim
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
 
@@ -124,7 +124,7 @@ jobs:
           [Desktop Entry]
           Type=Application
           Name=${DISPLAY_NAME}
-          Comment=Lightweight native TieZ clipboard manager
+          Comment=Lightweight native deziroslim clipboard manager
           Exec=${APP_NAME}
           Icon=${APP_NAME}
           Terminal=false
@@ -145,10 +145,10 @@ jobs:
             -v "${version}" \
             --architecture "${DEB_ARCH}" \
             --license GPL-3.0 \
-            --description "Lightweight native TieZ clipboard manager" \
+            --description "Lightweight native deziroslim clipboard manager" \
             --depends xdotool \
             --maintainer "qiyuanhuakai" \
-            --url "https://github.com/qiyuanhuakai/tiez-slim-linux" \
+            --url "https://github.com/qiyuanhuakai/deziroslim" \
             -C packaging/root \
             -p "dist/${APP_NAME}_${version}_${DEB_ARCH}.deb" \
             usr
@@ -157,10 +157,10 @@ jobs:
             -v "${version}" \
             --architecture "${RPM_ARCH}" \
             --license GPL-3.0 \
-            --description "Lightweight native TieZ clipboard manager" \
+            --description "Lightweight native deziroslim clipboard manager" \
             --depends xdotool \
             --maintainer "qiyuanhuakai" \
-            --url "https://github.com/qiyuanhuakai/tiez-slim-linux" \
+            --url "https://github.com/qiyuanhuakai/deziroslim" \
             -C packaging/root \
             -p "dist/${APP_NAME}-${version}-1.${RPM_ARCH}.rpm" \
             usr

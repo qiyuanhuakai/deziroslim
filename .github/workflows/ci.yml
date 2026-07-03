@@ -121,7 +121,7 @@ jobs:
       - name: Upload debug binary
         uses: actions/upload-artifact@v4
         with:
-          name: tiez-slim-linux-debug
-          path: target/debug/tiez-slim-linux
+          name: deziroslim-debug
+          path: target/debug/deziroslim
           if-no-files-found: error
           retention-days: 7
