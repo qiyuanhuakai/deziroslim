@@ -1,42 +1,42 @@
 #!/usr/bin/env bash
-# rofi-script.sh — Rofi integration for tiez-slim clipboard manager.
+# rofi-script.sh — Rofi integration for deziroslim clipboard manager.
 #
 # Usage:
-#   ~/.config/tiez/rofi-script.sh
+#   ~/.config/deziroslim/rofi-script.sh
 #
 # Prerequisites:
-#   - tiez-slim running in the background
-#   - tiez-cli in PATH (or edit TIEZ_CLI below)
+#   - deziroslim running in the background
+#   - dzc-slim in PATH (or edit DZC_SLIM_CLI below)
 #   - rofi installed
 #   - python3 (for JSON parsing)
 #
 # This script shows clipboard history in rofi. Selecting an entry copies it
-# to the clipboard via tiez-cli paste.
+# to the clipboard via dzc-slim paste.
 
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────
 
-TIEZ_CLI="${TIEZ_CLI:-tiez-cli}"
+DZC_SLIM_CLI="${DZC_SLIM_CLI:-dzc-slim}"
 ROFI="${ROFI:-rofi}"
 
 # ── Preflight checks ──────────────────────────────────────────────────
 
-if ! command -v "$TIEZ_CLI" &>/dev/null; then
-    "$ROFI" -e "未找到 tiez-cli / tiez-cli not found. 请安装 tiez-slim 或设置 TIEZ_CLI / Install tiez-slim or set TIEZ_CLI." 2>/dev/null \
-        || echo "Error: tiez-cli not found. Install tiez-slim or set TIEZ_CLI." >&2
+if ! command -v "$DZC_SLIM_CLI" &>/dev/null; then
+    "$ROFI" -e "未找到 dzc-slim / dzc-slim not found. 请安装 deziroslim 或设置 DZC_SLIM_CLI / Install deziroslim or set DZC_SLIM_CLI." 2>/dev/null \
+        || echo "Error: dzc-slim not found. Install deziroslim or set DZC_SLIM_CLI." >&2
     exit 1
 fi
 
-if ! "$TIEZ_CLI" status &>/dev/null; then
-    "$ROFI" -e "tiez-slim 未运行 / tiez-slim is not running. 请先启动它 / Start it first." 2>/dev/null \
-        || echo "Error: tiez-slim is not running. Start it first." >&2
+if ! "$DZC_SLIM_CLI" status &>/dev/null; then
+    "$ROFI" -e "deziroslim 未运行 / deziroslim is not running. 请先启动它 / Start it first." 2>/dev/null \
+        || echo "Error: deziroslim is not running. Start it first." >&2
     exit 1
 fi
 
 # ── Fetch entries ──────────────────────────────────────────────────────
 
-entries_json=$("$TIEZ_CLI" list --json 2>/dev/null) || {
+entries_json=$("$DZC_SLIM_CLI" list --json 2>/dev/null) || {
     "$ROFI" -e "获取剪贴板历史失败 / Failed to fetch clipboard history." 2>/dev/null \
         || echo "Error: Failed to fetch clipboard history." >&2
     exit 1
@@ -90,7 +90,7 @@ if [ -z "$entry_id" ]; then
     exit 1
 fi
 
-"$TIEZ_CLI" paste "$entry_id" || {
+"$DZC_SLIM_CLI" paste "$entry_id" || {
     "$ROFI" -e "粘贴失败 / Failed to paste entry." 2>/dev/null \
         || echo "Error: Failed to paste entry." >&2
     exit 1
