@@ -270,7 +270,7 @@ mod tests {
             .as_nanos();
         let counter = DB_COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "tiez-slim-io-test-{}-{nanos}-{counter}.db",
+            "deziroslim-io-test-{}-{nanos}-{counter}.db",
             std::process::id()
         ));
         Storage::open(path).expect("open temp db")
@@ -283,7 +283,7 @@ mod tests {
             .as_nanos();
         let counter = DB_COUNTER.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir().join(format!(
-            "tiez-slim-io-test-{}-{nanos}-{counter}.json",
+            "deziroslim-io-test-{}-{nanos}-{counter}.json",
             std::process::id()
         ))
     }

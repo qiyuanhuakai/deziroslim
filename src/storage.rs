@@ -16,7 +16,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-const APP_DATA_DIR: &str = "tiez-slim-linux";
+const APP_DATA_DIR: &str = "deziroslim";
 const LEGACY_DATA_DIR: &str = "myclipboard";
 const ENCRYPTED_PREFIX: &str = "enc:v1:";
 const DECRYPTED_CACHE_CAP: usize = 256;
@@ -1038,7 +1038,7 @@ mod tests {
             .as_nanos();
         let counter = DB_COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "tiez-slim-linux-test-{}-{nanos}-{counter}.db",
+            "deziroslim-test-{}-{nanos}-{counter}.db",
             std::process::id()
         ));
         Storage::open(path).expect("open temp db")
@@ -1169,13 +1169,13 @@ mod tests {
     }
 
     #[test]
-    fn settings_round_trip_supports_tiez_slim_linux_state_keys() {
+    fn settings_round_trip_supports_deziroslim_state_keys() {
         let storage = temp_storage();
         storage
             .set_setting("app.emoji_favorites", "[\"😀\",\"/tmp/sticker.png\"]")
             .expect("set emoji favorites");
         storage
-            .set_setting("ui.tiez_slim_linux", "{\"emoji_panel_enabled\":true}")
+            .set_setting("ui.deziroslim", "{\"emoji_panel_enabled\":true}")
             .expect("set preferences");
 
         assert_eq!(
@@ -1186,7 +1186,7 @@ mod tests {
         );
         assert_eq!(
             storage
-                .get_setting("ui.tiez_slim_linux")
+                .get_setting("ui.deziroslim")
                 .expect("get prefs"),
             Some("{\"emoji_panel_enabled\":true}".to_string())
         );
@@ -1323,7 +1323,7 @@ mod tests {
             .expect("clock before epoch")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "tiez-slim-linux-old-schema-{}-{nanos}.db",
+            "deziroslim-old-schema-{}-{nanos}.db",
             std::process::id()
         ));
         {
@@ -1493,7 +1493,7 @@ mod tests {
             .expect("clock before epoch")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "tiez-slim-linux-actions-migration-{}-{nanos}.db",
+            "deziroslim-actions-migration-{}-{nanos}.db",
             std::process::id()
         ));
         {
@@ -1530,7 +1530,7 @@ mod tests {
             .as_nanos();
         let counter = DB_COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "tiez-slim-linux-source-migration-{}-{nanos}-{counter}.db",
+            "deziroslim-source-migration-{}-{nanos}-{counter}.db",
             std::process::id()
         ));
         {

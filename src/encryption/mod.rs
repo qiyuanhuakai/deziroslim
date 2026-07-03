@@ -55,7 +55,7 @@ impl KeyringBackend {
 }
 
 #[cfg(feature = "secure_storage")]
-const KEYRING_SERVICE: &str = "tiez-slim-linux";
+const KEYRING_SERVICE: &str = "deziroslim";
 #[cfg(feature = "secure_storage")]
 const KEYRING_ACCOUNT: &str = "master";
 #[cfg(feature = "secure_storage")]
