@@ -804,7 +804,7 @@ cba4f1b style: apply cargo fmt across codebase
 ### #7 数据库加密
 
 #### 功能
-对 `is_sensitive = 1` 的条目，`content` 与 `preview` 列在 DB 中以加密形式存储。Linux 使用 `keyring` crate（Secret Service / GNOME Keyring / KWallet）存储主密钥，应用启动时拉取。提供 `secure_storage` Cargo feature 控制是否启用（opt-in）。
+对 `is_sensitive = 1` 的条目，`content` 与 `preview` 列在 DB 中以加密形式存储。Linux 使用 `keyring` crate（Secret Service / GNOME Keyring / KWallet）存储主密钥，应用启动时拉取。`secure_storage` 默认编译启用，keyring 不可用时降级并输出警告。
 
 #### 价值
 - **fork 优势补齐**：fork 已有 AES-256-GCM + keyring 实现，tiez 没移植
@@ -846,9 +846,9 @@ cba4f1b style: apply cargo fmt across codebase
 - 进度条显示在 dev 面板
 
 **Phase E：Feature gate 与文档（0.5 天）**
-- `Cargo.toml` 加 `[features] secure_storage = ["aes-gcm", "keyring"]`
-- 默认 `secure_storage = []` 不启用（避免 keyring 守护进程缺失时启动失败）
-- README 增加「敏感数据加密」章节
+- `Cargo.toml` 将 `secure_storage` 加入 `default = ["kde_connect", "secure_storage"]`
+- keyring 守护进程缺失时降级不 panic + 明确警告信息
+- README 更新为默认启用
 
 #### 验收标准
 - [ ] `cargo build --features secure_storage` 通过
@@ -860,7 +860,7 @@ cba4f1b style: apply cargo fmt across codebase
 #### 风险与权衡
 | 风险 | 缓解 |
 |---|---|
-| keyring 守护进程未运行 | feature 默认关闭 + 启动检测 + 明确错误信息 |
+| keyring 守护进程未运行 | 默认启用 + 启动检测 + 降级不 panic + 明确警告信息 |
 | 性能开销 | 批量 LRU 缓存 + 异步后台队列 |
 | 主密钥丢失 = 数据永久丢失 | README 强提示用户备份 keyring；提供「导出主密钥」冷存储选项 |
 | 跨平台 | 优先 Linux（keyring）；Windows DPAPI / macOS Keychain 留 v1.1 |

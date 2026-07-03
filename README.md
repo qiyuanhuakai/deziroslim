@@ -27,7 +27,7 @@ Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/dzc-slimpboar
 - 正则 Actions 系统：基于正则表达式的自动化规则引擎，匹配剪贴板内容后可自动执行外部命令（如 URL 用浏览器打开、邮箱用邮件客户端打开）；支持工具栏 ⚡ 按钮快速触发、右键上下文菜单集成、自动触发模式（5 秒撤销窗口）；设置面板提供完整 CRUD、实时测试和测试运行。
 - 导出/导入与自动备份：支持将全部历史、标签和设置导出为 JSON 文件，可从 JSON 文件导入（自动去重）；关闭应用时可自动备份，保留份数可配置；数据管理面板含导出/导入/备份/立即备份/打开备份目录等操作。
 - 模糊搜索：基于 nucleo-matcher 的高性能模糊搜索，支持拼写纠错（如 `cllpboard` 匹配 `clipboard`）和中文模糊匹配；搜索结果按相关度排序，匹配字符高亮显示；可在设置中切换回传统子串搜索。
-- 数据库加密（opt-in）：通过 `secure_storage` feature gate 启用，使用 AES-256-GCM 加密敏感条目；密钥通过系统 keyring（GNOME Keyring / KWallet）管理；启用后标记为敏感的条目自动加密存储，读取时自动解密；支持批量加密/解密迁移，带 LRU 缓存优化读取性能。
+- 数据库加密（默认启用）：使用 AES-256-GCM 加密敏感条目；密钥通过系统 keyring（GNOME Keyring / KWallet）管理；标记为敏感的条目自动加密存储，读取时自动解密；支持批量加密/解密迁移，带 LRU 缓存优化读取性能。
 - KDE Connect 同步：默认编译启用，支持与 Android 设备通过 KDE Connect 协议同步剪贴板；设置面板含启用开关、设备 ID 显示、已发现设备列表；通过手机端设备列表配对后双向同步，带 echo 防重复机制。
 - 国际化（i18n）：完整双语支持（zh-CN + en-US），754 个翻译键，100% 覆盖率；使用 rust-i18n v4，启动时自动检测系统语言，支持手动切换；所有用户可见字符串均通过 `t!()` 宏引用，无硬编码。
 
@@ -161,45 +161,8 @@ For rofi/wofi keyboard-driven clipboard picker integration, see [docs/rofi-scrip
 5. After pairing, the device list shows the connected device name and status
 6. From now on, copying text on either side automatically syncs to the other
 
-> **注意 / Note**: 同步依赖两个设备在同一局域网。加密标记的敏感条目同步前会提示确认。
+> **注意 / Note**: 同步依赖两个设备在同一局域网。敏感条目（已加密）同步前会提示确认。
 > Sync requires both devices on the same network. Sensitive (encrypted) entries prompt for confirmation before syncing.
-
-## 加密模式启用 / Enabling Encryption
-
-> 此功能需要编译时启用 `secure_storage` feature：`cargo build --features secure_storage`
-
-加密模式使用 AES-256-GCM 加密标记为敏感的剪贴板条目，密钥由系统 keyring 管理。
-
-```bash
-# 编译时启用加密
-cargo build --features secure_storage
-
-# 或运行时启用
-cargo run --features secure_storage
-```
-
-启用步骤：
-1. 编译带 `secure_storage` feature 的版本
-2. 启动应用，进入 **设置 → 隐私** 面板
-3. 打开「安全存储」开关（系统 keyring 需可用）
-4. 之后标记为 `sensitive`/`password`/`secret` 的条目会自动加密存储
-5. 读取时自动解密，UI 无感知
-
-> **注意**: 如果 keyring 不可用（如 SSH 会话），启动时会输出警告但不会 panic。关闭加密后重启会自动批量解密。
-
-Encryption uses AES-256-GCM for sensitive clipboard entries, with keys managed by the system keyring (GNOME Keyring / KWallet).
-
-```bash
-# Build with encryption support
-cargo build --features secure_storage
-```
-
-Steps:
-1. Build with the `secure_storage` feature
-2. Launch app, go to **Settings → Privacy**
-3. Enable "Secure Storage" (system keyring must be available)
-4. Entries tagged `sensitive`/`password`/`secret` are automatically encrypted at rest
-5. Decryption is transparent on read
 
 <a name="i18n"></a>
 

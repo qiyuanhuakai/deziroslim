@@ -5,7 +5,7 @@ edition = "2024"
 default-run = "deziroslim"
 
 [features]
-default = ["kde_connect"]
+default = ["kde_connect", "secure_storage"]
 devtools = ["log-miss-tr"]
 log-miss-tr = ["rust-i18n/log-miss-tr", "dep:log", "dep:env_logger"]
 secure_storage = ["aes-gcm", "keyring", "base64", "getrandom"]
