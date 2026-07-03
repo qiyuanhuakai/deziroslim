@@ -6,12 +6,12 @@
 
 ## OVERVIEW
 
-`tiez-slim-linux` is a Rust native clipboard manager. The original upstream is `https://github.com/jimuzhe/tiez-clipboard`; this project is migrated from the user's heavily modified branch at `https://github.com/qiyuanhuakai/tiez-clipboard` (also available locally at `../tiez-clipboard`) to remove React/Tauri/WebView overhead. The app is a single `eframe/egui` binary with SQLite persistence, clipboard polling, CJK font handling, and Linux/X11 platform integration. UI-facing app name should be the shorter `tiez-slim`.
+`deziroslim` is a Rust native clipboard manager. The original upstream is `https://github.com/jimuzhe/dzc-slimpboard`; this project is migrated from the user's heavily modified branch at `https://github.com/qiyuanhuakai/dzc-slimpboard` (also available locally at `../dzc-slimpboard`) to remove React/Tauri/WebView overhead. The app is a single `eframe/egui` binary with SQLite persistence, clipboard polling, CJK font handling, and Linux/X11 platform integration. UI-facing app name should be the shorter `deziroslim`.
 
 ## STRUCTURE
 
 ```text
-tiez-slim-linux/
+deziroslim/
 ├── Cargo.toml        # Rust 2024 binary crate, GUI + SQLite dependencies
 ├── README.md         # Chinese project overview, run commands, platform notes
 └── src/
@@ -31,7 +31,7 @@ Generated/cache directories such as `.zig-cache/`, `.dvui-cache/`, `.opencode/`,
 
 | Task | Location | Notes |
 | --- | --- | --- |
-| Startup, dev-mode flag, window size | `src/main.rs` | `--dev`, `TIEZ_SLIM_LINUX_DEV=1`, legacy `MYCLIPBOARD_DEV=1`, or `devtools` feature enables debug UI. |
+| Startup, dev-mode flag, window size | `src/main.rs` | `--dev`, `DEZIROS_LIM_DEV=1`, legacy `MYCLIPBOARD_DEV=1`, or `devtools` feature enables debug UI. |
 | Clipboard capture path | `src/clipboard.rs` -> `src/model.rs` -> `src/storage.rs` | Polls text every 700 ms; deduplication happens in storage. |
 | Main UI, shortcuts, filters, preferences | `src/app.rs` | Large `egui` surface; preserve dense TieZ-style layout. |
 | Emoji grouping data | `src/emoji_data.rs` | Auto-generated from `twemoji-assets` + Unicode `emoji-test.txt`; regenerate with `scripts/generate_emoji_data.py`, do not hand-edit. |
@@ -68,7 +68,7 @@ cargo run
 cargo dev
 cargo ci  # 首选完整验证：fmt/check/test/clippy/i18n
 cargo run -- dev
-TIEZ_SLIM_LINUX_DEV=1 cargo run
+DEZIROS_LIM_DEV=1 cargo run
 scripts/generate_emoji_data.py
 cargo test  # 仅用于局部调试；完成前优先 cargo ci
 cargo build --release
@@ -83,9 +83,9 @@ cargo build --release
 
 ## 同步来源
 
-This project is migrated from the user's `qiyuanhuakai/tiez-clipboard` branch (local `../tiez-clipboard`), whose original upstream is `jimuzhe/tiez-clipboard` (React + Tauri 2 + WebView). Key sync points:
+This project is migrated from the user's `qiyuanhuakai/dzc-slimpboard` branch (local `../dzc-slimpboard`), whose original upstream is `jimuzhe/dzc-slimpboard` (React + Tauri 2 + WebView). Key sync points:
 
-| Feature | TieZ Source | tiez-slim-linux Implementation |
+| Feature | TieZ Source | deziroslim Implementation |
 | --- | --- | --- |
 | macOS theme tokens | CSS variables in `theme.tokens.css` | `src/ui/theme.rs` (`MacosTokens`) |
 | Toggle switch widget | React component | `src/ui/widgets.rs` (`macos_toggle`) |

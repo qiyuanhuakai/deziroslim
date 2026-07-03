@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `tiez-slim-linux` will be documented in this file.
+All notable changes to `deziroslim` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Fuzzy search** (#10): nucleo-matcher powered fuzzy search with typo tolerance and CJK support; results ranked by relevance with character highlighting; toggleable between fuzzy and substring modes
 - **Database encryption** (#7, opt-in `secure_storage` feature): AES-256-GCM encryption for sensitive entries; keys managed via system keyring (GNOME Keyring / KWallet); transparent encrypt/decrypt on write/read; LRU cache for read performance; batch migration support
 - **KDE Connect sync** (#4): default-enabled bidirectional clipboard sync with Android via KDE Connect protocol; settings panel with device discovery, device-list pairing, and connection status; echo guard to prevent sync loops
-- **CLI (`tiez-cli`)** (#6): Unix domain socket IPC for script integration; subcommands: `list`, `search`, `paste`, `pin`, `tag`, `delete`, `add`, `status`; `--json` flag for machine-readable output; works offline for `paste` (direct DB access); Sway/Hyprland integration guide and rofi script
+- **CLI (`dzc-slim`)** (#6): Unix domain socket IPC for script integration; subcommands: `list`, `search`, `paste`, `pin`, `tag`, `delete`, `add`, `status`; `--json` flag for machine-readable output; works offline for `paste` (direct DB access); Sway/Hyprland integration guide and rofi script
 - **i18n** (#8): full bilingual support (zh-CN + en-US), 754 translation keys at 100% coverage; rust-i18n v4 with `t!()` macro; auto-detect system locale; all user-visible strings externalized
 
 ### Changed
@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `src/app.rs` settings extracted into 10 panel modules under `src/ui/settings/`
 - New modules: `actions/`, `blacklist.rs`, `clipboard.rs` (primary selection), `encryption/`, `export/`, `ipc.rs`, `search/`, `sync/`
-- New binary: `src/bin/tiez_cli.rs` (tiez-cli)
+- New binary: `src/bin/dzc_slim.rs` (dzc-slim)
 - 754 i18n keys across 2 locales
 - 203+ unit tests passing
 

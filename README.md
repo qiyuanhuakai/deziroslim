@@ -1,20 +1,20 @@
 <a name="chinese"></a>
 
 ![i18n](https://img.shields.io/badge/i18n-754%20keys%20%7C%20zh--CN%20100%25%20%7C%20en--US%20100%25-blue)
-[English](#i18n) | [中文](#tiez-slim-linux)
+[English](#i18n) | [中文](#deziroslim)
 
-# tiez-slim-linux
+# deziroslim
 
-Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/tiez-clipboard v0.3.1`](https://github.com/jimuzhe/tiez-clipboard/tree/v0.3.1)，我曾经在此基础上进行了大量修改，并以个人的方式将其完整迁移到了 Linux 上：[`qiyuanhuakai/tiez-clipboard`](https://github.com/qiyuanhuakai/tiez-clipboard)。但我受够了`Tauri`了。它看似使用性能最强的 Rust，实际上还是在运行一个高性能开销（能使我的n100增加80%占用）、无比巨大（内存占用200Mb，峰值可达600－800Mb）的 Webview。相比`electron`，它的跨平台兼容性也堪称糟糕（在 Linux 和Windows 上，同一套主题的观感是完全不同的）。所以我新开了这个项目，目标是在 Linux 上去掉 React/Tauri/WebView 所有的开销，并保留 TieZ 的紧凑视觉，我喜爱的`macos`风格与高频剪贴板工作流。
+Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/dzc-slimpboard v0.3.1`](https://github.com/jimuzhe/dzc-slimpboard/tree/v0.3.1)，我曾经在此基础上进行了大量修改，并以个人的方式将其完整迁移到了 Linux 上：[`qiyuanhuakai/dzc-slimpboard`](https://github.com/qiyuanhuakai/dzc-slimpboard)。但我受够了`Tauri`了。它看似使用性能最强的 Rust，实际上还是在运行一个高性能开销（能使我的n100增加80%占用）、无比巨大（内存占用200Mb，峰值可达600－800Mb）的 Webview。相比`electron`，它的跨平台兼容性也堪称糟糕（在 Linux 和Windows 上，同一套主题的观感是完全不同的）。所以我新开了这个项目，目标是在 Linux 上去掉 React/Tauri/WebView 所有的开销，并保留 TieZ 的紧凑视觉，我喜爱的`macos`风格与高频剪贴板工作流。
 
 ## 当前实现
 
-- 原生自绘 UI：`eframe/egui`，无系统标题栏，自绘 `tiez-slim` 顶栏可拖拽，支持圆角窗口、可切换应用边框和统一尺寸的 egui 手绘矢量工具图标。
+- 原生自绘 UI：`eframe/egui`，无系统标题栏，自绘 `deziroslim` 顶栏可拖拽，支持圆角窗口、可切换应用边框和统一尺寸的 egui 手绘矢量工具图标。
 - 字体默认优先使用个人喜好的 [`Maple Mono NF CN`](https://github.com/subframe7536/maple-font) ，自动回退 Noto / 思源 / WenQuanYi 等 CJK 字体；界面设置中可搜索系统字体并**自定义**“主要字体”和“备用字体”，缺字时自动走 egui fallback 链，内置 GNU Unifont 作为最后 Unicode 回退。
 - Linux 剪贴板：`arboard` 轮询监听文本、富文本 HTML、图片和文件列表；文本自动识别 URL、代码、文件路径、图片/视频 data URL 等类型。文件条目写回时会尽力写入 GNOME `x-special/gnome-copied-files`，并始终写入通用文件列表/`text/uri-list`，便于 Nautilus/Thunar/Dolphin/PCManFM 等 GUI 文件管理器粘贴。
-- 持久化：`rusqlite` + bundled SQLite；默认数据目录为 XDG 数据目录下的 `tiez-slim-linux`，并兼容读取旧 `myclipboard` 数据位置。
+- 持久化：`rusqlite` + bundled SQLite；默认数据目录为 XDG 数据目录下的 `deziroslim`，并兼容读取旧 `myclipboard` 数据位置。
 - 历史能力：搜索、类型过滤、标签过滤、置顶、删除、清空、标签编辑、左键/右键/Enter 按 TieZ 语义复制并粘贴。
-- `tiez-slim` 风格主界面：380×680 竖向剪贴板浮窗、紧凑标签胶囊、单列历史流、类型徽标、敏感内容遮罩、左/右/上三向贴边边条隐藏；富文本、图片和文件历史项悬停时提供内容预览浮层。
+- `deziroslim` 风格主界面：380×680 竖向剪贴板浮窗、紧凑标签胶囊、单列历史流、类型徽标、敏感内容遮罩、左/右/上三向贴边边条隐藏；富文本、图片和文件历史项悬停时提供内容预览浮层。
 - 表情包页面：顶部真实 emoji 按钮进入 `表情包` 全页，使用 Twemoji SVG 渲染完整 Twemoji 集合，并按 Unicode `emoji-test.txt` / CLDR 权威分组显示；组内继续分页以避免大组卡顿。收藏 Tab 支持文件选择、拖放图片和粘贴 data URL 添加表情包，保存到当前数据库旁的 `emoji_favorites/` 目录，点击表情或收藏会直接写入剪贴板并粘贴。
 - 符号页面：顶部 `∑` 按钮进入 `符号` 全页，提供常用、箭头、数学、货币、框线、希腊、上下标/分数、技术、几何、块元素、标点/括号、星标/装饰、音乐/棋牌等 Unicode 符号，点击即可直接粘贴。
 - 设置页面：顶部齿轮按钮进入全页设置，包含常规设置、快捷键设置、剪贴板设置、界面设置、默认打开程序、标签目录和数据管理；已接通项即时生效并持久化，字体选择支持可搜索下拉和系统字体重新扫描。
@@ -39,10 +39,10 @@ Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/tiez-clipboar
 
 ```bash
 cargo run
-cargo dev          # 等价于 cargo run --bin tiez-slim-linux -- dev
+cargo dev          # 等价于 cargo run --bin deziroslim -- dev
 cargo ci           # 串行运行 cargo fmt/check/test/clippy/i18n
 cargo run -- --db-path /path/to/clipboard.db
-TIEZ_SLIM_LINUX_DB_PATH=/path/to/clipboard.db cargo run
+DEZIROS_LIM_DB_PATH=/path/to/clipboard.db cargo run
 cargo test         # 局部调试可用；提交前优先 cargo ci
 cargo build --release
 ```
@@ -52,11 +52,11 @@ GUI 调试模式：
 ```bash
 cargo dev
 # 或显式转发参数
-cargo run --bin tiez-slim-linux -- dev
+cargo run --bin deziroslim -- dev
 # 兼容旧写法
 cargo run -- --dev
 # 或
-TIEZ_SLIM_LINUX_DEV=1 cargo run
+DEZIROS_LIM_DEV=1 cargo run
 # 兼容旧变量
 MYCLIPBOARD_DEV=1 cargo run
 # 或编译期启用
@@ -65,79 +65,79 @@ cargo run --features devtools
 
 ## CLI 与脚本集成
 
-`tiez-slim` 提供命令行工具 `tiez-cli`，可通过 Unix socket 与运行中的 GUI 实例通信。需要先启动 `tiez-slim` 才能使用 `tiez-cli`。
+`deziroslim` 提供命令行工具 `dzc-slim`，可通过 Unix socket 与运行中的 GUI 实例通信。需要先启动 `deziroslim` 才能使用 `dzc-slim`。
 
 ```bash
 # 列出最近的剪贴板记录
-tiez-cli list
+dzc-slim list
 
 # 搜索历史
-tiez-cli search "关键词"
+dzc-slim search "关键词"
 
 # 将指定条目复制到剪贴板
-tiez-cli paste 42
+dzc-slim paste 42
 
 # 查看服务器状态（含 KDE Connect 同步状态）
-tiez-cli status
+dzc-slim status
 
 # 切换置顶状态
-tiez-cli pin 42
+dzc-slim pin 42
 
 # 设置标签
-tiez-cli tag 42 work important
+dzc-slim tag 42 work important
 
 # 删除条目
-tiez-cli delete 42
+dzc-slim delete 42
 
 # 添加新条目
-tiez-cli add "要保存的文本"
+dzc-slim add "要保存的文本"
 
 # JSON 格式输出（适合脚本处理）
-tiez-cli --json list
-tiez-cli --json status | jq '.sync'
+dzc-slim --json list
+dzc-slim --json status | jq '.sync'
 ```
 
 配合 rofi/wofi 可实现键盘驱动的剪贴板选择器，详见 [docs/rofi-script.sh](docs/rofi-script.sh) 和 [Sway/Hyprland 集成指南](docs/sway-integration.md)。
 
 ---
 
-`tiez-slim` ships with `tiez-cli`, a command-line tool that talks to a running GUI instance over a Unix domain socket. The `tiez-slim` app must be running first.
+`deziroslim` ships with `dzc-slim`, a command-line tool that talks to a running GUI instance over a Unix domain socket. The `deziroslim` app must be running first.
 
 ```bash
 # List recent clipboard entries
-tiez-cli list
+dzc-slim list
 
 # Search history
-tiez-cli search "query"
+dzc-slim search "query"
 
 # Copy an entry to clipboard by ID
-tiez-cli paste 42
+dzc-slim paste 42
 
 # Show server status (including KDE Connect sync state)
-tiez-cli status
+dzc-slim status
 
 # Toggle pin state
-tiez-cli pin 42
+dzc-slim pin 42
 
 # Set tags on an entry
-tiez-cli tag 42 work important
+dzc-slim tag 42 work important
 
 # Delete an entry
-tiez-cli delete 42
+dzc-slim delete 42
 
 # Add a new entry
-tiez-cli add "text to save"
+dzc-slim add "text to save"
 
 # JSON output (for scripting)
-tiez-cli --json list
-tiez-cli --json status | jq '.sync'
+dzc-slim --json list
+dzc-slim --json status | jq '.sync'
 ```
 
 For rofi/wofi keyboard-driven clipboard picker integration, see [docs/rofi-script.sh](docs/rofi-script.sh) and the [Sway/Hyprland integration guide](docs/sway-integration.md).
 
 ## 与旧版差异
 
-原始 `tiez-clipboard` 使用 React + Tauri 2 + WebView。`tiez-slim-linux` 对齐个人 `qiyuanhuakai/tiez-clipboard` 分支中的主界面视觉和核心数据模型，并用 Rust 原生能力补齐文本/富文本/图片/文件剪贴板、X11 全局呼出、鼠标中键、点击/键盘粘贴流程、系统托盘、边缘停靠、默认打开应用设置、彩色 emoji/符号入口、音效、字体 fallback 和可配置数据位置。
+原始 `dzc-slimpboard` 使用 React + Tauri 2 + WebView。`deziroslim` 对齐个人 `qiyuanhuakai/dzc-slimpboard` 分支中的主界面视觉和核心数据模型，并用 Rust 原生能力补齐文本/富文本/图片/文件剪贴板、X11 全局呼出、鼠标中键、点击/键盘粘贴流程、系统托盘、边缘停靠、默认打开应用设置、彩色 emoji/符号入口、音效、字体 fallback 和可配置数据位置。
 
 ## KDE Connect 配对教程 / KDE Connect Pairing Guide
 
@@ -146,18 +146,18 @@ For rofi/wofi keyboard-driven clipboard picker integration, see [docs/rofi-scrip
 ### 中文
 
 1. 在 Android 手机安装 [KDE Connect](https://play.google.com/store/apps/details?id=org.kde.kdeconnect_tp)
-2. 启动 tiez-slim，进入 **设置 → 同步** 面板
+2. 启动 deziroslim，进入 **设置 → 同步** 面板
 3. 打开「启用 KDE Connect」开关
-4. 在手机 KDE Connect 的设备列表中选择 tiez-slim，并确认配对请求
+4. 在手机 KDE Connect 的设备列表中选择 deziroslim，并确认配对请求
 5. 配对成功后，设备列表显示已连接设备名和状态
 6. 之后在任意一端复制文本，另一端剪贴板会自动同步
 
 ### English
 
 1. Install [KDE Connect](https://play.google.com/store/apps/details?id=org.kde.kdeconnect_tp) on your Android phone
-2. Launch tiez-slim, go to **Settings → Sync** panel
+2. Launch deziroslim, go to **Settings → Sync** panel
 3. Enable the "KDE Connect" toggle
-4. Select tiez-slim from Android KDE Connect's device list and confirm the pairing request
+4. Select deziroslim from Android KDE Connect's device list and confirm the pairing request
 5. After pairing, the device list shows the connected device name and status
 6. From now on, copying text on either side automatically syncs to the other
 
@@ -205,7 +205,7 @@ Steps:
 
 ## 国际化 / Internationalization
 
-`tiez-slim-linux` 现已支持国际化（i18n）。当前支持以下语言：
+`deziroslim` 现已支持国际化（i18n）。当前支持以下语言：
 
 - **简体中文 (zh-CN)** — 源语言，完整覆盖
 - **English (en-US)** — 完整翻译
