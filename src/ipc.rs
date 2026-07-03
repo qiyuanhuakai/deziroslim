@@ -1,6 +1,6 @@
 //! Inter-process communication for CLI ↔ GUI coordination.
 //!
-//! Provides a Unix domain socket server so that the `tiez-cli` binary can
+//! Provides a Unix domain socket server so that the `dzc-slim` binary can
 //! send commands to a running GUI instance. Protocol is JSON Lines: one
 //! JSON object per line, terminated by `\n`.
 //!
@@ -21,7 +21,7 @@ use std::thread;
 // ── Error type ────────────────────────────────────────────────────────
 
 /// Errors returned by the IPC layer. Each variant maps to a distinct CLI
-/// exit code so that `tiez-cli` can translate them into user-visible
+/// exit code so that `dzc-slim` can translate them into user-visible
 /// diagnostics.
 ///
 /// | Variant            | Exit code |
@@ -34,7 +34,7 @@ use std::thread;
 /// | other              | 1         |
 #[derive(Debug, thiserror::Error)]
 pub enum IpcError {
-    #[error("connection refused – is tiez-slim running?")]
+    #[error("connection refused – is deziroslim running?")]
     ConnectionRefused,
     #[error("IPC timed out")]
     Timeout,
@@ -126,18 +126,18 @@ pub struct IpcServer {
 
 impl IpcServer {
     /// Resolve the default socket path:
-    /// 1. `$XDG_RUNTIME_DIR/tiez-slim-linux.sock` (when the env var is set,
+    /// 1. `$XDG_RUNTIME_DIR/deziroslim.sock` (when the env var is set,
     ///    per XDG Base Directory spec; callers are expected to ensure the
     ///    directory exists)
-    /// 2. `/tmp/tiez-slim-$UID.sock`
+    /// 2. `/tmp/deziroslim-$UID.sock`
     pub fn socket_path_default() -> PathBuf {
         if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR")
             && !runtime.is_empty()
         {
-            return PathBuf::from(runtime).join("tiez-slim-linux.sock");
+            return PathBuf::from(runtime).join("deziroslim.sock");
         }
         let uid = unsafe { libc::getuid() };
-        PathBuf::from(format!("/tmp/tiez-slim-{uid}.sock"))
+        PathBuf::from(format!("/tmp/deziroslim-{uid}.sock"))
     }
 
     /// Start the IPC server in a background thread.
@@ -523,10 +523,10 @@ impl IpcServer {
     }
 }
 
-// ── Client helper (for tiez-cli) ─────────────────────────────────────
+// ── Client helper (for dzc-slim) ─────────────────────────────────────
 
 /// Send a single JSON Lines request to the IPC server and return the
-/// parsed response. This is a convenience function for `tiez-cli`.
+/// parsed response. This is a convenience function for `dzc-slim`.
 pub fn send_request(socket_path: &Path, request: &IpcRequest) -> Result<IpcResponse, IpcError> {
     let stream = UnixStream::connect(socket_path).map_err(|_| IpcError::ConnectionRefused)?;
 
@@ -573,7 +573,7 @@ mod tests {
     #[test]
     fn ipc_error_display() {
         let e = IpcError::ConnectionRefused;
-        assert!(e.to_string().contains("tiez-slim"));
+        assert!(e.to_string().contains("deziroslim"));
 
         let e = IpcError::InvalidJson("bad input".into());
         assert!(e.to_string().contains("bad input"));
@@ -637,7 +637,7 @@ mod tests {
     fn socket_path_default_uses_xdg_runtime() {
         let dir = tempfile::tempdir().expect("create tempdir");
         let runtime = dir.path().to_str().expect("utf8 path").to_string();
-        let expected = dir.path().join("tiez-slim-linux.sock");
+        let expected = dir.path().join("deziroslim.sock");
 
         let old = std::env::var("XDG_RUNTIME_DIR").ok();
 
@@ -664,7 +664,7 @@ mod tests {
 
         let path = IpcServer::socket_path_default();
         let uid = unsafe { libc::getuid() };
-        assert_eq!(path, PathBuf::from(format!("/tmp/tiez-slim-{uid}.sock")));
+        assert_eq!(path, PathBuf::from(format!("/tmp/deziroslim-{uid}.sock")));
 
         if let Some(v) = old {
             unsafe {
