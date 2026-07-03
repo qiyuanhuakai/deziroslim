@@ -10,7 +10,7 @@
 //!   running a tokio runtime with the kdeconnect-proto [`Device`].
 //! - [`Discovery`] wraps device discovery events.
 //! - [`Pairing`] wraps pairing state for a specific peer.
-//! - [`ClipboardPlugin`] handles bidirectional clipboard sync (T30).
+//! - [`KdeConnectPlugin`] handles bidirectional clipboard sync (T30).
 //!
 //! mDNS discovery and TLS pairing are handled by kdeconnect-proto's `Device`
 //! internally. We additionally use `mdns-sd` for supplementary service
@@ -410,13 +410,13 @@ fn content_hash(content: &str) -> String {
 }
 
 #[cfg(feature = "kde_connect")]
-pub struct TiezClipboardPlugin {
+pub struct KdeConnectPlugin {
     echo_guard: SyncEchoGuard,
     event_tx: crossbeam_channel::Sender<SyncEvent>,
 }
 
 #[cfg(feature = "kde_connect")]
-impl TiezClipboardPlugin {
+impl KdeConnectPlugin {
     pub fn new(event_tx: crossbeam_channel::Sender<SyncEvent>, echo_guard: SyncEchoGuard) -> Self {
         Self {
             echo_guard,
@@ -431,7 +431,7 @@ impl TiezClipboardPlugin {
 
 #[cfg(feature = "kde_connect")]
 #[kdeconnect_proto::async_trait]
-impl kdeconnect_proto::plugin::Plugin for TiezClipboardPlugin {
+impl kdeconnect_proto::plugin::Plugin for KdeConnectPlugin {
     fn supported_incoming_packets(&self) -> Vec<kdeconnect_proto::packet::NetworkPacketType> {
         use kdeconnect_proto::packet::NetworkPacketType;
         vec![
@@ -498,7 +498,7 @@ impl kdeconnect_proto::plugin::Plugin for TiezClipboardPlugin {
 #[cfg(feature = "kde_connect")]
 fn sync_data_dir() -> PathBuf {
     let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.join("tiez-slim-linux").join("sync")
+    base.join("deziroslim").join("sync")
 }
 
 /// Get the path to the TLS certificate file.
@@ -674,7 +674,7 @@ fn sync_runtime(
 
     let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
         .map(|s| s.trim().to_string())
-        .unwrap_or_else(|_| "tiez-slim".to_string());
+        .unwrap_or_else(|_| "deziroslim".to_string());
     let name = if hostname.len() > 32 {
         hostname[..32].to_string()
     } else {
@@ -689,7 +689,7 @@ fn sync_runtime(
     };
 
     let plugins: Vec<Box<dyn kdeconnect_proto::plugin::Plugin + Send + Sync>> = vec![Box::new(
-        TiezClipboardPlugin::new(event_tx.clone(), echo_guard),
+        KdeConnectPlugin::new(event_tx.clone(), echo_guard),
     )];
     let trust_handler = FileTrustHandler::new(trusted_devices_dir());
     let kdevice =
@@ -1033,7 +1033,7 @@ mod tests {
     fn test_sync_data_dir_is_absolute() {
         let dir = sync_data_dir();
         assert!(dir.is_absolute(), "sync data dir should be absolute");
-        assert!(dir.to_string_lossy().contains("tiez-slim-linux"));
+        assert!(dir.to_string_lossy().contains("deziroslim"));
     }
 
     #[test]
@@ -1094,7 +1094,7 @@ mod tests {
     #[cfg(feature = "kde_connect")]
     fn test_clipboard_plugin_echo_guard_access() {
         let (tx, _rx) = crossbeam_channel::unbounded();
-        let plugin = TiezClipboardPlugin::new(tx, SyncEchoGuard::new());
+        let plugin = KdeConnectPlugin::new(tx, SyncEchoGuard::new());
 
         let guard = plugin.echo_guard();
         assert!(!guard.should_suppress("anything"));

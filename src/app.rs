@@ -24,10 +24,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-const APP_DISPLAY_NAME: &str = "tiez-slim";
-pub(crate) const APP_ID: &str = "tiez-slim-linux";
-const APP_REPO_URL: &str = "https://github.com/qiyuanhuakai/tiez-slim-linux";
-const PREFERENCES_KEY: &str = "ui.tiez_slim_linux";
+const APP_DISPLAY_NAME: &str = "deziroslim";
+pub(crate) const APP_ID: &str = "deziroslim";
+const APP_REPO_URL: &str = "https://github.com/qiyuanhuakai/deziroslim";
+const PREFERENCES_KEY: &str = "ui.deziroslim";
 const LEGACY_PREFERENCES_KEY: &str = "ui.native_tiez";
 const EMOJI_FAVORITES_KEY: &str = "app.emoji_favorites";
 const SETTINGS_PANEL_COUNT: usize = 12;
@@ -541,7 +541,7 @@ fn default_kde_connect_enabled() -> bool {
 }
 
 fn default_kde_connect_device_name() -> String {
-    "tiez-slim-linux".to_string()
+    "deziroslim".to_string()
 }
 
 fn default_builtin_actions_enabled() -> bool {
@@ -613,7 +613,7 @@ impl Default for AppPreferences {
             secure_storage_enabled: false,
             kde_connect_enabled: true,
             kde_connect_device_id: None,
-            kde_connect_device_name: "tiez-slim-linux".to_string(),
+            kde_connect_device_name: "deziroslim".to_string(),
             sync_enabled: false,
             cli_socket_path: None,
             builtin_actions_enabled: true,
@@ -4664,7 +4664,7 @@ fn hotkey_config_from_preferences(preferences: &AppPreferences) -> platform::Hot
 fn build_initial_hotkey_manager(preferences: &AppPreferences) -> HotkeyManager {
     let mut mgr = HotkeyManager::new();
     if let Err(err) = mgr.register("private_mode_toggle", &preferences.private_mode_hotkey) {
-        eprintln!("[tiez-slim] hotkey conflict while registering private-mode toggle: {err}");
+        eprintln!("[deziroslim] hotkey conflict while registering private-mode toggle: {err}");
     }
     mgr
 }
@@ -4791,7 +4791,7 @@ fn emoji_total_pages(count: usize) -> usize {
 fn write_text_to_temp_file(content: &str, extension: &str) -> Result<PathBuf, String> {
     let dir = temp_open_dir()?;
     let path = dir.join(format!(
-        "tiez-slim-linux-open-{}.{}",
+        "deziroslim-open-{}.{}",
         timestamp_millis(),
         extension
     ));
@@ -4807,7 +4807,7 @@ fn write_data_url_to_temp_file(content: &str, extension: &str) -> Result<PathBuf
     let bytes = decode_base64(data)?;
     let dir = temp_open_dir()?;
     let path = dir.join(format!(
-        "tiez-slim-linux-open-{}.{}",
+        "deziroslim-open-{}.{}",
         timestamp_millis(),
         extension
     ));
@@ -6737,7 +6737,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("tiez-slim-{name}-{nanos}"));
+        let dir = std::env::temp_dir().join(format!("deziroslim-{name}-{nanos}"));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
     }
