@@ -7,7 +7,7 @@ use rust_i18n::t;
 
 const PRIVACY_PANEL_INDEX: usize = 7;
 const SENSITIVE_KINDS: &[&str] = &["phone", "idcard", "email", "secret", "password"];
-const OWN_WINDOW_CLASSES: &[&str] = &[APP_ID, "tiez-slim"];
+const OWN_WINDOW_CLASSES: &[&str] = &[APP_ID, "deziroslim"];
 
 pub fn draw_privacy_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::Context) {
     let prev = app

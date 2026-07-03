@@ -151,7 +151,7 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
             .map_err(|err| t!("platform.autostart_exe_read_failed", err => err).to_string())?;
         let exec = desktop_exec_arg(&exe)?;
         let desktop = format!(
-            "[Desktop Entry]\nType=Application\nName=tiez-slim\nComment=Native clipboard manager\nExec={exec}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nStartupNotify=false\nStartupWMClass=tiez-slim-linux\n",
+            "[Desktop Entry]\nType=Application\nName=deziroslim\nComment=Native clipboard manager\nExec={exec}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nStartupNotify=false\nStartupWMClass=deziroslim\n",
         );
         fs::write(&path, desktop)
             .map_err(|err| t!("platform.autostart_write_failed", err => err).to_string())?;
@@ -165,7 +165,7 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
 fn autostart_desktop_path() -> Result<PathBuf, String> {
     let config_dir =
         dirs::config_dir().ok_or_else(|| t!("platform.xdg_config_not_found").to_string())?;
-    Ok(config_dir.join("autostart").join("tiez-slim-linux.desktop"))
+    Ok(config_dir.join("autostart").join("deziroslim.desktop"))
 }
 
 fn desktop_exec_arg(path: &Path) -> Result<String, String> {
@@ -908,10 +908,10 @@ fn start_status_notifier(
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
     private_mode: Arc<AtomicBool>,
-) -> Result<ksni::blocking::Handle<TiezSlimLinuxTray>, String> {
+) -> Result<ksni::blocking::Handle<LinuxTray>, String> {
     use ksni::blocking::TrayMethods;
 
-    let tray = TiezSlimLinuxTray {
+    let tray = LinuxTray {
         sender,
         ctx,
         private_mode,
@@ -921,7 +921,7 @@ fn start_status_notifier(
         .map_err(|err| err.to_string())
 }
 
-struct TiezSlimLinuxTray {
+struct LinuxTray {
     sender: Sender<ClipboardEvent>,
     ctx: egui::Context,
     /// Shared flag toggled from the UI thread. The ksni daemon polls
@@ -930,13 +930,13 @@ struct TiezSlimLinuxTray {
     private_mode: Arc<AtomicBool>,
 }
 
-impl ksni::Tray for TiezSlimLinuxTray {
+impl ksni::Tray for LinuxTray {
     fn id(&self) -> String {
-        "tiez-slim-linux".to_string()
+        "deziroslim".to_string()
     }
 
     fn title(&self) -> String {
-        "tiez-slim".to_string()
+        "deziroslim".to_string()
     }
 
     fn category(&self) -> ksni::Category {
@@ -944,7 +944,7 @@ impl ksni::Tray for TiezSlimLinuxTray {
     }
 
     fn icon_name(&self) -> String {
-        "tiez-slim-linux".to_string()
+        "deziroslim".to_string()
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
