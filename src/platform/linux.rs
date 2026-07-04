@@ -944,7 +944,7 @@ impl ksni::Tray for LinuxTray {
     }
 
     fn icon_name(&self) -> String {
-        "deziro-slim".to_string()
+        "deziroslim".to_string()
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
