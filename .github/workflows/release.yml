@@ -11,6 +11,7 @@ permissions:
 env:
   APP_NAME: deziroslim
   DISPLAY_NAME: deziroslim
+  ICON_NAME: deziro-slim
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
 
@@ -74,7 +75,7 @@ jobs:
 
       - name: Verify icon exists
         run: |
-          icon="assets/icons/${APP_NAME}.png"
+          icon="assets/icons/${ICON_NAME}.png"
           if [ ! -f "${icon}" ]; then
             echo "::error::Required icon file not found: ${icon}"
             exit 1
@@ -126,13 +127,13 @@ jobs:
           Name=${DISPLAY_NAME}
           Comment=Lightweight native deziroslim clipboard manager
           Exec=${APP_NAME}
-          Icon=${APP_NAME}
+          Icon=${ICON_NAME}
           Terminal=false
           Categories=Utility;
           EOF
           install -Dm755 "target/release/${APP_NAME}" "packaging/root/usr/bin/${APP_NAME}"
           install -Dm644 "packaging/${APP_NAME}.desktop" "packaging/root/usr/share/applications/${APP_NAME}.desktop"
-          install -Dm644 "assets/icons/${APP_NAME}.png" "packaging/root/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
+          install -Dm644 "assets/icons/${ICON_NAME}.png" "packaging/root/usr/share/icons/hicolor/256x256/apps/${ICON_NAME}.png"
 
       - name: Build deb and rpm packages
         env:
@@ -175,11 +176,11 @@ jobs:
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
           cp "target/release/${APP_NAME}" "AppDir/usr/bin/${APP_NAME}"
           cp "packaging/${APP_NAME}.desktop" "AppDir/usr/share/applications/${APP_NAME}.desktop"
-          cp "assets/icons/${APP_NAME}.png" "AppDir/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
+          cp "assets/icons/${ICON_NAME}.png" "AppDir/usr/share/icons/hicolor/256x256/apps/${ICON_NAME}.png"
           ./linuxdeploy \
             --appdir AppDir \
             --desktop-file "AppDir/usr/share/applications/${APP_NAME}.desktop" \
-            --icon-file "AppDir/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png" \
+            --icon-file "AppDir/usr/share/icons/hicolor/256x256/apps/${ICON_NAME}.png" \
             --output appimage
           appimage_path="$(find . -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "${appimage_path}"

@@ -244,7 +244,7 @@ where
 }
 
 fn load_window_icon() -> Option<Arc<egui::IconData>> {
-    let image = image::load_from_memory(include_bytes!("../assets/icons/deziroslim.png"))
+    let image = image::load_from_memory(include_bytes!("../assets/icons/deziro-slim.png"))
         .ok()?
         .into_rgba8();
     let (width, height) = image.dimensions();
