@@ -151,7 +151,7 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
             .map_err(|err| t!("platform.autostart_exe_read_failed", err => err).to_string())?;
         let exec = desktop_exec_arg(&exe)?;
         let desktop = format!(
-            "[Desktop Entry]\nType=Application\nName=deziroslim\nComment=Native clipboard manager\nExec={exec}\nIcon=deziro-slim\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nStartupNotify=false\nStartupWMClass=deziroslim\n",
+            "[Desktop Entry]\nType=Application\nName=deziroslim\nComment=Native clipboard manager\nExec={exec}\nIcon=deziroslim\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nStartupNotify=false\nStartupWMClass=deziroslim\n",
         );
         fs::write(&path, desktop)
             .map_err(|err| t!("platform.autostart_write_failed", err => err).to_string())?;
