@@ -6,9 +6,9 @@
 rust_i18n::i18n!("locales", fallback = "en-US");
 
 use clap::{Parser, Subcommand};
-use rust_i18n::t;
 use deziroslim::ipc::{IpcError, IpcRequest, IpcResponse, IpcServer};
 use deziroslim::model::ClipboardEntrySummary;
+use rust_i18n::t;
 
 // ── CLI definition ────────────────────────────────────────────────────
 

@@ -1185,9 +1185,7 @@ mod tests {
             Some("[\"😀\",\"/tmp/sticker.png\"]".to_string())
         );
         assert_eq!(
-            storage
-                .get_setting("ui.deziroslim")
-                .expect("get prefs"),
+            storage.get_setting("ui.deziroslim").expect("get prefs"),
             Some("{\"emoji_panel_enabled\":true}".to_string())
         );
     }

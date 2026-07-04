@@ -2,12 +2,12 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 
 use anyhow::Context;
 use app::ClipboardApp;
+use deziroslim::*;
 use ipc::IpcServer;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use storage::Storage;
-use deziroslim::*;
 
 const APP_DISPLAY_NAME: &str = "deziroslim";
 const APP_ID: &str = "deziroslim";
