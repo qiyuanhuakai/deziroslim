@@ -278,7 +278,7 @@ mod tests {
     fn ciphertext_too_short_returns_error() {
         use base64::Engine;
         let backend = test_backend();
-        let short_payload = base64::engine::general_purpose::STANDARD.encode(&[0u8; 8]);
+        let short_payload = base64::engine::general_purpose::STANDARD.encode([0u8; 8]);
         let input = format!("enc:v1:{short_payload}");
         let result = backend.decrypt(input.as_bytes());
         assert!(result.is_err());
