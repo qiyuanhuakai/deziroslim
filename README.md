@@ -5,7 +5,7 @@
 
 # deziroslim
 
-Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/dzc-slimpboard v0.3.1`](https://github.com/jimuzhe/dzc-slimpboard/tree/v0.3.1)，我曾经在此基础上进行了大量修改，并以个人的方式将其完整迁移到了 Linux 上：[`qiyuanhuakai/dzc-slimpboard`](https://github.com/qiyuanhuakai/dzc-slimpboard)。但我受够了`Tauri`了。它看似使用性能最强的 Rust，实际上还是在运行一个高性能开销（能使我的n100增加80%占用）、无比巨大（内存占用200Mb，峰值可达600－800Mb）的 Webview。相比`electron`，它的跨平台兼容性也堪称糟糕（在 Linux 和Windows 上，同一套主题的观感是完全不同的）。所以我新开了这个项目，目标是在 Linux 上去掉 React/Tauri/WebView 所有的开销，并保留 TieZ 的紧凑视觉，我喜爱的`macos`风格与高频剪贴板工作流。
+Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/dzc-slimpboard v0.3.1`](https://github.com/jimuzhe/dzc-slimpboard/tree/v0.3.1)，我曾经在此基础上进行了大量修改，并以个人的方式将其完整迁移到了 Linux 上：[`qiyuanhuakai/dezirclip`](https://github.com/qiyuanhuakai/dezirclip)。但我受够了`Tauri`了。它看似使用性能最强的 Rust，实际上还是在运行一个高性能开销（能使我的n100增加80%占用）、无比巨大（内存占用200Mb，峰值可达600－800Mb）的 Webview。相比`electron`，它的跨平台兼容性也堪称糟糕（在 Linux 和Windows 上，同一套主题的观感是完全不同的）。所以我新开了这个项目，目标是在 Linux 上去掉 React/Tauri/WebView 所有的开销，并保留 TieZ 的紧凑视觉，我喜爱的`macos`风格与高频剪贴板工作流。
 
 ## 当前实现
 
