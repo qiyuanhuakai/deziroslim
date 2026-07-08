@@ -1,4 +1,5 @@
 use crate::app::ClipboardApp;
+use crate::ui::widgets::MacosButton;
 use eframe::egui;
 use rust_i18n::t;
 
@@ -23,17 +24,12 @@ pub fn draw_toolbar_actions_button(ui: &mut egui::Ui, app: &mut ClipboardApp) {
 
     let popup_id = ui.make_persistent_id("actions_popover");
 
-    let button_response = ui.add(
-        egui::Button::new(
-            egui::RichText::new("\u{26A1}")
-                .size(16.0)
-                .color(theme.accent),
-        )
-        .min_size(egui::vec2(32.0, 32.0))
-        .fill(theme.history_selected)
-        .stroke(egui::Stroke::new(2.0, theme.border))
-        .rounding(egui::Rounding::same(10.0)),
-    );
+    let button_response = MacosButton::normal()
+        .min_width(32.0)
+        .height(32.0)
+        .padding_x(0.0)
+        .font_size(16.0)
+        .show(ui, "\u{26A1}", &theme);
     let button_response = button_response.on_hover_text(t!("settings.actions.popover_title"));
 
     if toolbar_actions.len() == 1 {
@@ -65,11 +61,11 @@ pub fn draw_toolbar_actions_button(ui: &mut egui::Ui, app: &mut ClipboardApp) {
                     } else {
                         format!("{} {}", action.icon, action.name)
                     };
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new(&label).size(12.5))
-                                .fill(egui::Color32::TRANSPARENT),
-                        )
+                    if MacosButton::normal()
+                        .min_width(0.0)
+                        .height(28.0)
+                        .font_size(12.5)
+                        .show(ui, &label, &theme)
                         .on_hover_text(&action.command)
                         .clicked()
                     {

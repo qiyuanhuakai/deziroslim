@@ -1,4 +1,7 @@
 use crate::app::ClipboardApp;
+use crate::ui::settings::{
+    settings_danger_button, settings_footer_button, settings_primary_button,
+};
 use crate::ui::widgets::macos_toggle;
 use eframe::egui;
 use rust_i18n::t;
@@ -154,13 +157,11 @@ pub fn draw_action_editor_dialog(
                 && !app.action_editor.command.trim().is_empty();
 
             ui.horizontal(|ui| {
-                let btn =
-                    egui::Button::new(egui::RichText::new(t!("common.save")).size(12.5).strong())
-                        .rounding(egui::Rounding::same(6.0))
-                        .min_size(egui::vec2(100.0, 30.0))
-                        .fill(if is_valid { theme.accent } else { theme.muted });
                 if ui
-                    .add_enabled(is_valid, btn)
+                    .add_enabled_ui(is_valid, |ui| {
+                        settings_primary_button(ui, t!("common.save"), &theme, 0.0)
+                    })
+                    .inner
                     .on_disabled_hover_text(t!("settings.actions.name_empty"))
                     .clicked()
                 {
@@ -189,31 +190,14 @@ pub fn draw_action_editor_dialog(
                 }
 
                 if app.action_editor.editing_id.is_some()
-                    && ui
-                        .add_sized(
-                            [80.0, 30.0],
-                            egui::Button::new(
-                                egui::RichText::new(t!("common.delete")).size(12.5).strong(),
-                            )
-                            .rounding(egui::Rounding::same(6.0))
-                            .fill(theme.danger),
-                        )
-                        .clicked()
+                    && settings_danger_button(ui, t!("common.delete"), &theme, 0.0).clicked()
                     && let Some(id) = app.action_editor.editing_id
                 {
                     result = Some(EditorResult::Delete(id));
                     close = true;
                 }
 
-                if ui
-                    .add_sized(
-                        [80.0, 30.0],
-                        egui::Button::new(egui::RichText::new(t!("common.cancel")).size(12.5))
-                            .rounding(egui::Rounding::same(6.0))
-                            .fill(theme.card),
-                    )
-                    .clicked()
-                {
+                if settings_footer_button(ui, t!("common.cancel"), &theme, 0.0).clicked() {
                     result = Some(EditorResult::Cancel);
                     close = true;
                 }

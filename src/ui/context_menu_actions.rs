@@ -1,5 +1,6 @@
 use crate::app::ClipboardApp;
 use crate::model::ClipboardEntrySummary;
+use crate::ui::widgets::MacosButton;
 use eframe::egui;
 use rust_i18n::t;
 
@@ -21,11 +22,11 @@ pub fn show_entry_actions_menu(
                     } else {
                         format!("{} {}", action.icon, action.name)
                     };
-                    if ui
-                        .add(
-                            egui::Button::new(egui::RichText::new(&label).size(12.0))
-                                .fill(egui::Color32::TRANSPARENT),
-                        )
+                    if MacosButton::normal()
+                        .min_width(0.0)
+                        .height(26.0)
+                        .font_size(12.0)
+                        .show(ui, &label, &app.theme)
                         .on_hover_text(&action.command)
                         .clicked()
                     {
