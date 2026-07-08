@@ -29,8 +29,7 @@ pub fn draw_appearance_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &eg
                         .clicked()
                     {
                         app.color_mode = value.to_string();
-                        app.theme = crate::app::resolve_theme(&app.color_mode);
-                        app.configure_style(ctx);
+                        app.refresh_theme(ctx);
                         app.persist_preferences();
                     }
                 }
@@ -166,7 +165,7 @@ pub fn draw_appearance_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &eg
             let mut opacity_f32 = app.surface_opacity as f32;
             if macos_range_slider(ui, &mut opacity_f32, 0.0..=100.0, &app.theme).changed() {
                 app.surface_opacity = opacity_f32 as u8;
-                app.configure_style(ctx);
+                app.refresh_theme(ctx);
                 app.persist_preferences();
             }
             ui.label(t!("settings.appearance.interaction_hint"));

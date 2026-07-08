@@ -10,6 +10,11 @@ fn rgba(r: u8, g: u8, b: u8, a: f32) -> Color32 {
     Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8)
 }
 
+fn scale_alpha(color: Color32, factor: f32) -> Color32 {
+    let [r, g, b, a] = color.to_array();
+    Color32::from_rgba_unmultiplied(r, g, b, ((a as f32) * factor).clamp(0.0, 255.0) as u8)
+}
+
 /// macOS 设计语言主题 Token。
 ///
 /// 包含颜色、圆角、间距、字体、阴影、模糊和动画等完整视觉参数。
@@ -287,6 +292,31 @@ pub struct MacosTokens {
 }
 
 impl MacosTokens {
+    pub fn with_surface_opacity(mut self, opacity: u8) -> Self {
+        let factor = (opacity as f32 / 100.0).clamp(0.0, 1.0);
+        self.bg = scale_alpha(self.bg, factor);
+        self.body_bg = scale_alpha(self.body_bg, factor);
+        self.card = scale_alpha(self.card, factor);
+        self.card_hover = scale_alpha(self.card_hover, factor);
+        self.history_bg = scale_alpha(self.history_bg, factor);
+        self.history_hover = scale_alpha(self.history_hover, factor);
+        self.history_selected = scale_alpha(self.history_selected, factor);
+        self.settings_bg = scale_alpha(self.settings_bg, factor);
+        self.settings_header_bg = scale_alpha(self.settings_header_bg, factor);
+        self.data_bg = scale_alpha(self.data_bg, factor);
+        self.glass_bg = scale_alpha(self.glass_bg, factor);
+        self.toolbar_bg = scale_alpha(self.toolbar_bg, factor);
+        self.root_bg = scale_alpha(self.root_bg, factor);
+        self.header_bg = scale_alpha(self.header_bg, factor);
+        self.input_bg = scale_alpha(self.input_bg, factor);
+        self.tag_bg = scale_alpha(self.tag_bg, factor);
+        self.keycap_bg = scale_alpha(self.keycap_bg, factor);
+        self.modal_bg = scale_alpha(self.modal_bg, factor);
+        self.dialog_btn_bg = scale_alpha(self.dialog_btn_bg, factor);
+        self.dialog_btn_hover_bg = scale_alpha(self.dialog_btn_hover_bg, factor);
+        self
+    }
+
     /// Light 模式 Token (白色系背景, 深色文字)。
     ///
     /// 颜色值源自 tiez-clipboard `macos.css` 的 `:root.theme-macos` 变量

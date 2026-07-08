@@ -1076,7 +1076,7 @@ impl ClipboardApp {
             show_inspection: false,
             show_memory: false,
             force_quit: false,
-            theme: resolve_theme(&preferences.color_mode),
+            theme: resolve_surface_theme(&preferences.color_mode, preferences.surface_opacity),
         };
         // Apply locale at startup so rust_i18n knows the active locale.
         // Without this, the library stays at its default ("en") and t!() returns English.
@@ -1100,7 +1100,6 @@ impl ClipboardApp {
     }
 
     pub(crate) fn configure_style(&self, ctx: &egui::Context) {
-        let opacity = self.surface_opacity as f32 / 100.0;
         let [r, g, b, _] = self.theme.bg.to_array();
         let is_light = (r as u16 + g as u16 + b as u16) > 384;
         let mut visuals = if is_light {
@@ -1108,18 +1107,22 @@ impl ClipboardApp {
         } else {
             egui::Visuals::dark()
         };
-        visuals.panel_fill = scale_alpha(self.theme.bg, opacity);
-        visuals.window_fill = scale_alpha(self.theme.bg, opacity);
+        visuals.panel_fill = self.theme.bg;
+        visuals.window_fill = self.theme.bg;
         visuals.override_text_color = Some(self.theme.fg);
-        visuals.widgets.inactive.bg_fill = scale_alpha(self.theme.card, opacity);
-        visuals.widgets.inactive.bg_stroke =
-            egui::Stroke::new(1.0, scale_alpha(self.theme.border, opacity));
-        visuals.widgets.hovered.bg_fill = scale_alpha(self.theme.card_hover, opacity);
+        visuals.widgets.inactive.bg_fill = self.theme.card;
+        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, self.theme.border);
+        visuals.widgets.hovered.bg_fill = self.theme.card_hover;
         visuals.widgets.active.bg_fill = self.theme.accent;
         visuals.selection.bg_fill = self.theme.accent;
         visuals.selection.stroke = egui::Stroke::new(1.0, self.theme.accent);
         visuals.window_rounding = egui::Rounding::same(self.theme.radius_window);
         ctx.set_visuals(visuals);
+    }
+
+    pub(crate) fn refresh_theme(&mut self, ctx: &egui::Context) {
+        self.theme = resolve_surface_theme(&self.color_mode, self.surface_opacity);
+        self.configure_style(ctx);
     }
 
     pub(crate) fn refresh_entries(&mut self) {
@@ -2570,9 +2573,8 @@ impl ClipboardApp {
         self.cli_socket_path = preferences.cli_socket_path;
         self.builtin_actions_enabled = preferences.builtin_actions_enabled;
         self.action_command_allowlist = preferences.action_command_allowlist;
-        self.theme = resolve_theme(&self.color_mode);
+        self.refresh_theme(ctx);
         configure_fonts(ctx, &self.font_selection());
-        self.configure_style(ctx);
         self.apply_window_level(ctx);
         self.update_hotkeys();
         self.apply_tray_visibility(ctx);
@@ -6640,6 +6642,10 @@ pub(crate) fn resolve_theme(color_mode: &str) -> MacosTokens {
         "dark" => MacosTokens::dark(),
         _ => detect_system_theme(),
     }
+}
+
+pub(crate) fn resolve_surface_theme(color_mode: &str, surface_opacity: u8) -> MacosTokens {
+    resolve_theme(color_mode).with_surface_opacity(surface_opacity)
 }
 
 fn detect_system_theme() -> MacosTokens {
