@@ -100,10 +100,10 @@ settings:
     autostart_enabled: "已启用开机启动"
     autostart_disabled: "已关闭开机启动"
     autostart_failed: "设置开机启动失败: %{err}"
-    autostart_hint: "启用后会写入 XDG autostart，并以最小化方式启动。"
-    tag_manager: "启用标签管理能力"
+    autostart_hint: "登录系统后自动启动，并默认在后台运行。"
+    tag_manager: "启用标签管理"
     always_show_search: "始终显示搜索框"
-    always_show_search_hint: "关闭后，先滚到历史顶端并停顿片刻，再向上滚动可临时唤出；无搜索/过滤时向下滚动会隐藏并停在顶端。"
+    always_show_search_hint: "关闭后，滚到历史顶部再上滑可临时显示搜索框。"
     compact_mode: "简洁模式"
     compact_mode_hint: "开启后卡片更紧凑，操作按钮默认隐藏并在悬浮时显示。"
     arrow_key_selection: "方向键选择历史"
@@ -113,11 +113,11 @@ settings:
     sound_volume: "音效音量"
     paste_sound: "粘贴音效"
     language: "语言"
-    language_desc: "选择界面语言，选择「跟随系统」会读取 LANG / LC_MESSAGES 环境变量"
+    language_desc: "选择界面语言；「跟随系统」会使用当前系统语言。"
     language_option_zh_cn: "中文(简体)"
     language_option_en_us: "English"
     language_option_follow_system: "跟随系统"
-    language_restart_notice: "部分平台元素(托盘菜单)需重启应用后更新"
+    language_restart_notice: "托盘菜单等系统元素会在重启应用后更新。"
 
   hotkey:
     title: "快捷键设置"
@@ -143,14 +143,14 @@ settings:
 
   clipboard:
     title: "剪贴板设置"
-    persistent: "持久化保存历史（当前固定开启）"
+    persistent: "保存剪贴板历史"
     deduplicate: "去重合并相同内容"
-    capture_files: "捕获文件剪贴板（路径/URI）"
-    capture_rich_text: "捕获富文本 HTML"
+    capture_files: "记录文件复制内容"
+    capture_rich_text: "记录富文本内容"
     delete_after_paste: "粘贴后删除"
     move_to_top_after_paste: "粘贴后移到顶部"
     paste_method: "粘贴模拟方式"
-    paste_method_shift_insert: "Shift+Insert（文本优先，文件/图片自动 Ctrl+V）"
+    paste_method_shift_insert: "Shift+Insert（文本优先）"
     paste_method_ctrl_v: "Ctrl+V"
     paste_method_type_text: "逐字输入（仅文本兜底）"
     paste_method_search_hint: "搜索粘贴方式..."
@@ -163,7 +163,7 @@ settings:
     sensitive_kind_password: "密码"
     custom_rules_label: "自定义规则（正则）"
     custom_rules_hint: "每行一个正则表达式"
-    clipboard_status_hint: "当前已落地：文本、富文本 HTML、图片、文件剪贴板捕获/写回；粘贴模拟按 deziroslim 使用 Shift+Insert/Ctrl+V。"
+    clipboard_status_hint: "支持文本、富文本、图片和文件复制内容；粘贴方式可按使用环境调整。"
 
   appearance:
     title: "界面设置"
@@ -178,20 +178,20 @@ settings:
     fallback_font_search: "搜索备用字体..."
     rescan_fonts: "重新扫描系统字体"
     rescan_fonts_done: "已扫描 %{count} 个系统字体"
-    fallback_font_hint: "备用字体会放在 fallback 链末尾；主要字体缺字时自动回退。"
+    fallback_font_hint: "主要字体缺字时会自动使用备用字体。"
     show_sensitive: "显示敏感内容（Ctrl+H）"
     show_detail_panel: "显示详情/标签侧栏"
     show_app_border: "显示应用边框"
     window_pin: "窗口置顶"
     follow_mouse: "呼出时跟随鼠标位置"
     edge_docking: "边缘停靠隐藏"
-    edge_docking_hint: "开启后会按窗口位置自动吸附到左、右、上屏幕边缘，并留下可见边条。"
+    edge_docking_hint: "窗口靠近屏幕边缘时可自动收起，并保留可唤回的边条。"
     surface_opacity: "表面不透明度"
     interaction_hint: "左键点击/Enter：复制并粘贴；右键点击：带格式复制并粘贴；Delete 删除；↑/↓ 切换选中。"
 
   default_app:
     title: "默认打开程序"
-    hint: "自动扫描 XDG .desktop 应用；选择“系统默认”时使用 xdg-open/open crate。"
+    hint: "为不同内容类型选择打开程序；留空时使用系统默认应用。"
     system_default: "系统默认"
     search_hint: "搜索应用..."
     rescan: "重新扫描应用"
@@ -199,7 +199,7 @@ settings:
 
   tags:
     title: "标签目录"
-    manager_closed_hint: "标签管理已关闭，目录不会显示或编辑；已有条目标签保留在数据库中。"
+    manager_closed_hint: "标签管理已关闭；已有历史标签会保留。"
     new_tag: "＋ 新增标签"
     tag_name_hint: "标签名"
     add_button: "添加"
@@ -231,7 +231,7 @@ settings:
     restore_default: "恢复默认位置"
     restore_default_done: "已恢复默认数据库保存路径，重启后生效"
     restore_default_failed: "恢复默认位置失败: %{err}"
-    db_hint: "数据库连接已打开，新的保存路径会在重启后生效；也可用 --db-path 或 DEZIROS_LIM_DB_PATH 临时覆盖。"
+    db_hint: "新的保存位置会在重启后生效；当前数据库不会立即移动。"
 
   exclusion_list:
     title: "排除列表"
@@ -260,7 +260,7 @@ settings:
     remove_success: "已移除排除规则"
     remove_failed: "移除排除规则失败: %{err}"
     whitelist_mode: "白名单模式"
-    whitelist_mode_notice: "白名单模式将在 v1.1 实现"
+    whitelist_mode_notice: "仅记录匹配窗口的剪贴板内容。"
 
   private_mode:
     title: "隐私模式"
@@ -329,16 +329,16 @@ settings:
 
   actions:
     title: "动作配置"
-    description: "按剪贴板内容匹配规则触发自定义命令，可设置工具栏按钮、自动执行、PRIMARY 选区触发与命令白名单。"
+    description: "按剪贴板内容匹配规则执行自定义命令，可用于打开链接、处理文本或快速触发常用操作。"
     new_action: "新建动作"
     edit_action: "编辑动作"
     pattern_label: "匹配模式"
     pattern_placeholder: "支持正则 ^https?:// 或通配 *password*"
     command_label: "执行命令"
     command_placeholder: "firefox %1 (用 %1-%9 引用捕获组，%% 表示 %)"
-    is_automatic: "捕获即自动执行"
-    is_primary_automatic: "鼠标选区(PRIMARY)也触发"
-    is_primary: "在工具栏显示 ⚡ 按钮"
+    is_automatic: "匹配后自动执行"
+    is_primary_automatic: "鼠标选区也触发"
+    is_primary: "在工具栏显示"
     icon_label: "图标"
     icon_placeholder: "选择图标"
     enabled: "启用"
@@ -363,9 +363,9 @@ settings:
     save_failed: "保存动作失败: %{err}"
     run_failed: "执行动作失败: %{err}"
     run_success: "动作执行成功"
-    toolbar_button: "工具栏 ⚡ 按钮"
+    toolbar_button: "工具栏按钮"
     popover_title: "可用动作"
-    context_menu_title: "⚡ 执行动作"
+    context_menu_title: "执行动作"
 
   primary_selection:
     title: "主剪贴板(PRIMARY)"
@@ -511,7 +511,7 @@ settings:
     no_devices: "暂无设备"
     paired: "已配对"
 
-  panel_not_implemented: "此面板将在后续 Phase 实现"
+  panel_not_implemented: "此面板暂不可用"
 
 emoji:
   group:
@@ -538,7 +538,7 @@ emoji:
   favorite_hint: "点击收藏图片/文件会直接粘贴；也可拖放图片或粘贴 data URL 添加。右侧 × 可移除。"
   drop_hint: "释放图片即可添加到表情包收藏"
   no_favorites: "暂无收藏"
-  no_favorites_hint: "添加或拖放常用表情包图片后，会复制到当前数据库旁的 emoji_favorites 目录并保存在 app.emoji_favorites。"
+  no_favorites_hint: "添加或拖放常用表情包图片后，会保存在当前数据库旁的收藏目录中。"
   added_count: "已添加 %{count} 个表情包收藏"
   added_drop: "已添加拖放表情包收藏"
   removed: "已移除表情包收藏"
@@ -616,12 +616,12 @@ storage_error:
 platform:
   note:
     linux: "Linux 原生模式：支持文本/富文本/图片/文件剪贴板历史、X11 可配置全局热键、系统托盘、边缘停靠、模拟粘贴、前台窗口识别。"
-    windows: "Windows 预留模式：平台抽象已存在，后续可接入 Win32 剪贴板、窗口追踪和全局快捷键。"
+    windows: "Windows 支持有限：部分系统集成功能暂不可用。"
     generic: "当前平台使用通用实现。"
   capability:
     active_window_linux: "已接入 X11 _NET_ACTIVE_WINDOW，失败时回退桌面环境名"
     window_mgmt_linux: "已接入 egui WindowLevel/OuterPosition 置顶、隐藏和边缘停靠"
-    hotkey_linux: "已接入 X11 可配置全局热键；Wayland 需后续 evdev/portal 后端"
+    hotkey_linux: "X11 下支持可配置全局快捷键；Wayland 支持取决于桌面环境"
     tray_linux: "已接入 ksni StatusNotifierItem 托盘；取决于桌面 SNI/AppIndicator 支持"
     rich_clipboard_linux: "arboard 已接入文本、text/html、image/png、file_list targets"
     active_window_generic: "通用占位"
@@ -629,10 +629,10 @@ platform:
     hotkey_generic: "未接入"
     tray_generic: "未接入"
     rich_clipboard_generic: "文本优先"
-    active_window_windows: "预留：GetForegroundWindow + GetWindowTextW"
-    hotkey_windows: "预留：RegisterHotKey 或 global-hotkey"
-    tray_windows: "预留：tray-icon Windows backend"
-    rich_clipboard_windows: "预留：Win32 Clipboard formats"
+    active_window_windows: "暂不支持活动窗口识别"
+    hotkey_windows: "暂不支持全局快捷键"
+    tray_windows: "暂不支持系统托盘"
+    rich_clipboard_windows: "暂不支持富剪贴板格式"
   hotkey_unavailable: "全局快捷键不可用: %{err}"
   hotkey_update_failed: "更新快捷键失败: %{err}"
   hotkey_global_update_failed: "更新全局快捷键失败: %{err}"
@@ -661,9 +661,9 @@ platform:
   paste_type_write_failed: "写入 xdotool 输入失败: %{err}"
   paste_type_wait_failed: "等待 xdotool type 失败: %{err}"
   paste_type_error: "模拟输入失败：xdotool 返回 %{status}"
-  windows_hotkey_not_implemented: "Windows 全局快捷键后端尚未实现，暂不支持保存快捷键"
-  windows_autostart_not_implemented: "Windows 开机启动仍使用预留 Win32 后端"
-  windows_paste_not_implemented: "Windows 粘贴模拟仍使用预留 Win32 后端"
+  windows_hotkey_not_implemented: "Windows 全局快捷键暂不支持，无法保存快捷键"
+  windows_autostart_not_implemented: "Windows 开机启动暂不支持"
+  windows_paste_not_implemented: "Windows 粘贴模拟暂不支持"
 
 tray:
   menu:
