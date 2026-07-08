@@ -16,6 +16,146 @@ const THUMB_PAD: f32 = 2.0;
 const SLIDER_TRACK_H: f32 = 8.0;
 const SLIDER_THUMB_R: f32 = 9.0;
 const SETTINGS_R: f32 = 14.0;
+const BUTTON_MIN_W: f32 = 34.0;
+const BUTTON_H: f32 = 30.0;
+const BUTTON_PAD_X: f32 = 14.0;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MacosButtonStyle {
+    Normal,
+    Primary,
+    Danger,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct MacosButton {
+    style: MacosButtonStyle,
+    min_width: f32,
+    max_width: Option<f32>,
+    height: f32,
+    padding_x: f32,
+    font_size: f32,
+}
+
+impl MacosButton {
+    pub const fn normal() -> Self {
+        Self {
+            style: MacosButtonStyle::Normal,
+            min_width: BUTTON_MIN_W,
+            max_width: None,
+            height: BUTTON_H,
+            padding_x: BUTTON_PAD_X,
+            font_size: 12.5,
+        }
+    }
+
+    pub const fn primary() -> Self {
+        Self {
+            style: MacosButtonStyle::Primary,
+            ..Self::normal()
+        }
+    }
+
+    pub const fn danger() -> Self {
+        Self {
+            style: MacosButtonStyle::Danger,
+            ..Self::normal()
+        }
+    }
+
+    pub const fn min_width(mut self, min_width: f32) -> Self {
+        self.min_width = min_width;
+        self
+    }
+
+    pub const fn max_width(mut self, max_width: f32) -> Self {
+        self.max_width = Some(max_width);
+        self
+    }
+
+    pub const fn height(mut self, height: f32) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub const fn padding_x(mut self, padding_x: f32) -> Self {
+        self.padding_x = padding_x;
+        self
+    }
+
+    pub const fn font_size(mut self, font_size: f32) -> Self {
+        self.font_size = font_size;
+        self
+    }
+
+    pub fn show(
+        self,
+        ui: &mut egui::Ui,
+        label: impl AsRef<str>,
+        theme: &MacosTokens,
+    ) -> egui::Response {
+        let label = label.as_ref();
+        let font_id = egui::FontId::new(self.font_size, egui::FontFamily::Proportional);
+        let text_width = ui
+            .painter()
+            .layout_no_wrap(label.to_string(), font_id.clone(), theme.fg)
+            .size()
+            .x;
+        let desired_width = text_width + self.padding_x * 2.0;
+        let width = self
+            .max_width
+            .map_or(desired_width, |max_width| desired_width.min(max_width))
+            .max(self.min_width)
+            .max(1.0);
+        let (rect, response) =
+            ui.allocate_exact_size(Vec2::new(width, self.height), egui::Sense::click());
+
+        if ui.is_rect_visible(rect) {
+            let (text_color, fill, stroke) = match self.style {
+                MacosButtonStyle::Normal => {
+                    let fill = if response.hovered() || response.has_focus() {
+                        theme.history_hover
+                    } else {
+                        theme.card
+                    };
+                    (theme.fg, fill, Stroke::new(1.0, theme.border))
+                }
+                MacosButtonStyle::Primary => {
+                    let fill = if response.hovered() || response.has_focus() {
+                        theme.accent_hover
+                    } else {
+                        theme.accent
+                    };
+                    (egui::Color32::WHITE, fill, Stroke::new(1.0, theme.accent))
+                }
+                MacosButtonStyle::Danger => {
+                    let fill = if response.hovered() || response.has_focus() {
+                        alpha(theme.danger, 0.14)
+                    } else {
+                        theme.card
+                    };
+                    (theme.danger, fill, Stroke::new(1.0, theme.danger))
+                }
+            };
+            ui.painter()
+                .rect(rect, Rounding::same(theme.radius_input), fill, stroke);
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                label,
+                font_id,
+                text_color,
+            );
+        }
+
+        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    }
+}
+
+fn alpha(color: egui::Color32, factor: f32) -> egui::Color32 {
+    let [r, g, b, a] = color.to_array();
+    egui::Color32::from_rgba_unmultiplied(r, g, b, ((a as f32) * factor).clamp(0.0, 255.0) as u8)
+}
 
 /// iOS 风格 38×22 toggle 开关。
 ///
