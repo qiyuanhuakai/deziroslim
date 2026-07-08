@@ -6,7 +6,7 @@ use crate::sound::{self, SoundEffect};
 use crate::storage::Storage;
 use crate::ui::MacosTokens;
 use crate::ui::hotkey::HotkeyManager;
-use crate::ui::widgets::macos_toggle;
+use crate::ui::widgets::{MacosButton, macos_toggle};
 use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
 use eframe::egui;
 use rust_i18n::t;
@@ -53,6 +53,7 @@ const SEARCH_BOX_SCROLL_THRESHOLD: f32 = 8.0;
 const SEARCH_BOX_SCROLL_GATE_DELAY: Duration = Duration::from_millis(450);
 const FORCE_HISTORY_TOP_DURATION: Duration = Duration::from_millis(260);
 const SEARCH_REFRESH_DEBOUNCE: Duration = Duration::from_millis(120);
+const EDGE_REVEAL_LAYOUT_TIMEOUT: Duration = Duration::from_millis(700);
 const EVENT_CHANNEL_CAPACITY: usize = 100;
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(6 * 3600);
 const ACTIVITY_REPAINT_WINDOW: Duration = Duration::from_millis(500);
@@ -648,6 +649,7 @@ pub struct ClipboardApp {
     last_activity: Instant,
     last_cleanup: Instant,
     selected_id: Option<i64>,
+    scroll_selected_to_visible: bool,
     pub(crate) tag_editor: String,
     pub(crate) new_tag_input: String,
     focus_search: bool,
@@ -733,6 +735,7 @@ pub struct ClipboardApp {
     edge_restore_size: Option<egui::Vec2>,
     pending_edge_hide: Option<PendingEdgeHide>,
     last_edge_transition: Instant,
+    edge_reveal_requested_at: Option<Instant>,
     pending_paste: Option<PendingPaste>,
     suppress_copy_sound_until: Option<Instant>,
     pub(crate) saved_tags: Vec<String>,
@@ -895,6 +898,7 @@ impl ClipboardApp {
             last_cleanup: Instant::now(),
             status: platform::platform_note().to_string(),
             selected_id: None,
+            scroll_selected_to_visible: false,
             tag_editor: String::new(),
             new_tag_input: String::new(),
             focus_search: false,
@@ -975,6 +979,7 @@ impl ClipboardApp {
             edge_restore_size: None,
             pending_edge_hide: None,
             last_edge_transition: Instant::now(),
+            edge_reveal_requested_at: None,
             pending_paste: None,
             suppress_copy_sound_until: None,
             saved_tags,
@@ -1936,11 +1941,33 @@ impl ClipboardApp {
         let candidate = self
             .edge_restore_size
             .unwrap_or_else(|| self.viewport_size(ctx));
-        let max_size = egui::vec2(
-            (screen.width - margin * 2.0).max(MIN_NORMAL_WINDOW_SIZE.x),
-            (screen.height - margin * 2.0).max(MIN_NORMAL_WINDOW_SIZE.y),
-        );
-        egui::vec2(candidate.x.min(max_size.x), candidate.y.min(max_size.y))
+        sanitize_normal_window_size(candidate, screen, margin)
+    }
+
+    fn raw_viewport_size(&self, ctx: &egui::Context) -> Option<egui::Vec2> {
+        ctx.input(|input| {
+            input
+                .viewport()
+                .inner_rect
+                .or(input.viewport().outer_rect)
+                .map(|rect| rect.size())
+        })
+    }
+
+    fn wait_for_edge_reveal_layout(&mut self, ctx: &egui::Context) -> bool {
+        let Some(requested_at) = self.edge_reveal_requested_at else {
+            return false;
+        };
+        let layout_ready = self.raw_viewport_size(ctx).is_some_and(|size| {
+            size.x >= MIN_NORMAL_WINDOW_SIZE.x - 1.0 && size.y >= MIN_NORMAL_WINDOW_SIZE.y - 1.0
+        });
+        if layout_ready || requested_at.elapsed() >= EDGE_REVEAL_LAYOUT_TIMEOUT {
+            self.edge_reveal_requested_at = None;
+            return false;
+        }
+
+        ctx.request_repaint_after(Duration::from_millis(32));
+        true
     }
 
     fn process_edge_docking(&mut self, ctx: &egui::Context, mouse: Option<(f32, f32)>) {
@@ -2064,6 +2091,7 @@ impl ClipboardApp {
         self.edge_hidden = false;
         self.edge_hide_armed = true;
         self.last_edge_transition = Instant::now();
+        self.edge_reveal_requested_at = Some(Instant::now());
     }
 
     fn viewport_rect(&self, ctx: &egui::Context) -> Option<egui::Rect> {
@@ -2157,7 +2185,11 @@ impl ClipboardApp {
             height: 800.0,
         });
         let screen = logical_screen_geometry(screen, ctx.pixels_per_point().max(1.0));
-        let restore_size = self.edge_restore_size.unwrap_or(DEFAULT_WINDOW_SIZE);
+        let restore_size = sanitize_normal_window_size(
+            self.edge_restore_size.unwrap_or(DEFAULT_WINDOW_SIZE),
+            screen,
+            8.0,
+        );
         let pos = self.edge_restore_pos.unwrap_or_else(|| {
             visible_position_for_dock(self.current_edge_dock, restore_size, screen)
         });
@@ -2169,6 +2201,7 @@ impl ClipboardApp {
         self.pending_edge_hide = None;
         self.window_visible = true;
         self.last_edge_transition = Instant::now();
+        self.edge_reveal_requested_at = Some(Instant::now());
         ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(egui::vec2(
             320.0, 400.0,
         )));
@@ -2821,6 +2854,7 @@ impl ClipboardApp {
             .unwrap_or(0);
         let next = (current as isize + delta).clamp(0, self.entries.len() as isize - 1) as usize;
         self.select_entry(self.entries[next].id);
+        self.scroll_selected_to_visible = true;
     }
 
     fn apply_debug_overlays(&self, ctx: &egui::Context) {
@@ -3455,6 +3489,11 @@ impl ClipboardApp {
         }) || response.hovered();
         let show_actions = !self.compact_rows || card_hovered;
 
+        if selected && self.scroll_selected_to_visible {
+            response.scroll_to_me(Some(egui::Align::Center));
+            self.scroll_selected_to_visible = false;
+        }
+
         if card_hovered {
             ui.painter().rect_stroke(
                 response.rect.expand(1.0).translate(egui::vec2(0.0, 1.0)),
@@ -3661,26 +3700,22 @@ impl ClipboardApp {
                             action_to_execute = Some(action);
                         }
                         ui.separator();
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new(t!("common.copy")).size(12.0),
-                                )
-                                .fill(egui::Color32::TRANSPARENT),
-                            )
+                        if MacosButton::normal()
+                            .min_width(0.0)
+                            .height(26.0)
+                            .font_size(12.0)
+                            .show(ui, t!("common.copy"), &self.theme)
                             .clicked()
                         {
                             self.select_entry(entry.id);
                             self.paste_entry(ui.ctx(), entry, false);
                             ui.memory_mut(|m| m.close_popup());
                         }
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new(t!("tooltip.pin_toggle")).size(12.0),
-                                )
-                                .fill(egui::Color32::TRANSPARENT),
-                            )
+                        if MacosButton::normal()
+                            .min_width(0.0)
+                            .height(26.0)
+                            .font_size(12.0)
+                            .show(ui, t!("tooltip.pin_toggle"), &self.theme)
                             .clicked()
                         {
                             match self.storage.toggle_pin(entry.id) {
@@ -3691,13 +3726,11 @@ impl ClipboardApp {
                             }
                             ui.memory_mut(|m| m.close_popup());
                         }
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new(t!("common.delete")).size(12.0),
-                                )
-                                .fill(egui::Color32::TRANSPARENT),
-                            )
+                        if MacosButton::danger()
+                            .min_width(0.0)
+                            .height(26.0)
+                            .font_size(12.0)
+                            .show(ui, t!("common.delete"), &self.theme)
                             .clicked()
                         {
                             match self.storage.delete(entry.id) {
@@ -3921,23 +3954,45 @@ impl ClipboardApp {
         ui.horizontal(|ui| {
             ui.heading(t!("detail.title"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(t!("common.delete")).clicked() {
+                if MacosButton::danger()
+                    .min_width(0.0)
+                    .height(28.0)
+                    .show(ui, t!("common.delete"), &self.theme)
+                    .clicked()
+                {
                     self.delete_selected();
                 }
                 if ui
-                    .button(if summary.is_pinned {
-                        t!("common.unpin")
-                    } else {
-                        t!("common.pin")
+                    .scope(|ui| {
+                        MacosButton::normal().min_width(0.0).height(28.0).show(
+                            ui,
+                            if summary.is_pinned {
+                                t!("common.unpin")
+                            } else {
+                                t!("common.pin")
+                            },
+                            &self.theme,
+                        )
                     })
+                    .inner
                     .clicked()
                 {
                     self.toggle_selected_pin();
                 }
-                if ui.button(t!("detail.copy_and_paste")).clicked() {
+                if MacosButton::normal()
+                    .min_width(0.0)
+                    .height(28.0)
+                    .show(ui, t!("detail.copy_and_paste"), &self.theme)
+                    .clicked()
+                {
                     self.paste_entry(ui.ctx(), &summary, false);
                 }
-                if ui.button(t!("common.open")).clicked() {
+                if MacosButton::normal()
+                    .min_width(0.0)
+                    .height(28.0)
+                    .show(ui, t!("common.open"), &self.theme)
+                    .clicked()
+                {
                     self.open_entry(&summary);
                 }
             });
@@ -3958,7 +4013,12 @@ impl ClipboardApp {
                 if tags.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
                     self.save_selected_tags();
                 }
-                if ui.button(t!("common.save")).clicked() {
+                if MacosButton::primary()
+                    .min_width(0.0)
+                    .height(28.0)
+                    .show(ui, t!("common.save"), &self.theme)
+                    .clicked()
+                {
                     self.save_selected_tags();
                 }
             });
@@ -4081,19 +4141,27 @@ impl ClipboardApp {
                         .strong(),
                     );
                     if ui
-                        .add_enabled(
-                            self.emoji_page > 0,
-                            egui::Button::new(t!("emoji.prev_page")),
-                        )
+                        .add_enabled_ui(self.emoji_page > 0, |ui| {
+                            MacosButton::normal().min_width(0.0).height(28.0).show(
+                                ui,
+                                t!("emoji.prev_page"),
+                                &self.theme,
+                            )
+                        })
+                        .inner
                         .clicked()
                     {
                         self.emoji_page = self.emoji_page.saturating_sub(1);
                     }
                     if ui
-                        .add_enabled(
-                            self.emoji_page + 1 < total_pages,
-                            egui::Button::new(t!("emoji.next_page")),
-                        )
+                        .add_enabled_ui(self.emoji_page + 1 < total_pages, |ui| {
+                            MacosButton::normal().min_width(0.0).height(28.0).show(
+                                ui,
+                                t!("emoji.next_page"),
+                                &self.theme,
+                            )
+                        })
+                        .inner
                         .clicked()
                     {
                         self.emoji_page += 1;
@@ -4119,7 +4187,12 @@ impl ClipboardApp {
             EmojiTab::Favorites => {
                 self.handle_emoji_favorite_drops(ui.ctx());
                 ui.horizontal_wrapped(|ui| {
-                    if ui.button(t!("emoji.add_favorite")).clicked() {
+                    if MacosButton::normal()
+                        .min_width(0.0)
+                        .height(28.0)
+                        .show(ui, t!("emoji.add_favorite"), &self.theme)
+                        .clicked()
+                    {
                         match pick_emoji_favorite_files_with_dialog() {
                             Ok(paths) => self.add_emoji_favorite_paths(paths),
                             Err(err) => self.status = err,
@@ -4156,10 +4229,23 @@ impl ClipboardApp {
                         let favorites = self.emoji_favorites.clone();
                         for favorite in favorites {
                             ui.horizontal(|ui| {
-                                if ui.button(short_path_label(&favorite)).clicked() {
+                                let label_width = ui.available_width().max(120.0);
+                                if MacosButton::normal()
+                                    .min_width(0.0)
+                                    .max_width(label_width)
+                                    .height(28.0)
+                                    .show(ui, short_path_label(&favorite), &self.theme)
+                                    .clicked()
+                                {
                                     self.paste_file_favorite(ctx, &favorite);
                                 }
-                                if ui.button("×").clicked() {
+                                if MacosButton::danger()
+                                    .min_width(28.0)
+                                    .height(28.0)
+                                    .padding_x(0.0)
+                                    .show(ui, "×", &self.theme)
+                                    .clicked()
+                                {
                                     self.remove_emoji_favorite(&favorite);
                                 }
                             });
@@ -4831,6 +4917,7 @@ fn hidden_edge_target(
     screen: platform::ScreenGeometry,
 ) -> (egui::Pos2, egui::Vec2) {
     let sliver = 8.0;
+    let size = egui::vec2(size.x.max(sliver), size.y.max(sliver));
     match dock {
         DockMode::Left => (
             egui::pos2(screen.x.max(0.0), visible_pos.y.max(0.0)),
@@ -4926,6 +5013,21 @@ fn visible_position_for_dock(
             screen.y + ((screen.height - size.y) / 2.0).max(0.0),
         ),
     }
+}
+
+fn sanitize_normal_window_size(
+    candidate: egui::Vec2,
+    screen: platform::ScreenGeometry,
+    margin: f32,
+) -> egui::Vec2 {
+    let max_size = egui::vec2(
+        (screen.width - margin * 2.0).max(MIN_NORMAL_WINDOW_SIZE.x),
+        (screen.height - margin * 2.0).max(MIN_NORMAL_WINDOW_SIZE.y),
+    );
+    egui::vec2(
+        candidate.x.clamp(MIN_NORMAL_WINDOW_SIZE.x, max_size.x),
+        candidate.y.clamp(MIN_NORMAL_WINDOW_SIZE.y, max_size.y),
+    )
 }
 
 fn timestamp_millis() -> u128 {
@@ -5190,6 +5292,10 @@ fn page_title(ui: &mut egui::Ui, title: impl AsRef<str>, theme: &MacosTokens) ->
 }
 
 impl eframe::App for ClipboardApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        egui::Color32::TRANSPARENT.to_normalized_gamma_f32()
+    }
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         if self.auto_backup_enabled {
             let data_dir = self
@@ -5229,7 +5335,17 @@ impl eframe::App for ClipboardApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(120));
             return;
         }
+        if self.wait_for_edge_reveal_layout(ctx) {
+            return;
+        }
         self.handle_resize_edges(ctx);
+
+        let root_rect = ctx.screen_rect();
+        ctx.layer_painter(egui::LayerId::background()).rect_filled(
+            root_rect,
+            egui::Rounding::same(self.theme.radius_window),
+            self.theme.bg,
+        );
 
         self.draw_header(ctx);
         let app_border = if self.show_app_border {
@@ -5268,7 +5384,11 @@ impl eframe::App for ClipboardApp {
             });
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(self.theme.bg).stroke(app_border))
+            .frame(
+                egui::Frame::none()
+                    .fill(egui::Color32::TRANSPARENT)
+                    .stroke(egui::Stroke::NONE),
+            )
             .show(ctx, |ui| {
                 egui::Frame::none()
                     .inner_margin(egui::Margin {
@@ -5709,22 +5829,32 @@ pub(crate) fn filter_chip(
     } else {
         egui::Stroke::new(1.0, theme.border)
     };
-    ui.add(
-        egui::Button::new(
-            egui::RichText::new(display_label)
-                .size(10.5)
-                .color(if selected {
-                    egui::Color32::WHITE
-                } else {
-                    theme.muted
-                }),
-        )
-        .fill(fill)
-        .stroke(stroke)
-        .rounding(egui::Rounding::same(99.0))
-        .min_size(egui::vec2(40.0, 20.0)),
-    )
-    .on_hover_text(label)
+    let font_id = egui::FontId::new(10.5, egui::FontFamily::Proportional);
+    let text_width = ui
+        .painter()
+        .layout_no_wrap(display_label.clone(), font_id.clone(), theme.muted)
+        .size()
+        .x;
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2((text_width + 22.0).max(40.0), 22.0),
+        egui::Sense::click(),
+    );
+    if ui.is_rect_visible(rect) {
+        ui.painter()
+            .rect(rect, egui::Rounding::same(99.0), fill, stroke);
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            display_label,
+            font_id,
+            if selected {
+                egui::Color32::WHITE
+            } else {
+                theme.muted
+            },
+        );
+    }
+    response.on_hover_text(label)
 }
 
 fn emoji_button(ui: &mut egui::Ui, emoji: &str, theme: &MacosTokens) -> egui::Response {
@@ -5772,18 +5902,12 @@ fn twemoji_source(emoji: &str) -> Option<egui::ImageSource<'static>> {
 }
 
 fn symbol_button(ui: &mut egui::Ui, symbol: &str, theme: &MacosTokens) -> egui::Response {
-    ui.add(
-        egui::Button::new(
-            egui::RichText::new(symbol)
-                .size(18.0)
-                .strong()
-                .color(theme.fg),
-        )
-        .fill(theme.history_bg)
-        .stroke(egui::Stroke::new(1.0, theme.border))
-        .rounding(egui::Rounding::same(10.0))
-        .min_size(egui::vec2(34.0, 34.0)),
-    )
+    MacosButton::normal()
+        .min_width(34.0)
+        .height(34.0)
+        .padding_x(0.0)
+        .font_size(18.0)
+        .show(ui, symbol, theme)
 }
 
 fn toolbar_button(
@@ -5796,13 +5920,12 @@ fn toolbar_button(
     let response = if let Some(icon) = ToolbarIcon::from_label(label) {
         vector_toolbar_button(ui, icon, theme)
     } else {
-        ui.add(
-            egui::Button::new(egui::RichText::new(label).size(16.0))
-                .min_size(egui::vec2(32.0, 32.0))
-                .fill(theme.history_selected)
-                .stroke(egui::Stroke::new(2.0, theme.border))
-                .rounding(egui::Rounding::same(10.0)),
-        )
+        MacosButton::normal()
+            .min_width(32.0)
+            .height(32.0)
+            .padding_x(6.0)
+            .font_size(16.0)
+            .show(ui, label, theme)
     };
     response.on_hover_text(tooltip)
 }
