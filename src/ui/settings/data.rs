@@ -1,6 +1,8 @@
 use crate::app::ClipboardApp;
 use crate::storage::Storage;
-use crate::ui::settings::pick_database_save_dir_with_dialog;
+use crate::ui::settings::{
+    pick_database_save_dir_with_dialog, settings_danger_button, settings_footer_button,
+};
 use crate::ui::widgets::macos_collapsible_group;
 use eframe::egui;
 use rust_i18n::t;
@@ -39,11 +41,7 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
                 );
             });
         ui.horizontal(|ui| {
-            if ui
-                .add(
-                    egui::Button::new(t!("settings.data.select_save_path"))
-                        .rounding(egui::Rounding::same(8.0)),
-                )
+            if settings_footer_button(ui, t!("settings.data.select_save_path"), &app.theme, 0.0)
                 .clicked()
             {
                 let current = PathBuf::from(app.database_path_input.trim());
@@ -65,7 +63,9 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
                     Err(err) => app.status = err,
                 }
             }
-            if ui.button(t!("settings.data.restore_default")).clicked() {
+            if settings_footer_button(ui, t!("settings.data.restore_default"), &app.theme, 0.0)
+                .clicked()
+            {
                 let path = Storage::default_path();
                 match Storage::write_redirect_path(path.clone()) {
                     Ok(()) => {
@@ -80,7 +80,9 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
             }
         });
         ui.label(egui::RichText::new(t!("settings.data.db_hint")).color(app.theme.muted));
-        if ui.button(t!("history.clear_unpinned_history")).clicked() {
+        if settings_danger_button(ui, t!("history.clear_unpinned_history"), &app.theme, 0.0)
+            .clicked()
+        {
             match app.storage.clear_unpinned() {
                 Ok(()) => {
                     app.status = t!("history.cleared_unpinned").to_string();

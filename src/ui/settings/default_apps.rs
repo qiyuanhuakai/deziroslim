@@ -1,5 +1,5 @@
 use crate::app::ClipboardApp;
-use crate::ui::settings::app_combo_row;
+use crate::ui::settings::{app_combo_row, settings_footer_button};
 use crate::ui::widgets::macos_collapsible_group;
 use eframe::egui;
 use rust_i18n::t;
@@ -64,7 +64,9 @@ pub fn draw_default_apps_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: 
                 &app.video_app_choices,
                 &app.theme,
             );
-            if ui.button(t!("settings.default_app.rescan")).clicked() {
+            if settings_footer_button(ui, t!("settings.default_app.rescan"), &app.theme, 0.0)
+                .clicked()
+            {
                 app.text_app_choices = crate::platform::discover_apps_for_mime("text/plain");
                 app.url_app_choices =
                     crate::platform::discover_apps_for_mime("x-scheme-handler/http");

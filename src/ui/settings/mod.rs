@@ -12,6 +12,7 @@ pub mod tags;
 
 use crate::app::ClipboardApp;
 use crate::ui::MacosTokens;
+use crate::ui::widgets::MacosButton;
 use eframe::egui;
 use rust_i18n::t;
 
@@ -93,19 +94,37 @@ pub(crate) fn settings_footer_button(
     theme: &MacosTokens,
     width: f32,
 ) -> egui::Response {
-    let label = label.as_ref();
-    ui.add(
-        egui::Button::new(
-            egui::RichText::new(label)
-                .size(14.0)
-                .strong()
-                .color(theme.fg),
-        )
-        .min_size(egui::vec2(width, 34.0))
-        .fill(theme.card)
-        .stroke(egui::Stroke::new(1.0, theme.border))
-        .rounding(egui::Rounding::same(theme.radius_input)),
-    )
+    MacosButton::normal()
+        .min_width(width)
+        .height(30.0)
+        .font_size(12.5)
+        .show(ui, label, theme)
+}
+
+pub(crate) fn settings_primary_button(
+    ui: &mut egui::Ui,
+    label: impl AsRef<str>,
+    theme: &MacosTokens,
+    width: f32,
+) -> egui::Response {
+    MacosButton::primary()
+        .min_width(width)
+        .height(30.0)
+        .font_size(12.5)
+        .show(ui, label, theme)
+}
+
+pub(crate) fn settings_danger_button(
+    ui: &mut egui::Ui,
+    label: impl AsRef<str>,
+    theme: &MacosTokens,
+    width: f32,
+) -> egui::Response {
+    MacosButton::danger()
+        .min_width(width)
+        .height(30.0)
+        .font_size(12.5)
+        .show(ui, label, theme)
 }
 
 pub(crate) fn hotkey_record_row(
@@ -126,6 +145,7 @@ pub(crate) fn hotkey_record_row(
             value.lines().map(str::trim).collect::<Vec<_>>().join(" / ")
         };
         ui.monospace(display);
+        ui.spacing_mut().item_spacing.x = 6.0;
         actions(ui);
     });
 }
@@ -135,10 +155,11 @@ pub(crate) fn hotkey_single_record_row(
     label: impl AsRef<str>,
     value: &str,
     recording: bool,
+    theme: &MacosTokens,
     mut start_recording: impl FnMut(),
 ) {
     hotkey_record_row(ui, label, value, recording, |ui| {
-        if ui.button(t!("common.recording")).clicked() {
+        if settings_footer_button(ui, t!("common.recording"), theme, 0.0).clicked() {
             start_recording();
         }
     });

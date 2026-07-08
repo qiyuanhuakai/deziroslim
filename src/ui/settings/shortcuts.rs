@@ -1,5 +1,7 @@
 use crate::app::{ClipboardApp, HotkeyTarget, hotkey_lines};
-use crate::ui::settings::{hotkey_record_row, hotkey_single_record_row, removable_hotkey_chip};
+use crate::ui::settings::{
+    hotkey_record_row, hotkey_single_record_row, removable_hotkey_chip, settings_footer_button,
+};
 use crate::ui::widgets::macos_collapsible_group;
 use eframe::egui;
 use rust_i18n::t;
@@ -25,11 +27,15 @@ pub fn draw_shortcuts_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &eg
                 &main_hotkeys,
                 app.recording_hotkey == Some(HotkeyTarget::Main),
                 |ui| {
-                    if ui.button(t!("settings.hotkey.record_new")).clicked() {
+                    if settings_footer_button(ui, t!("settings.hotkey.record_new"), &theme, 0.0)
+                        .clicked()
+                    {
                         app.recording_hotkey = Some(HotkeyTarget::Main);
                         app.status = t!("settings.hotkey.recording_main").to_string();
                     }
-                    if ui.button(t!("settings.hotkey.clear_all")).clicked() {
+                    if settings_footer_button(ui, t!("settings.hotkey.clear_all"), &theme, 0.0)
+                        .clicked()
+                    {
                         app.main_hotkeys.clear();
                         app.update_hotkeys();
                         app.persist_preferences();
@@ -58,6 +64,7 @@ pub fn draw_shortcuts_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &eg
                 t!("settings.hotkey.sequential_paste"),
                 &sequential_hotkey,
                 app.recording_hotkey == Some(HotkeyTarget::Sequential),
+                &theme,
                 || {
                     app.recording_hotkey = Some(HotkeyTarget::Sequential);
                     app.status = t!("settings.hotkey.recording_sequential").to_string();
@@ -68,6 +75,7 @@ pub fn draw_shortcuts_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &eg
                 t!("settings.hotkey.rich_paste"),
                 &rich_paste_hotkey,
                 app.recording_hotkey == Some(HotkeyTarget::RichPaste),
+                &theme,
                 || {
                     app.recording_hotkey = Some(HotkeyTarget::RichPaste);
                     app.status = t!("settings.hotkey.recording_rich_paste").to_string();
@@ -78,6 +86,7 @@ pub fn draw_shortcuts_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &eg
                 t!("settings.hotkey.search_focus"),
                 &search_hotkey,
                 app.recording_hotkey == Some(HotkeyTarget::Search),
+                &theme,
                 || {
                     app.recording_hotkey = Some(HotkeyTarget::Search);
                     app.status = t!("settings.hotkey.recording_search").to_string();

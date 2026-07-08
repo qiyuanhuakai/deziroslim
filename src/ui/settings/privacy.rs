@@ -196,11 +196,13 @@ fn draw_private_mode(ui: &mut egui::Ui, app: &mut ClipboardApp) {
     ui.add_space(2.0);
 
     let recording = matches!(app.recording_hotkey, Some(HotkeyTarget::PrivateMode));
+    let theme = app.theme.clone();
     hotkey_single_record_row(
         ui,
         t!("settings.private_mode.hotkey_label"),
         &app.private_mode_hotkey,
         recording,
+        &theme,
         || {
             app.recording_hotkey = Some(HotkeyTarget::PrivateMode);
         },

@@ -2,7 +2,7 @@ use crate::app::{
     AUTO_FALLBACK_FONT_LABEL, AUTO_PRIMARY_FONT_LABEL, ClipboardApp, DockMode, configure_fonts,
     discover_system_font_names, filter_chip,
 };
-use crate::ui::settings::font_combo_row;
+use crate::ui::settings::{font_combo_row, settings_footer_button};
 use crate::ui::widgets::{macos_collapsible_group, macos_range_slider, macos_toggle};
 use eframe::egui;
 use rust_i18n::t;
@@ -59,7 +59,14 @@ pub fn draw_appearance_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &eg
                 &app.theme,
             );
             ui.vertical(|ui| {
-                if ui.button(t!("settings.appearance.rescan_fonts")).clicked() {
+                if settings_footer_button(
+                    ui,
+                    t!("settings.appearance.rescan_fonts"),
+                    &app.theme,
+                    0.0,
+                )
+                .clicked()
+                {
                     app.font_choices = discover_system_font_names();
                     app.status = format!(
                         "{}: {}",
