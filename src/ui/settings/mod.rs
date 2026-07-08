@@ -135,19 +135,23 @@ pub(crate) fn hotkey_record_row(
     mut actions: impl FnMut(&mut egui::Ui),
 ) {
     let label = label.as_ref();
-    ui.horizontal_wrapped(|ui| {
-        ui.label(label);
-        let display = if recording {
-            t!("settings.hotkey.recording_active").to_string()
-        } else if value.trim().is_empty() {
-            t!("settings.hotkey.not_set").to_string()
-        } else {
-            value.lines().map(str::trim).collect::<Vec<_>>().join(" / ")
-        };
-        ui.monospace(display);
-        ui.spacing_mut().item_spacing.x = 6.0;
-        actions(ui);
-    });
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_width(), 30.0),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            ui.label(label);
+            let display = if recording {
+                t!("settings.hotkey.recording_active").to_string()
+            } else if value.trim().is_empty() {
+                t!("settings.hotkey.not_set").to_string()
+            } else {
+                value.lines().map(str::trim).collect::<Vec<_>>().join(" / ")
+            };
+            ui.monospace(display);
+            actions(ui);
+        },
+    );
 }
 
 pub(crate) fn hotkey_single_record_row(

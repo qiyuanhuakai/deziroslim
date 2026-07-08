@@ -1,7 +1,7 @@
 use crate::app::{APP_ID, ClipboardApp, HotkeyTarget, filter_chip};
 use crate::platform;
 use crate::ui::settings::hotkey_single_record_row;
-use crate::ui::widgets::{macos_collapsible_group, macos_toggle};
+use crate::ui::widgets::{MacosButton, macos_collapsible_group, macos_toggle};
 use eframe::egui;
 use rust_i18n::t;
 
@@ -115,12 +115,12 @@ fn draw_exclusion_list(ui: &mut egui::Ui, app: &mut ClipboardApp) {
     for (i, pattern) in list_clone.iter().enumerate() {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(pattern).monospace().size(12.0));
-            if ui
-                .button(
-                    egui::RichText::new("\u{00d7}")
-                        .size(12.0)
-                        .color(app.theme.danger),
-                )
+            if MacosButton::danger()
+                .min_width(24.0)
+                .height(24.0)
+                .padding_x(0.0)
+                .font_size(12.0)
+                .show(ui, "\u{00d7}", &app.theme)
                 .clicked()
             {
                 to_remove = Some(i);
@@ -141,8 +141,10 @@ fn draw_exclusion_list(ui: &mut egui::Ui, app: &mut ClipboardApp) {
                 .hint_text(t!("settings.exclusion_list.pattern_hint")),
         );
         let enter = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if ui
-            .button(t!("settings.exclusion_list.add_button"))
+        if MacosButton::normal()
+            .min_width(0.0)
+            .height(28.0)
+            .show(ui, t!("settings.exclusion_list.add_button"), &app.theme)
             .clicked()
             || enter
         {
@@ -156,8 +158,10 @@ fn draw_exclusion_list(ui: &mut egui::Ui, app: &mut ClipboardApp) {
     });
 
     ui.add_space(2.0);
-    if ui
-        .button(t!("settings.exclusion_list.current_window"))
+    if MacosButton::normal()
+        .min_width(0.0)
+        .height(28.0)
+        .show(ui, t!("settings.exclusion_list.current_window"), &app.theme)
         .clicked()
         && let Some(wm_class) = platform::active_window_class()
         && !is_own_window_class(&wm_class)

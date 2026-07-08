@@ -13,9 +13,27 @@ pub fn show_entry_actions_menu(
     let mut result = None;
 
     if !matched.is_empty() {
-        ui.menu_button(
-            egui::RichText::new(t!("settings.actions.context_menu_title")).size(12.5),
+        let popup_id = ui.make_persistent_id(("entry_actions_menu", entry.id));
+        let response = MacosButton::normal()
+            .min_width(0.0)
+            .height(26.0)
+            .font_size(12.5)
+            .show(ui, t!("settings.actions.context_menu_title"), &app.theme);
+        if response.clicked() {
+            let is_open = ui.memory(|mem| mem.is_popup_open(popup_id));
+            if is_open {
+                ui.memory_mut(|mem| mem.close_popup());
+            } else {
+                ui.memory_mut(|mem| mem.open_popup(popup_id));
+            }
+        }
+        egui::popup::popup_below_widget(
+            ui,
+            popup_id,
+            &response,
+            egui::popup::PopupCloseBehavior::CloseOnClickOutside,
             |ui| {
+                ui.set_min_width(180.0);
                 for action in &matched {
                     let label = if action.icon.is_empty() {
                         action.name.clone()
@@ -32,6 +50,7 @@ pub fn show_entry_actions_menu(
                     {
                         result = Some(action.clone());
                         ui.close_menu();
+                        ui.memory_mut(|mem| mem.close_popup());
                     }
                 }
             },
