@@ -329,6 +329,7 @@ settings:
 
   actions:
     title: "动作配置"
+    description: "按剪贴板内容匹配规则触发自定义命令，可设置工具栏按钮、自动执行、PRIMARY 选区触发与命令白名单。"
     new_action: "新建动作"
     edit_action: "编辑动作"
     pattern_label: "匹配模式"
@@ -437,6 +438,7 @@ settings:
 
   snippets:
     title: "代码片段"
+    description: "保存常用模板与命令片段，支持描述、标签、变量占位符和快捷插入，适合复用链接、代码块与固定回复。"
     enable: "启用代码片段"
     new_snippet: "新建片段"
     edit_snippet: "编辑片段"

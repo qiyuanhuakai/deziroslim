@@ -21,6 +21,8 @@ pub fn draw_actions_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui
         &mut expanded,
         &theme,
         |ui| {
+            ui.label(egui::RichText::new(t!("settings.actions.description")).color(theme.muted));
+            ui.add_space(8.0);
             draw_global_settings(ui, app);
             ui.add_space(8.0);
             draw_action_list(ui, app);
@@ -211,18 +213,13 @@ fn draw_test_pattern(ui: &mut egui::Ui, app: &mut ClipboardApp) {
     );
     ui.add_space(4.0);
 
-    if ui
-        .add_sized(
-            [120.0, 28.0],
-            egui::Button::new(
-                egui::RichText::new(t!("settings.actions.test_run"))
-                    .size(12.0)
-                    .strong(),
-            )
-            .rounding(egui::Rounding::same(6.0))
-            .fill(theme.accent),
-        )
-        .clicked()
+    if crate::ui::settings::settings_primary_button(
+        ui,
+        t!("settings.actions.test_run"),
+        &theme,
+        0.0,
+    )
+    .clicked()
     {
         let text = app.action_editor.test_pattern_text.clone();
         let test_result = if text.is_empty() {

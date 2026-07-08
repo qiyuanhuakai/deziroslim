@@ -315,6 +315,7 @@ settings:
 
   actions:
     title: "Action Settings"
+    description: "Match clipboard content and trigger custom commands, with toolbar buttons, auto-run, PRIMARY selection triggers, and command allowlists."
     new_action: "New Action"
     edit_action: "Edit Action"
     pattern_label: "Match pattern"
@@ -423,6 +424,7 @@ settings:
 
   snippets:
     title: "Snippets"
+    description: "Save reusable templates and command snippets with descriptions, tags, variables, and quick insertion for links, code blocks, and canned replies."
     enable: "Enable snippets"
     new_snippet: "New snippet"
     edit_snippet: "Edit snippet"

@@ -21,6 +21,8 @@ pub fn draw_snippets_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egu
         &mut expanded,
         &theme,
         |ui| {
+            ui.label(egui::RichText::new(t!("settings.snippets.description")).color(theme.muted));
+            ui.add_space(8.0);
             draw_snippet_list(ui, app);
             ui.add_space(8.0);
             draw_snippet_buttons(ui, app);
