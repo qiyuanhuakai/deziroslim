@@ -29,6 +29,35 @@ pub struct Storage {
     decrypted_cache: Arc<Mutex<LruCache<i64, String>>>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EntryRetentionLimits {
+    total: usize,
+    primary: usize,
+}
+
+impl EntryRetentionLimits {
+    pub const fn new(total: usize, primary: usize) -> Self {
+        Self {
+            total: if total == 0 { 1 } else { total },
+            primary: if primary == 0 { 1 } else { primary },
+        }
+    }
+
+    pub const fn total(self) -> usize {
+        self.total
+    }
+
+    pub const fn primary(self) -> usize {
+        self.primary
+    }
+}
+
+impl Default for EntryRetentionLimits {
+    fn default() -> Self {
+        Self::new(MAX_ENTRIES, MAX_ENTRIES)
+    }
+}
+
 impl Storage {
     pub fn default_path() -> PathBuf {
         let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -316,6 +345,15 @@ impl Storage {
     }
 
     pub fn save_entry_with_dedup(&self, entry: &ClipboardEntry, deduplicate: bool) -> Result<i64> {
+        self.save_entry_with_limits(entry, deduplicate, EntryRetentionLimits::default())
+    }
+
+    pub fn save_entry_with_limits(
+        &self,
+        entry: &ClipboardEntry,
+        deduplicate: bool,
+        limits: EntryRetentionLimits,
+    ) -> Result<i64> {
         let hash_input = if deduplicate {
             entry_hash_identity(entry)
         } else {
@@ -392,8 +430,15 @@ impl Storage {
 
         tx.commit()?;
         drop(conn);
-        self.enforce_limit()?;
+        self.enforce_retention_limits(limits)?;
         Ok(id)
+    }
+
+    pub fn enforce_retention_limits(&self, limits: EntryRetentionLimits) -> Result<()> {
+        let conn = self.conn.lock().expect("storage mutex poisoned");
+        prune_unpinned_total(&conn, limits.total())?;
+        prune_unpinned_primary(&conn, limits.primary())?;
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -684,29 +729,6 @@ impl Storage {
         conn.execute(
             "DELETE FROM clipboard_history WHERE is_pinned = 0 AND timestamp < ?1",
             params![cutoff],
-        )?;
-        Ok(())
-    }
-
-    fn enforce_limit(&self) -> Result<()> {
-        let conn = self.conn.lock().expect("storage mutex poisoned");
-        let unpinned_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM clipboard_history WHERE is_pinned = 0",
-            [],
-            |row| row.get(0),
-        )?;
-        if unpinned_count <= MAX_ENTRIES as i64 {
-            return Ok(());
-        }
-        conn.execute(
-            "DELETE FROM clipboard_history
-             WHERE id IN (
-                SELECT id FROM clipboard_history
-                WHERE is_pinned = 0
-                ORDER BY timestamp DESC
-                LIMIT -1 OFFSET ?1
-             )",
-            params![MAX_ENTRIES as i64],
         )?;
         Ok(())
     }
@@ -1011,6 +1033,38 @@ fn content_hash(kind: &str, source: &str, content: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+fn prune_limit_offset(limit: usize) -> i64 {
+    i64::try_from(limit).unwrap_or(i64::MAX)
+}
+
+fn prune_unpinned_total(conn: &Connection, limit: usize) -> Result<()> {
+    conn.execute(
+        "DELETE FROM clipboard_history
+         WHERE id IN (
+            SELECT id FROM clipboard_history
+            WHERE is_pinned = 0
+            ORDER BY timestamp DESC, id DESC
+            LIMIT -1 OFFSET ?1
+         )",
+        params![prune_limit_offset(limit)],
+    )?;
+    Ok(())
+}
+
+fn prune_unpinned_primary(conn: &Connection, limit: usize) -> Result<()> {
+    conn.execute(
+        "DELETE FROM clipboard_history
+         WHERE id IN (
+            SELECT id FROM clipboard_history
+            WHERE is_pinned = 0 AND source = ?1
+            ORDER BY timestamp DESC, id DESC
+            LIMIT -1 OFFSET ?2
+         )",
+        params![SelectionSource::Primary.as_str(), prune_limit_offset(limit)],
+    )?;
+    Ok(())
+}
+
 fn entry_hash_identity(entry: &ClipboardEntry) -> String {
     if matches!(entry.kind, ClipboardKind::RichText) {
         format!(
@@ -1072,6 +1126,74 @@ mod tests {
 
         let entries = storage.list("repeat").expect("list");
         assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn save_entry_with_limits_keeps_newest_unpinned_entries() {
+        let storage = temp_storage();
+        let limits = EntryRetentionLimits::new(2, MAX_ENTRIES);
+        let mut old = ClipboardEntry::captured_text("old".to_string(), "test".to_string())
+            .expect("valid old entry");
+        old.timestamp = 1;
+        let mut middle = ClipboardEntry::captured_text("middle".to_string(), "test".to_string())
+            .expect("valid middle entry");
+        middle.timestamp = 2;
+        let mut new = ClipboardEntry::captured_text("new".to_string(), "test".to_string())
+            .expect("valid new entry");
+        new.timestamp = 3;
+
+        storage
+            .save_entry_with_limits(&old, false, limits)
+            .expect("save old");
+        storage
+            .save_entry_with_limits(&middle, false, limits)
+            .expect("save middle");
+        storage
+            .save_entry_with_limits(&new, false, limits)
+            .expect("save new");
+
+        let entries = storage.list("").expect("list");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].content, "new");
+        assert_eq!(entries[1].content, "middle");
+    }
+
+    #[test]
+    fn save_entry_with_limits_keeps_newest_primary_entries() {
+        let storage = temp_storage();
+        let limits = EntryRetentionLimits::new(MAX_ENTRIES, 1);
+        let mut clipboard =
+            ClipboardEntry::captured_text("clipboard".to_string(), "test".to_string())
+                .expect("valid clipboard entry");
+        clipboard.timestamp = 1;
+        let mut primary_old =
+            ClipboardEntry::captured_text("primary old".to_string(), "test".to_string())
+                .expect("valid old primary entry");
+        primary_old.timestamp = 2;
+        primary_old.source = SelectionSource::Primary;
+        let mut primary_new =
+            ClipboardEntry::captured_text("primary new".to_string(), "test".to_string())
+                .expect("valid new primary entry");
+        primary_new.timestamp = 3;
+        primary_new.source = SelectionSource::Primary;
+
+        storage
+            .save_entry_with_limits(&clipboard, false, limits)
+            .expect("save clipboard");
+        storage
+            .save_entry_with_limits(&primary_old, false, limits)
+            .expect("save old primary");
+        storage
+            .save_entry_with_limits(&primary_new, false, limits)
+            .expect("save new primary");
+
+        let primary_entries = storage
+            .list_filtered("", None, None, Some(&SelectionSource::Primary))
+            .expect("list primary");
+        assert_eq!(primary_entries.len(), 1);
+        assert_eq!(primary_entries[0].content, "primary new");
+        let all_entries = storage.list("").expect("list all");
+        assert!(all_entries.iter().any(|entry| entry.content == "clipboard"));
     }
 
     #[test]

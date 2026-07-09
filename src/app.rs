@@ -3,7 +3,7 @@ use crate::emoji_data::{EMOJI_GROUPS, EmojiGroup};
 use crate::model::{ClipboardEntry, ClipboardEntrySummary, ClipboardKind, SelectionSource};
 use crate::platform;
 use crate::sound::{self, SoundEffect};
-use crate::storage::Storage;
+use crate::storage::{EntryRetentionLimits, Storage};
 use crate::ui::MacosTokens;
 use crate::ui::hotkey::HotkeyManager;
 use crate::ui::widgets::{MacosButton, macos_toggle};
@@ -31,6 +31,9 @@ const PREFERENCES_KEY: &str = "ui.deziroslim";
 const LEGACY_PREFERENCES_KEY: &str = "ui.native_tiez";
 const EMOJI_FAVORITES_KEY: &str = "app.emoji_favorites";
 const SETTINGS_PANEL_COUNT: usize = 12;
+pub(crate) const ENTRY_LIMIT_MIN: u32 = 1;
+pub(crate) const ENTRY_LIMIT_MAX: u32 = 10_000;
+pub(crate) const ENTRY_LIMIT_DEFAULT: u32 = 1_000;
 const HISTORY_MAX_WIDTH: f32 = 560.0;
 const DEFAULT_WINDOW_SIZE: egui::Vec2 = egui::vec2(480.0, 680.0);
 const MIN_NORMAL_WINDOW_SIZE: egui::Vec2 = egui::vec2(320.0, 400.0);
@@ -390,6 +393,10 @@ struct AppPreferences {
     paste_method: String,
     #[serde(default = "default_surface_opacity")]
     surface_opacity: u8,
+    #[serde(default = "default_entry_limit")]
+    entry_limit: u32,
+    #[serde(default = "default_primary_entry_limit")]
+    primary_entry_limit: u32,
     #[serde(skip)]
     window_level_applied: bool,
     #[serde(default = "default_privacy_protection_kinds")]
@@ -505,6 +512,14 @@ fn default_surface_opacity() -> u8 {
     50
 }
 
+fn default_entry_limit() -> u32 {
+    ENTRY_LIMIT_DEFAULT
+}
+
+fn default_primary_entry_limit() -> u32 {
+    ENTRY_LIMIT_DEFAULT
+}
+
 fn default_app_exclusion_list() -> Vec<String> {
     Vec::new()
 }
@@ -595,6 +610,8 @@ impl Default for AppPreferences {
             default_video_app: String::new(),
             paste_method: "shift_insert".to_string(),
             surface_opacity: 50,
+            entry_limit: ENTRY_LIMIT_DEFAULT,
+            primary_entry_limit: ENTRY_LIMIT_DEFAULT,
             window_level_applied: false,
             color_mode: default_color_mode(),
             primary_font: String::new(),
@@ -700,6 +717,8 @@ pub struct ClipboardApp {
     pub(crate) default_video_app: String,
     pub(crate) paste_method: String,
     pub(crate) surface_opacity: u8,
+    pub(crate) entry_limit: u32,
+    pub(crate) primary_entry_limit: u32,
     pub(crate) current_database_path: String,
     pub(crate) database_path_input: String,
     pub(crate) text_app_choices: Vec<platform::AppChoice>,
@@ -949,6 +968,12 @@ impl ClipboardApp {
             default_video_app: preferences.default_video_app,
             paste_method: preferences.paste_method,
             surface_opacity: preferences.surface_opacity,
+            entry_limit: preferences
+                .entry_limit
+                .clamp(ENTRY_LIMIT_MIN, ENTRY_LIMIT_MAX),
+            primary_entry_limit: preferences
+                .primary_entry_limit
+                .clamp(ENTRY_LIMIT_MIN, ENTRY_LIMIT_MAX),
             database_path_input: current_database_path.clone(),
             current_database_path,
             text_app_choices,
@@ -1123,6 +1148,20 @@ impl ClipboardApp {
     pub(crate) fn refresh_theme(&mut self, ctx: &egui::Context) {
         self.theme = resolve_surface_theme(&self.color_mode, self.surface_opacity);
         self.configure_style(ctx);
+    }
+
+    pub(crate) fn entry_retention_limits(&self) -> EntryRetentionLimits {
+        EntryRetentionLimits::new(self.entry_limit as usize, self.primary_entry_limit as usize)
+    }
+
+    pub(crate) fn enforce_entry_retention_limits(&mut self) {
+        match self
+            .storage
+            .enforce_retention_limits(self.entry_retention_limits())
+        {
+            Ok(()) => self.refresh_entries(),
+            Err(err) => self.status = format!("{}: {err}", t!("settings.clipboard.limit_failed")),
+        }
     }
 
     pub(crate) fn refresh_entries(&mut self) {
@@ -1302,15 +1341,17 @@ impl ClipboardApp {
                         continue;
                     }
                     if matches!(entry.kind, ClipboardKind::RichText) && !self.capture_rich_text {
-                        if let Some(text_entry) = ClipboardEntry::captured_text(
+                        if let Some(mut text_entry) = ClipboardEntry::captured_text(
                             entry.content.clone(),
                             entry.source_app.clone(),
                         ) {
-                            let result = if self.deduplicate {
-                                self.storage.save_entry(&text_entry)
-                            } else {
-                                self.storage.save_entry_with_dedup(&text_entry, false)
-                            };
+                            text_entry.timestamp = entry.timestamp;
+                            text_entry.source = entry.source.clone();
+                            let result = self.storage.save_entry_with_limits(
+                                &text_entry,
+                                self.deduplicate,
+                                self.entry_retention_limits(),
+                            );
                             match result {
                                 Ok(_) => {
                                     self.saved_count += 1;
@@ -1332,11 +1373,11 @@ impl ClipboardApp {
                         }
                         continue;
                     }
-                    let result = if self.deduplicate {
-                        self.storage.save_entry(&entry)
-                    } else {
-                        self.storage.save_entry_with_dedup(&entry, false)
-                    };
+                    let result = self.storage.save_entry_with_limits(
+                        &entry,
+                        self.deduplicate,
+                        self.entry_retention_limits(),
+                    );
                     match result {
                         Ok(_) => {
                             self.saved_count += 1;
@@ -2393,6 +2434,8 @@ impl ClipboardApp {
             default_video_app: self.default_video_app.clone(),
             paste_method: self.paste_method.clone(),
             surface_opacity: self.surface_opacity,
+            entry_limit: self.entry_limit,
+            primary_entry_limit: self.primary_entry_limit,
             window_level_applied: false,
             color_mode: self.color_mode.clone(),
             primary_font: self.primary_font.clone(),
@@ -2544,6 +2587,12 @@ impl ClipboardApp {
             crate::i18n::set_app_locale(&self.language);
         }
         self.surface_opacity = preferences.surface_opacity;
+        self.entry_limit = preferences
+            .entry_limit
+            .clamp(ENTRY_LIMIT_MIN, ENTRY_LIMIT_MAX);
+        self.primary_entry_limit = preferences
+            .primary_entry_limit
+            .clamp(ENTRY_LIMIT_MIN, ENTRY_LIMIT_MAX);
         self.app_exclusion_list = preferences.app_exclusion_list;
         self.private_mode = preferences.private_mode;
         self.private_mode_flag

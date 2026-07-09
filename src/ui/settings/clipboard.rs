@@ -1,6 +1,6 @@
-use crate::app::ClipboardApp;
+use crate::app::{ClipboardApp, ENTRY_LIMIT_MAX, ENTRY_LIMIT_MIN};
 use crate::ui::settings::{DropdownOption, searchable_combo_row};
-use crate::ui::widgets::{macos_collapsible_group, macos_toggle};
+use crate::ui::widgets::{macos_collapsible_group, macos_range_slider, macos_toggle};
 use eframe::egui;
 use rust_i18n::t;
 
@@ -70,6 +70,56 @@ pub fn draw_clipboard_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &eg
             {
                 app.persist_preferences();
             }
+            ui.add_space(4.0);
+            ui.label(t!("settings.clipboard.entry_limit"));
+            let mut entry_limit = app.entry_limit as f32;
+            if macos_range_slider(
+                ui,
+                &mut entry_limit,
+                ENTRY_LIMIT_MIN as f32..=ENTRY_LIMIT_MAX as f32,
+                &app.theme,
+            )
+            .changed()
+            {
+                app.entry_limit =
+                    (entry_limit.round() as u32).clamp(ENTRY_LIMIT_MIN, ENTRY_LIMIT_MAX);
+                app.persist_preferences();
+                app.enforce_entry_retention_limits();
+            }
+            ui.label(
+                egui::RichText::new(t!(
+                    "settings.clipboard.entry_limit_value",
+                    count = app.entry_limit
+                ))
+                .color(app.theme.muted),
+            );
+            ui.add_space(4.0);
+            ui.label(t!("settings.clipboard.primary_entry_limit"));
+            let mut primary_entry_limit = app.primary_entry_limit as f32;
+            if macos_range_slider(
+                ui,
+                &mut primary_entry_limit,
+                ENTRY_LIMIT_MIN as f32..=ENTRY_LIMIT_MAX as f32,
+                &app.theme,
+            )
+            .changed()
+            {
+                app.primary_entry_limit =
+                    (primary_entry_limit.round() as u32).clamp(ENTRY_LIMIT_MIN, ENTRY_LIMIT_MAX);
+                app.persist_preferences();
+                app.enforce_entry_retention_limits();
+            }
+            ui.label(
+                egui::RichText::new(t!(
+                    "settings.clipboard.primary_entry_limit_value",
+                    count = app.primary_entry_limit
+                ))
+                .color(app.theme.muted),
+            );
+            ui.label(
+                egui::RichText::new(t!("settings.clipboard.entry_limit_hint"))
+                    .color(app.theme.muted),
+            );
             let paste_options = [
                 DropdownOption::borrowed(
                     "shift_insert",
