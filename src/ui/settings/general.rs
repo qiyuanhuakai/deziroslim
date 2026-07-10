@@ -34,14 +34,8 @@ pub fn draw_general_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &egui:
                 &app.theme,
             ) {
                 let new_value = app.language.clone();
-                if new_value == "follow-system" {
-                    let detected = crate::i18n::detect_system_locale();
-                    crate::i18n::set_app_locale(&detected);
-                    app.language = "follow-system".to_string();
-                } else {
-                    crate::i18n::set_app_locale(&new_value);
-                    app.language = new_value;
-                }
+                crate::i18n::set_app_locale_choice(&new_value);
+                app.language = new_value;
                 app.persist_preferences();
             }
             ui.label(
@@ -201,13 +195,14 @@ pub fn draw_general_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &egui:
                 if ui
                     .horizontal(|ui| {
                         ui.label(t!("settings.general.sound_volume"));
-                        let changed =
-                            macos_range_slider(ui, &mut volume, 0.0..=100.0, &app.theme).changed();
-                        ui.label(
-                            egui::RichText::new(format!("{}%", volume.round() as u8))
-                                .color(app.theme.muted),
-                        );
-                        changed
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(
+                                egui::RichText::new(format!("{}%", volume.round() as u8))
+                                    .color(app.theme.muted),
+                            );
+                            macos_range_slider(ui, &mut volume, 0.0..=100.0, &app.theme).changed()
+                        })
+                        .inner
                     })
                     .inner
                 {

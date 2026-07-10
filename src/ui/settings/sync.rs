@@ -19,12 +19,12 @@ pub fn draw_sync_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
         &mut expanded,
         &theme,
         |ui| {
-            #[cfg(feature = "kde_connect")]
+            #[cfg(target_os = "linux")]
             {
                 draw_sync_content(ui, app, &theme);
             }
 
-            #[cfg(not(feature = "kde_connect"))]
+            #[cfg(not(target_os = "linux"))]
             {
                 ui.label(
                     egui::RichText::new(t!("settings.sync.feature_disabled")).color(theme.muted),
@@ -44,7 +44,7 @@ pub fn draw_sync_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
     }
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn draw_sync_content(ui: &mut egui::Ui, app: &mut ClipboardApp, theme: &crate::ui::MacosTokens) {
     use crate::ui::widgets::macos_toggle;
 

@@ -45,6 +45,7 @@ pub fn draw_shortcuts_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &eg
             let main_hotkey_items = hotkey_lines(&main_hotkeys);
             if !main_hotkey_items.is_empty() {
                 ui.horizontal_wrapped(|ui| {
+                    ui.set_min_height(24.0);
                     ui.label(
                         egui::RichText::new(t!("settings.hotkey.recorded")).color(app.theme.muted),
                     );

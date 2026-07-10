@@ -55,7 +55,7 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
                             }
                             Err(err) => {
                                 app.status =
-                                    format!("{}: {err}", t!("settings.data.save_path_failed"))
+                                    t!("settings.data.save_path_failed", err => err).to_string()
                             }
                         }
                     }
@@ -74,7 +74,7 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
                     }
                     Err(err) => {
                         app.status =
-                            format!("{}: {err}", t!("settings.data.restore_default_failed"))
+                            t!("settings.data.restore_default_failed", err => err).to_string()
                     }
                 }
             }

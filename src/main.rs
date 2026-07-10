@@ -23,6 +23,7 @@ fn main() -> anyhow::Result<()> {
 
     #[cfg(feature = "log-miss-tr")]
     env_logger::init();
+    platform::initialize_process();
 
     let dev_mode = dev_mode_enabled();
     let minimized = minimized_start_enabled();
@@ -33,9 +34,9 @@ fn main() -> anyhow::Result<()> {
         .cleanup_expired()
         .context(rust_i18n::t!("error.cleanup_failed"))?;
 
-    let ipc_socket = IpcServer::socket_path_default();
+    let ipc_port_file = IpcServer::port_file_default();
     let ipc_storage = Arc::new(storage.clone());
-    match IpcServer::start(ipc_storage, ipc_socket) {
+    match IpcServer::start(ipc_storage, ipc_port_file) {
         Ok(_server) => {}
         Err(e) => eprintln!("IPC server failed to start: {e}"),
     }
@@ -73,6 +74,7 @@ fn main() -> anyhow::Result<()> {
         .with_transparent(true)
         .with_decorations(false)
         .with_resizable(true)
+        .with_taskbar(false)
         .with_visible(!minimized);
     if let Some(icon) = load_window_icon() {
         viewport = viewport.with_icon(icon);

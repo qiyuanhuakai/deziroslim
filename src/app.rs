@@ -7,6 +7,7 @@ use crate::storage::{EntryRetentionLimits, Storage};
 use crate::ui::MacosTokens;
 use crate::ui::hotkey::HotkeyManager;
 use crate::ui::widgets::{MacosButton, macos_toggle};
+#[allow(unused_imports)]
 use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
 use eframe::egui;
 use rust_i18n::t;
@@ -800,7 +801,7 @@ pub struct ClipboardApp {
     pub(crate) kde_connect_device_id: Option<String>,
     pub(crate) kde_connect_device_name: String,
     pub(crate) sync_enabled: bool,
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     pub(crate) sync_manager: crate::sync::SyncManager,
     pub(crate) cli_socket_path: Option<String>,
     pub(crate) builtin_actions_enabled: bool,
@@ -899,7 +900,7 @@ impl ClipboardApp {
         let loaded_actions = storage.load_actions().unwrap_or_default();
         let loaded_snippets = storage.load_snippets().unwrap_or_default();
 
-        #[cfg(feature = "kde_connect")]
+        #[cfg(target_os = "linux")]
         let sync_storage = storage.clone();
 
         let mut app = Self {
@@ -1050,7 +1051,7 @@ impl ClipboardApp {
             kde_connect_device_id: preferences.kde_connect_device_id,
             kde_connect_device_name: preferences.kde_connect_device_name,
             sync_enabled: preferences.sync_enabled,
-            #[cfg(feature = "kde_connect")]
+            #[cfg(target_os = "linux")]
             sync_manager: crate::sync::SyncManager::new(sync_storage),
             cli_socket_path: preferences.cli_socket_path,
             builtin_actions_enabled: preferences.builtin_actions_enabled,
@@ -1105,18 +1106,11 @@ impl ClipboardApp {
         };
         // Apply locale at startup so rust_i18n knows the active locale.
         // Without this, the library stays at its default ("en") and t!() returns English.
-        {
-            let initial_locale = if app.language == "follow-system" {
-                crate::i18n::detect_system_locale()
-            } else {
-                app.language.clone()
-            };
-            crate::i18n::set_app_locale(&initial_locale);
-        }
+        crate::i18n::set_app_locale_choice(&app.language);
         #[cfg(feature = "log-miss-tr")]
         crate::i18n::log_locale_info();
         app.configure_style(&cc.egui_ctx);
-        #[cfg(feature = "kde_connect")]
+        #[cfg(target_os = "linux")]
         if app.sync_enabled {
             app.sync_manager.enable();
         }
@@ -1443,7 +1437,7 @@ impl ClipboardApp {
     }
 
     fn sync_captured_entry(&self, entry: &ClipboardEntry) {
-        #[cfg(feature = "kde_connect")]
+        #[cfg(target_os = "linux")]
         {
             if !self.sync_enabled {
                 return;
@@ -1458,11 +1452,11 @@ impl ClipboardApp {
                 self.sync_manager.send_clipboard(&entry.content);
             }
         }
-        #[cfg(not(feature = "kde_connect"))]
+        #[cfg(not(target_os = "linux"))]
         let _ = entry;
     }
 
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn process_sync_events(&mut self, ctx: &egui::Context) {
         if !self.sync_enabled {
             return;
@@ -1486,7 +1480,7 @@ impl ClipboardApp {
         }
     }
 
-    #[cfg(not(feature = "kde_connect"))]
+    #[cfg(not(target_os = "linux"))]
     fn process_sync_events(&mut self, _ctx: &egui::Context) {}
 
     fn paste_entry(
@@ -2262,7 +2256,7 @@ impl ClipboardApp {
 
     fn open_entry(&mut self, summary: &ClipboardEntrySummary) {
         let Some(entry) = self.get_full_entry(summary.id) else {
-            self.status = format!("{} (id={})", t!("error.open_content_empty_id"), summary.id);
+            self.status = t!("error.open_content_empty_id", id = summary.id).to_string();
             return;
         };
         self.last_activity = Instant::now();
@@ -2277,9 +2271,12 @@ impl ClipboardApp {
                 match result {
                     Ok(()) => {
                         let _ = self.storage.increment_use_count(entry.id);
-                        self.status = format!("{}: {target}", t!("error.open_target"));
+                        self.status = t!("error.open_target", target = target).to_string();
                     }
-                    Err(err) => self.status = format!("{}: {err}", t!("error.open_entry_failed")),
+                    Err(err) => {
+                        self.status =
+                            t!("error.open_entry_failed", err = err.to_string()).to_string()
+                    }
                 }
             }
             Err(err) => self.status = err,
@@ -2502,12 +2499,12 @@ impl ClipboardApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
     }
 
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     pub(crate) fn sync_manager(&self) -> &crate::sync::SyncManager {
         &self.sync_manager
     }
 
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     pub(crate) fn sync_manager_mut(&mut self) -> &mut crate::sync::SyncManager {
         &mut self.sync_manager
     }
@@ -2529,6 +2526,12 @@ impl ClipboardApp {
         } else {
             t!("status.window_unpinned").to_string()
         };
+    }
+
+    fn sync_native_window_handle(&mut self, frame: &eframe::Frame) {
+        if let Err(err) = platform::remember_main_window(frame) {
+            self.status = err;
+        }
     }
 
     fn apply_preferences(&mut self, preferences: AppPreferences, ctx: &egui::Context) {
@@ -2584,7 +2587,7 @@ impl ClipboardApp {
         self.fallback_font = preferences.fallback_font;
         if self.language != preferences.language {
             self.language = preferences.language.clone();
-            crate::i18n::set_app_locale(&self.language);
+            crate::i18n::set_app_locale_choice(&self.language);
         }
         self.surface_opacity = preferences.surface_opacity;
         self.entry_limit = preferences
@@ -2612,7 +2615,7 @@ impl ClipboardApp {
         self.kde_connect_device_name = preferences.kde_connect_device_name;
         if self.sync_enabled != preferences.sync_enabled {
             self.sync_enabled = preferences.sync_enabled;
-            #[cfg(feature = "kde_connect")]
+            #[cfg(target_os = "linux")]
             if self.sync_enabled {
                 self.sync_manager.enable();
             } else {
@@ -4970,22 +4973,17 @@ fn hidden_edge_target(
     let sliver = 8.0;
     let size = egui::vec2(size.x.max(sliver), size.y.max(sliver));
     match dock {
-        DockMode::Left => (
-            egui::pos2(screen.x.max(0.0), visible_pos.y.max(0.0)),
-            egui::vec2(sliver, size.y),
-        ),
+        DockMode::Left => (egui::pos2(screen.x - size.x + sliver, visible_pos.y), size),
         DockMode::Right => (
-            egui::pos2(
-                (screen.x + screen.width - sliver).max(screen.x).max(0.0),
-                visible_pos.y.max(0.0),
-            ),
-            egui::vec2(sliver, size.y),
+            egui::pos2(screen.x + screen.width - sliver, visible_pos.y),
+            size,
         ),
-        DockMode::Top => (
-            egui::pos2(visible_pos.x.max(0.0), screen.y.max(0.0)),
-            egui::vec2(size.x, sliver),
+        DockMode::Top => (egui::pos2(visible_pos.x, screen.y - size.y + sliver), size),
+        DockMode::Bottom => (
+            egui::pos2(visible_pos.x, screen.y + screen.height - sliver),
+            size,
         ),
-        DockMode::Bottom | DockMode::Off => (visible_pos, size),
+        DockMode::Off => (visible_pos, size),
     }
 }
 
@@ -5382,6 +5380,7 @@ impl eframe::App for ClipboardApp {
         // the X11 query for every internal check.
         let mouse = platform::mouse_position();
         self.process_edge_docking(ctx, mouse);
+        self.sync_native_window_handle(frame);
         if self.edge_hidden || self.pending_edge_hide.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(120));
             return;
@@ -5898,11 +5897,7 @@ pub(crate) fn filter_chip(
             egui::Align2::CENTER_CENTER,
             display_label,
             font_id,
-            if selected {
-                egui::Color32::WHITE
-            } else {
-                theme.muted
-            },
+            if selected { theme.tag_fg } else { theme.muted },
         );
     }
     response.on_hover_text(label)
@@ -6698,33 +6693,44 @@ pub(crate) fn resolve_surface_theme(color_mode: &str, surface_opacity: u8) -> Ma
 }
 
 fn detect_system_theme() -> MacosTokens {
-    // Try GNOME/gsettings color-scheme
-    if let Ok(output) = std::process::Command::new("gsettings")
-        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
-        .output()
-        && let Ok(text) = String::from_utf8(output.stdout)
-    {
-        let lower = text.to_ascii_lowercase();
-        if lower.contains("prefer-light") {
-            return MacosTokens::light();
-        }
-        if lower.contains("prefer-dark") {
-            return MacosTokens::dark();
-        }
+    if let Some(dark) = crate::platform::system_dark_mode() {
+        return if dark {
+            MacosTokens::dark()
+        } else {
+            MacosTokens::light()
+        };
     }
-    // Try GTK theme name
-    if let Ok(output) = std::process::Command::new("gsettings")
-        .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
-        .output()
-        && let Ok(text) = String::from_utf8(output.stdout)
+
+    #[cfg(target_os = "linux")]
     {
-        let lower = text.to_ascii_lowercase();
-        if lower.contains("dark") {
-            return MacosTokens::dark();
+        // Try GNOME/gsettings color-scheme
+        if let Ok(output) = std::process::Command::new("gsettings")
+            .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+            .output()
+            && let Ok(text) = String::from_utf8(output.stdout)
+        {
+            let lower = text.to_ascii_lowercase();
+            if lower.contains("prefer-light") {
+                return MacosTokens::light();
+            }
+            if lower.contains("prefer-dark") {
+                return MacosTokens::dark();
+            }
         }
-        // Non-dark GTK theme suggests light mode
-        if !lower.is_empty() && !lower.contains("default") {
-            return MacosTokens::light();
+        // Try GTK theme name
+        if let Ok(output) = std::process::Command::new("gsettings")
+            .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
+            .output()
+            && let Ok(text) = String::from_utf8(output.stdout)
+        {
+            let lower = text.to_ascii_lowercase();
+            if lower.contains("dark") {
+                return MacosTokens::dark();
+            }
+            // Non-dark GTK theme suggests light mode
+            if !lower.is_empty() && !lower.contains("default") {
+                return MacosTokens::light();
+            }
         }
     }
     // Default to dark

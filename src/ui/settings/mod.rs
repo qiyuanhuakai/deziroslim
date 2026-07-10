@@ -251,14 +251,12 @@ fn dropdown_option_row(
     selected: bool,
     theme: &MacosTokens,
 ) -> egui::Response {
-    use crate::app::scale_alpha;
-
     let width = ui.available_width().max(120.0);
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 28.0), egui::Sense::click());
     let fill = if selected {
-        scale_alpha(theme.accent, 0.88)
+        theme.accent_soft
     } else if response.hovered() {
-        theme.card_hover
+        theme.select_menu_hover_bg
     } else {
         egui::Color32::TRANSPARENT
     };
@@ -266,11 +264,7 @@ fn dropdown_option_row(
         ui.painter()
             .rect_filled(rect, egui::Rounding::same(theme.radius_input), fill);
     }
-    let color = if selected {
-        egui::Color32::WHITE
-    } else {
-        theme.fg
-    };
+    let color = theme.fg;
     ui.painter().text(
         rect.left_center() + egui::vec2(10.0, 0.0),
         egui::Align2::LEFT_CENTER,
@@ -284,7 +278,7 @@ fn dropdown_option_row(
             egui::Align2::RIGHT_CENTER,
             "\u{2713}",
             egui::FontId::proportional(12.0),
-            egui::Color32::WHITE,
+            theme.accent,
         );
     }
     response
@@ -363,6 +357,12 @@ pub(crate) fn searchable_combo_row(
         let mut popup_style = ui.style().as_ref().clone();
         popup_style.visuals.window_fill = theme.select_menu_bg;
         popup_style.visuals.window_stroke = egui::Stroke::new(1.0, theme.select_menu_border);
+        popup_style.visuals.window_shadow = egui::epaint::Shadow {
+            offset: egui::vec2(0.0, 4.0),
+            blur: 16.0,
+            spread: 2.0,
+            color: theme.shadow,
+        };
         popup_style.visuals.menu_rounding = egui::Rounding::same(theme.radius_input);
         popup_style.spacing.menu_margin = egui::Margin::same(10.0);
         ui.scope(|ui| {
@@ -376,12 +376,17 @@ pub(crate) fn searchable_combo_row(
                 |ui| {
                     ui.set_min_width((button.rect.width() - 20.0).max(160.0));
                     ui.set_max_width((button.rect.width() - 20.0).max(160.0));
-                    let search_response = ui.add(
-                        egui::TextEdit::singleline(search)
-                            .id(search_id)
-                            .hint_text(search_hint)
-                            .desired_width(ui.available_width().max(120.0)),
-                    );
+                    let search_response = ui
+                        .scope(|ui| {
+                            apply_settings_widget_rounding(ui, theme.radius_input);
+                            ui.add(
+                                egui::TextEdit::singleline(search)
+                                    .id(search_id)
+                                    .hint_text(search_hint)
+                                    .desired_width(ui.available_width().max(120.0)),
+                            )
+                        })
+                        .inner;
                     let should_focus = ui
                         .memory_mut(|mem| mem.data.remove_temp::<bool>(search_id.with("focus")))
                         .unwrap_or(false);
@@ -528,38 +533,49 @@ pub(crate) fn pick_database_save_dir_with_dialog(
             .unwrap_or_else(|| PathBuf::from("."))
     };
 
-    match std::process::Command::new("zenity")
-        .arg("--file-selection")
-        .arg("--directory")
-        .arg(format!("--title={}", t!("error.db_select_title")))
-        .arg(format!("--filename={}", current_dir.display()))
-        .output()
+    #[cfg(target_os = "windows")]
     {
-        Ok(output) if output.status.success() => {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
-        }
-        Ok(_) => return Ok(None),
-        Err(_) => {}
+        Ok(rfd::FileDialog::new()
+            .set_title(t!("error.db_select_title").to_string())
+            .set_directory(current_dir)
+            .pick_folder())
     }
 
-    match std::process::Command::new("kdialog")
-        .arg("--getexistingdirectory")
-        .arg(current_dir.display().to_string())
-        .output()
+    #[cfg(not(target_os = "windows"))]
     {
-        Ok(output) if output.status.success() => {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            Ok((!value.is_empty()).then(|| PathBuf::from(value)))
+        match std::process::Command::new("zenity")
+            .arg("--file-selection")
+            .arg("--directory")
+            .arg(format!("--title={}", t!("error.db_select_title")))
+            .arg(format!("--filename={}", current_dir.display()))
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+            }
+            Ok(_) => return Ok(None),
+            Err(_) => {}
         }
-        Ok(_) => Ok(None),
-        Err(_) => {
-            let fallback = Storage::default_path();
-            Err(format!(
-                "{} ({})",
-                t!("error.dialog_not_found"),
-                fallback.display()
-            ))
+
+        match std::process::Command::new("kdialog")
+            .arg("--getexistingdirectory")
+            .arg(current_dir.display().to_string())
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                Ok((!value.is_empty()).then(|| PathBuf::from(value)))
+            }
+            Ok(_) => Ok(None),
+            Err(_) => {
+                let fallback = Storage::default_path();
+                Err(format!(
+                    "{} ({})",
+                    t!("error.dialog_not_found"),
+                    fallback.display()
+                ))
+            }
         }
     }
 }

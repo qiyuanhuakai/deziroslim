@@ -1,7 +1,7 @@
 //! `dzc-slim` — command-line interface for the deziroslim clipboard manager.
 //!
-//! Communicates with a running `deziroslim` GUI instance over a Unix domain
-//! socket using the JSON Lines IPC protocol defined in `src/ipc.rs`.
+//! Communicates with a running `deziroslim` GUI instance over a TCP socket
+//! (127.0.0.1) using the JSON Lines IPC protocol defined in `src/ipc.rs`.
 
 rust_i18n::i18n!("locales", fallback = "en-US");
 
@@ -122,23 +122,21 @@ enum SnippetCmd {
 fn main() {
     detect_locale();
     let cli = Cli::parse();
-    let socket_path = IpcServer::socket_path_default();
+    let port_file = IpcServer::port_file_default();
 
     let exit_code = match cli.command {
-        SubCommand::List { limit, type_, tag } => {
-            cmd_list(&socket_path, limit, type_, tag, cli.json)
-        }
-        SubCommand::Search { query, mode: _ } => cmd_search(&socket_path, &query, cli.json),
-        SubCommand::Paste { id, rich } => cmd_paste(&socket_path, id, rich, cli.json),
-        SubCommand::Pin { id, unpin } => cmd_pin(&socket_path, id, unpin),
-        SubCommand::Tag { id, tag } => cmd_tag(&socket_path, id, &tag),
-        SubCommand::Delete { id } => cmd_delete(&socket_path, id),
-        SubCommand::Status => cmd_status(&socket_path, cli.json),
+        SubCommand::List { limit, type_, tag } => cmd_list(&port_file, limit, type_, tag, cli.json),
+        SubCommand::Search { query, mode: _ } => cmd_search(&port_file, &query, cli.json),
+        SubCommand::Paste { id, rich } => cmd_paste(&port_file, id, rich, cli.json),
+        SubCommand::Pin { id, unpin } => cmd_pin(&port_file, id, unpin),
+        SubCommand::Tag { id, tag } => cmd_tag(&port_file, id, &tag),
+        SubCommand::Delete { id } => cmd_delete(&port_file, id),
+        SubCommand::Status => cmd_status(&port_file, cli.json),
         SubCommand::Add {
             content,
             entry_type,
-        } => cmd_add(&socket_path, &content, entry_type, cli.json),
-        SubCommand::Snippet(sub) => cmd_snippet(&socket_path, sub, cli.json),
+        } => cmd_add(&port_file, &content, entry_type, cli.json),
+        SubCommand::Snippet(sub) => cmd_snippet(&port_file, sub, cli.json),
     };
 
     std::process::exit(exit_code);
@@ -163,7 +161,7 @@ fn detect_locale() {
 // ── Command implementations ───────────────────────────────────────────
 
 fn cmd_list(
-    socket_path: &std::path::Path,
+    port_file: &std::path::Path,
     limit: Option<usize>,
     type_: Option<String>,
     tag: Option<String>,
@@ -177,7 +175,7 @@ fn cmd_list(
         args.insert("tag".into(), serde_json::Value::String(t.clone()));
     }
 
-    let resp = match send_ipc(socket_path, "list", serde_json::Value::Object(args)) {
+    let resp = match send_ipc(port_file, "list", serde_json::Value::Object(args)) {
         Ok(r) => r,
         Err(e) => return handle_error(&e),
     };
@@ -216,10 +214,10 @@ fn cmd_list(
     0
 }
 
-fn cmd_search(socket_path: &std::path::Path, query: &str, json_output: bool) -> i32 {
+fn cmd_search(port_file: &std::path::Path, query: &str, json_output: bool) -> i32 {
     let args = serde_json::json!({ "query": query });
 
-    let resp = match send_ipc(socket_path, "search", args) {
+    let resp = match send_ipc(port_file, "search", args) {
         Ok(r) => r,
         Err(e) => return handle_error(&e),
     };
@@ -248,10 +246,10 @@ fn cmd_search(socket_path: &std::path::Path, query: &str, json_output: bool) -> 
     0
 }
 
-fn cmd_paste(socket_path: &std::path::Path, id: i64, rich: bool, json_output: bool) -> i32 {
+fn cmd_paste(port_file: &std::path::Path, id: i64, rich: bool, json_output: bool) -> i32 {
     let args = serde_json::json!({ "id": id });
 
-    let resp = match send_ipc(socket_path, "paste", args) {
+    let resp = match send_ipc(port_file, "paste", args) {
         Ok(r) => r,
         Err(IpcError::ConnectionRefused) => return paste_from_db(id, rich),
         Err(e) => return handle_error(&e),
@@ -286,10 +284,10 @@ fn cmd_paste(socket_path: &std::path::Path, id: i64, rich: bool, json_output: bo
     0
 }
 
-fn cmd_pin(socket_path: &std::path::Path, id: i64, unpin: bool) -> i32 {
+fn cmd_pin(port_file: &std::path::Path, id: i64, unpin: bool) -> i32 {
     let args = serde_json::json!({ "id": id });
 
-    let resp = match send_ipc(socket_path, "pin", args) {
+    let resp = match send_ipc(port_file, "pin", args) {
         Ok(r) => r,
         Err(e) => return handle_error(&e),
     };
@@ -307,13 +305,13 @@ fn cmd_pin(socket_path: &std::path::Path, id: i64, unpin: bool) -> i32 {
     0
 }
 
-fn cmd_tag(socket_path: &std::path::Path, id: i64, tags: &[String]) -> i32 {
+fn cmd_tag(port_file: &std::path::Path, id: i64, tags: &[String]) -> i32 {
     let args = serde_json::json!({
         "id": id,
         "tags": tags,
     });
 
-    let resp = match send_ipc(socket_path, "tag", args) {
+    let resp = match send_ipc(port_file, "tag", args) {
         Ok(r) => r,
         Err(e) => return handle_error(&e),
     };
@@ -331,10 +329,10 @@ fn cmd_tag(socket_path: &std::path::Path, id: i64, tags: &[String]) -> i32 {
     0
 }
 
-fn cmd_delete(socket_path: &std::path::Path, id: i64) -> i32 {
+fn cmd_delete(port_file: &std::path::Path, id: i64) -> i32 {
     let args = serde_json::json!({ "id": id });
 
-    let resp = match send_ipc(socket_path, "delete", args) {
+    let resp = match send_ipc(port_file, "delete", args) {
         Ok(r) => r,
         Err(e) => return handle_error(&e),
     };
@@ -347,8 +345,8 @@ fn cmd_delete(socket_path: &std::path::Path, id: i64) -> i32 {
     0
 }
 
-fn cmd_status(socket_path: &std::path::Path, json_output: bool) -> i32 {
-    let resp = match send_ipc(socket_path, "status", serde_json::Value::Null) {
+fn cmd_status(port_file: &std::path::Path, json_output: bool) -> i32 {
+    let resp = match send_ipc(port_file, "status", serde_json::Value::Null) {
         Ok(r) => r,
         Err(e) => return handle_error(&e),
     };
@@ -411,14 +409,14 @@ fn cmd_status(socket_path: &std::path::Path, json_output: bool) -> i32 {
 }
 
 fn cmd_add(
-    socket_path: &std::path::Path,
+    port_file: &std::path::Path,
     content: &str,
     _entry_type: Option<String>,
     json_output: bool,
 ) -> i32 {
     let args = serde_json::json!({ "text": content });
 
-    let resp = match send_ipc(socket_path, "add", args) {
+    let resp = match send_ipc(port_file, "add", args) {
         Ok(r) => r,
         Err(e) => return handle_error(&e),
     };
@@ -440,10 +438,10 @@ fn cmd_add(
     0
 }
 
-fn cmd_snippet(socket_path: &std::path::Path, sub: SnippetCmd, json_output: bool) -> i32 {
+fn cmd_snippet(port_file: &std::path::Path, sub: SnippetCmd, json_output: bool) -> i32 {
     match sub {
         SnippetCmd::List => {
-            let resp = match send_ipc(socket_path, "snippet_list", serde_json::json!({})) {
+            let resp = match send_ipc(port_file, "snippet_list", serde_json::json!({})) {
                 Ok(r) => r,
                 Err(e) => return handle_error(&e),
             };
@@ -489,7 +487,7 @@ fn cmd_snippet(socket_path: &std::path::Path, sub: SnippetCmd, json_output: bool
             if let Some(desc) = description {
                 args["description"] = serde_json::Value::String(desc);
             }
-            let resp = match send_ipc(socket_path, "snippet_add", args) {
+            let resp = match send_ipc(port_file, "snippet_add", args) {
                 Ok(r) => r,
                 Err(e) => return handle_error(&e),
             };
@@ -507,7 +505,7 @@ fn cmd_snippet(socket_path: &std::path::Path, sub: SnippetCmd, json_output: bool
             } else {
                 serde_json::json!({"name": id_or_name})
             };
-            let resp = match send_ipc(socket_path, "snippet_remove", args) {
+            let resp = match send_ipc(port_file, "snippet_remove", args) {
                 Ok(r) => r,
                 Err(e) => return handle_error(&e),
             };
@@ -532,7 +530,7 @@ fn cmd_snippet(socket_path: &std::path::Path, sub: SnippetCmd, json_output: bool
                 }
                 args["var"] = serde_json::Value::Object(map);
             }
-            let resp = match send_ipc(socket_path, "snippet_insert", args) {
+            let resp = match send_ipc(port_file, "snippet_insert", args) {
                 Ok(r) => r,
                 Err(e) => return handle_error(&e),
             };
@@ -550,15 +548,16 @@ fn cmd_snippet(socket_path: &std::path::Path, sub: SnippetCmd, json_output: bool
 // ── IPC helpers ───────────────────────────────────────────────────────
 
 fn send_ipc(
-    socket_path: &std::path::Path,
+    port_file: &std::path::Path,
     cmd: &str,
     args: serde_json::Value,
 ) -> Result<IpcResponse, IpcError> {
     let request = IpcRequest {
         cmd: cmd.to_string(),
         args,
+        token: None,
     };
-    deziroslim::ipc::send_request(socket_path, &request)
+    deziroslim::ipc::send_request(port_file, &request)
 }
 
 fn handle_error(err: &IpcError) -> i32 {

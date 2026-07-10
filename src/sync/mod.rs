@@ -16,23 +16,23 @@
 //! internally. We additionally use `mdns-sd` for supplementary service
 //! monitoring/registration.
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 use crate::storage::Storage;
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 use std::collections::HashSet;
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 use std::path::PathBuf;
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 use std::sync::Arc;
 
 // ── Service type ──────────────────────────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 const SYNC_SERVICE_TYPE: &str = "_kdeconnect._tcp.local.";
 
 // ── Sync state ────────────────────────────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncState {
     Disabled,
@@ -44,7 +44,7 @@ pub enum SyncState {
 
 // ── Sync commands (UI → runtime) ──────────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 #[derive(Debug)]
 enum SyncCmd {
     Disable,
@@ -55,7 +55,7 @@ enum SyncCmd {
 
 // ── Sync events (runtime → UI) ────────────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
     DeviceDiscovered { id: String, name: String },
@@ -69,7 +69,7 @@ pub enum SyncEvent {
 
 // ── Device info for the UI ────────────────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
 pub struct DiscoveredDevice {
     pub id: String,
@@ -79,7 +79,7 @@ pub struct DiscoveredDevice {
 
 // ── SyncManager ───────────────────────────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 pub struct SyncManager {
     storage: Storage,
     device_id: String,
@@ -92,7 +92,7 @@ pub struct SyncManager {
     pending_clipboard: Option<String>,
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl SyncManager {
     pub fn new(storage: Storage) -> Self {
         let device_id = load_or_create_device_id(&storage);
@@ -285,13 +285,13 @@ impl SyncManager {
 
 // ── Discovery (wrapper for discovery info) ────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 pub struct Discovery {
     device_id: String,
     device_name: String,
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl Discovery {
     pub fn new(device_id: String, device_name: String) -> Self {
         Self {
@@ -311,7 +311,7 @@ impl Discovery {
 
 // ── Pairing (wrapper for pairing state) ───────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 pub struct Pairing {
     #[allow(dead_code)]
     device_id: String,
@@ -320,7 +320,7 @@ pub struct Pairing {
     trusted: bool,
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl Pairing {
     pub fn new(device_id: String, peer_id: String) -> Self {
         Self {
@@ -345,14 +345,14 @@ impl Pairing {
 
 // ── ClipboardPlugin (bidirectional sync with echo suppression) ────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 pub struct ClipboardPlugin {
     device_id: String,
     #[allow(dead_code)]
     storage: Storage,
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl ClipboardPlugin {
     pub fn new(device_id: String, storage: Storage) -> Self {
         Self { device_id, storage }
@@ -364,16 +364,16 @@ impl ClipboardPlugin {
 }
 
 /// Prevents feedback loop: suppresses local clipboard re-capture after a remote write.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 #[derive(Clone)]
 pub struct SyncEchoGuard {
     inner: Arc<std::sync::Mutex<(String, Option<std::time::Instant>)>>,
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 const SYNC_ECHO_WINDOW: std::time::Duration = std::time::Duration::from_millis(800);
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl SyncEchoGuard {
     pub fn new() -> Self {
         Self {
@@ -394,14 +394,14 @@ impl SyncEchoGuard {
     }
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl Default for SyncEchoGuard {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn content_hash(content: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -409,13 +409,13 @@ fn content_hash(content: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 pub struct KdeConnectPlugin {
     echo_guard: SyncEchoGuard,
     event_tx: crossbeam_channel::Sender<SyncEvent>,
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl KdeConnectPlugin {
     pub fn new(event_tx: crossbeam_channel::Sender<SyncEvent>, echo_guard: SyncEchoGuard) -> Self {
         Self {
@@ -429,7 +429,7 @@ impl KdeConnectPlugin {
     }
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 #[kdeconnect_proto::async_trait]
 impl kdeconnect_proto::plugin::Plugin for KdeConnectPlugin {
     fn supported_incoming_packets(&self) -> Vec<kdeconnect_proto::packet::NetworkPacketType> {
@@ -495,26 +495,26 @@ impl kdeconnect_proto::plugin::Plugin for KdeConnectPlugin {
 // ── Certificate management ────────────────────────────────────────────
 
 /// Directory for sync-related data (certificates, trusted devices).
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn sync_data_dir() -> PathBuf {
     let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
     base.join("deziroslim").join("sync")
 }
 
 /// Get the path to the TLS certificate file.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn cert_path() -> PathBuf {
     sync_data_dir().join("cert.pem")
 }
 
 /// Get the path to the TLS private key file.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn key_path() -> PathBuf {
     sync_data_dir().join("private_key.pem")
 }
 
 /// Get the path to the trusted devices directory.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn trusted_devices_dir() -> PathBuf {
     sync_data_dir().join("trusted")
 }
@@ -522,7 +522,7 @@ fn trusted_devices_dir() -> PathBuf {
 /// Generate a self-signed TLS certificate for KDE Connect using `openssl`.
 ///
 /// Returns `(cert_pem, key_pem)` on success.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn generate_tls_certificate(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8>)> {
     let dir = sync_data_dir();
     std::fs::create_dir_all(&dir)?;
@@ -575,7 +575,7 @@ fn generate_tls_certificate(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8
 }
 
 /// Load or generate TLS certificate. Returns `(cert_pem, key_pem)`.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn load_or_generate_cert(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8>)> {
     let cert_p = cert_path();
     let key_p = key_path();
@@ -591,13 +591,13 @@ fn load_or_generate_cert(device_id: &str) -> std::io::Result<(Vec<u8>, Vec<u8>)>
 
 // ── TrustHandler backed by filesystem ─────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 struct FileTrustHandler {
     path: PathBuf,
     trusted_devices: std::collections::HashMap<String, Vec<u8>>,
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 impl FileTrustHandler {
     fn new(path: PathBuf) -> Self {
         let trusted_devices = if path.exists() {
@@ -630,7 +630,7 @@ impl FileTrustHandler {
     }
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 #[kdeconnect_proto::async_trait]
 impl kdeconnect_proto::trust::TrustHandler for FileTrustHandler {
     async fn trust_device(&mut self, device_id: String, cert: Vec<u8>) {
@@ -652,7 +652,7 @@ impl kdeconnect_proto::trust::TrustHandler for FileTrustHandler {
 
 /// The main sync runtime running in a background thread with its own tokio
 /// runtime. Uses kdeconnect-proto's `Device` for mDNS discovery + TLS pairing.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn sync_runtime(
     _storage: Storage,
     device_id: String,
@@ -798,7 +798,7 @@ fn sync_runtime(
     });
 }
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 async fn link_device_info<Io, UdpSocket, TcpStream, TcpListener, TlsStream>(
     device: &Arc<
         kdeconnect_proto::device::Device<Io, UdpSocket, TcpStream, TcpListener, TlsStream>,
@@ -828,7 +828,7 @@ where
 
 /// Monitor for KDE Connect services on the network using `mdns-sd`.
 /// This is supplementary to kdeconnect-proto's built-in mDNS discovery.
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn mdns_monitor_loop(_local_device_id: &str, event_tx: crossbeam_channel::Sender<SyncEvent>) {
     use mdns_sd::{ServiceDaemon, ServiceEvent};
 
@@ -882,7 +882,7 @@ fn mdns_monitor_loop(_local_device_id: &str, event_tx: crossbeam_channel::Sender
 
 // ── Device ID persistence ─────────────────────────────────────────────
 
-#[cfg(feature = "kde_connect")]
+#[cfg(target_os = "linux")]
 fn load_or_create_device_id(storage: &Storage) -> String {
     const KEY: &str = "sync.device_id";
     if let Ok(Some(id)) = storage.get_setting(KEY) {
@@ -897,13 +897,13 @@ fn load_or_create_device_id(storage: &Storage) -> String {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     use super::*;
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     use crate::storage::Storage;
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_load_or_create_device_id_persists() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("test_sync_id.db");
@@ -918,7 +918,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_sync_state_transitions() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("test_sync_state.db");
@@ -943,7 +943,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_poll_events_preserves_clipboard_received() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("test_sync_clipboard_event.db");
@@ -963,7 +963,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_poll_events_coalesces_clipboard_received() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("test_sync_clipboard_coalesce.db");
@@ -991,7 +991,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_discovery_struct() {
         let d = Discovery::new("abc123".into(), "My Phone".into());
         assert_eq!(d.device_id(), "abc123");
@@ -999,7 +999,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_pairing_lifecycle() {
         let mut p = Pairing::new("local".into(), "remote".into());
         assert!(!p.is_trusted());
@@ -1012,7 +1012,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_clipboard_plugin_device_id() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("test_cp_plugin.db");
@@ -1023,13 +1023,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_service_type_constant() {
         assert_eq!(SYNC_SERVICE_TYPE, "_kdeconnect._tcp.local.");
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_sync_data_dir_is_absolute() {
         let dir = sync_data_dir();
         assert!(dir.is_absolute(), "sync data dir should be absolute");
@@ -1037,7 +1037,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_discovered_device_clone() {
         let dev = DiscoveredDevice {
             id: "abc".into(),
@@ -1051,7 +1051,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_echo_guard_suppresses_matching_content() {
         let guard = SyncEchoGuard::new();
         assert!(!guard.should_suppress("hello"));
@@ -1062,7 +1062,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_echo_guard_different_content_not_suppressed() {
         let guard = SyncEchoGuard::new();
         guard.mark_remote_write("aaa");
@@ -1070,7 +1070,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_content_hash_deterministic() {
         let h1 = content_hash("test content");
         let h2 = content_hash("test content");
@@ -1081,7 +1081,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_sync_echo_guard_clone() {
         let guard1 = SyncEchoGuard::new();
         let guard2 = guard1.clone();
@@ -1091,7 +1091,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "kde_connect")]
+    #[cfg(target_os = "linux")]
     fn test_clipboard_plugin_echo_guard_access() {
         let (tx, _rx) = crossbeam_channel::unbounded();
         let plugin = KdeConnectPlugin::new(tx, SyncEchoGuard::new());

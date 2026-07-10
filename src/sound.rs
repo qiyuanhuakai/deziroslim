@@ -1,4 +1,6 @@
+#[cfg(not(target_os = "windows"))]
 use std::io::Write;
+#[cfg(not(target_os = "windows"))]
 use std::process::{Command, Stdio};
 use std::thread;
 
@@ -15,12 +17,20 @@ pub fn play(effect: SoundEffect, volume: u8) {
     }
     thread::spawn(move || {
         let wav = synth_effect(effect, volume);
-        if !play_with_stdin("aplay", &["-q", "-"], &wav) {
-            let _ = play_with_stdin("paplay", &["/dev/stdin"], &wav);
+        #[cfg(target_os = "windows")]
+        {
+            let _ = crate::platform::play_wav(&wav);
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            if !play_with_stdin("aplay", &["-q", "-"], &wav) {
+                let _ = play_with_stdin("paplay", &["/dev/stdin"], &wav);
+            }
         }
     });
 }
 
+#[cfg(not(target_os = "windows"))]
 fn play_with_stdin(program: &str, args: &[&str], wav: &[u8]) -> bool {
     let Ok(mut child) = Command::new(program)
         .args(args)

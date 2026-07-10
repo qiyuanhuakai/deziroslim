@@ -132,6 +132,8 @@ pub use linux::{mouse_position, screen_geometry, start_tray};
 #[cfg(target_os = "linux")]
 pub use linux_xfixes::start_primary_watcher;
 #[cfg(target_os = "windows")]
+pub use windows::active_window_class;
+#[cfg(target_os = "windows")]
 pub use windows::current_keyboard_modifiers;
 #[cfg(target_os = "windows")]
 pub use windows::validate_hotkey;
@@ -143,6 +145,70 @@ pub use windows::{
 pub use windows::{autostart_enabled, set_autostart};
 #[cfg(target_os = "windows")]
 pub use windows::{mouse_position, screen_geometry, start_tray};
+
+#[cfg(target_os = "windows")]
+pub fn initialize_process() {
+    windows::initialize_process();
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn initialize_process() {}
+
+#[cfg(target_os = "windows")]
+pub fn system_locale_name() -> Option<String> {
+    windows::system_locale_name()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn system_locale_name() -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+pub fn system_dark_mode() -> Option<bool> {
+    windows::system_dark_mode()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn system_dark_mode() -> Option<bool> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+pub fn remember_main_window(frame: &eframe::Frame) -> Result<(), String> {
+    windows::remember_main_window(frame)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn remember_main_window(_frame: &eframe::Frame) -> Result<(), String> {
+    Ok(())
+}
+
+pub fn open_file_manager(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        windows::open_file_manager(path)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        open::that(path).map_err(|err| t!("error.open_file_manager_failed", err = err).to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn set_taskbar_visible(frame: &eframe::Frame, visible: bool) -> Result<(), String> {
+    windows::set_taskbar_visible(frame, visible)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn set_taskbar_visible(_frame: &eframe::Frame, _visible: bool) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+pub fn play_wav(wav: &[u8]) -> bool {
+    windows::play_wav(wav)
+}
 
 #[cfg(target_os = "linux")]
 #[allow(dead_code)]
@@ -235,11 +301,6 @@ pub fn screen_geometry() -> Option<ScreenGeometry> {
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn mouse_position() -> Option<(f32, f32)> {
-    None
-}
-
-#[cfg(target_os = "windows")]
-pub fn active_window_class() -> Option<String> {
     None
 }
 

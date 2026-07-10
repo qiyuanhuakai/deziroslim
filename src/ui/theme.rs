@@ -205,6 +205,8 @@ pub struct MacosTokens {
     pub select_menu_bg: Color32,
     /// 下拉菜单边框
     pub select_menu_border: Color32,
+    /// 下拉菜单选项悬停背景
+    pub select_menu_hover_bg: Color32,
 
     // ===== 尺寸 / 圆角 (f32) ================================================
     /// 窗口圆角
@@ -428,6 +430,7 @@ impl MacosTokens {
             // -- Select --
             select_menu_bg: rgba(255, 255, 255, 0.98),
             select_menu_border: rgba(60, 60, 67, 0.20),
+            select_menu_hover_bg: rgba(10, 132, 255, 0.18),
 
             // -- Radius --
             radius_window: 12.0,
@@ -590,6 +593,7 @@ impl MacosTokens {
             // -- Select --
             select_menu_bg: rgba(62, 64, 74, 0.98),
             select_menu_border: rgba(255, 255, 255, 0.14),
+            select_menu_hover_bg: rgba(90, 200, 250, 0.16),
 
             // -- Radius (同 Light) --
             radius_window: 12.0,

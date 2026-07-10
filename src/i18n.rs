@@ -19,17 +19,27 @@ pub fn current_locale() -> String {
 
 /// Set the application locale at runtime.
 ///
-/// Accepts `"zh-CN"` or `"en-US"`.  `"follow-system"` is intentionally
-/// **not** handled here — the startup logic in `main.rs` is responsible
-/// for resolving system locale and calling this function with an explicit
-/// locale string.
-///
-/// Invalid values are silently ignored.
+/// Accepts `"zh-CN"` or `"en-US"`. Invalid values are silently ignored.
 pub fn set_app_locale(lang: &str) {
     match lang {
         "zh-CN" | "en-US" => rust_i18n::set_locale(lang),
         _ => {}
     }
+}
+
+/// Resolve a persisted language choice to a concrete application locale.
+pub fn resolve_locale_choice(lang: &str) -> String {
+    match lang {
+        "follow-system" => detect_system_locale(),
+        "zh-CN" | "en-US" => lang.to_string(),
+        _ => "en-US".to_string(),
+    }
+}
+
+/// Apply a persisted language choice, including `"follow-system"`.
+pub fn set_app_locale_choice(lang: &str) {
+    let locale = resolve_locale_choice(lang);
+    set_app_locale(&locale);
 }
 
 /// Detect locale from a raw locale string (e.g. `"zh_CN.UTF-8"`).
@@ -41,11 +51,16 @@ pub fn set_app_locale(lang: &str) {
 ///        `"en*"` / `"english"` → `"en-US"`,
 ///         everything else → `"en-US"`.
 pub fn detect_from_raw(raw: &str) -> String {
-    let lang = raw.split(['.', '_']).next().unwrap_or("").to_lowercase();
-    match lang.as_str() {
-        "zh" | "zh-cn" | "zh-tw" | "zh-hk" | "chinese" => "zh-CN".to_string(),
-        "en" | "en-us" | "en-gb" | "english" => "en-US".to_string(),
-        _ => "en-US".to_string(),
+    let lang = raw
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .replace('_', "-")
+        .to_lowercase();
+    if lang.starts_with("zh") || lang.contains("chinese") {
+        "zh-CN".to_string()
+    } else {
+        "en-US".to_string()
     }
 }
 
@@ -54,8 +69,9 @@ pub fn detect_from_raw(raw: &str) -> String {
 /// Priority: `LC_MESSAGES` > `LANG`.  Falls back to `"en-US"` when neither
 /// is set or when the value doesn't match a known locale pattern.
 pub fn detect_system_locale() -> String {
-    let raw = std::env::var("LC_MESSAGES")
-        .or_else(|_| std::env::var("LANG"))
+    let raw = crate::platform::system_locale_name()
+        .or_else(|| std::env::var("LC_MESSAGES").ok())
+        .or_else(|| std::env::var("LANG").ok())
         .unwrap_or_default();
     detect_from_raw(&raw)
 }

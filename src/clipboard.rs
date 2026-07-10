@@ -11,7 +11,9 @@ use rust_i18n::t;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::io::Cursor;
+#[allow(unused_imports)]
 use std::path::{Path, PathBuf};
+#[allow(unused_imports)]
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;

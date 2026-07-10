@@ -310,8 +310,15 @@ fn kill_process(pid: u32) -> Result<(), String> {
     }
     #[cfg(not(unix))]
     {
-        let _ = pid;
-        Err("kill not supported on this platform".to_string())
+        let status = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status()
+            .map_err(|err| format!("taskkill failed: {err}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("taskkill exited with {status}"))
+        }
     }
 }
 

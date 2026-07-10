@@ -1,19 +1,23 @@
 //! Inter-process communication for CLI ↔ GUI coordination.
 //!
-//! Provides a Unix domain socket server so that the `dzc-slim` binary can
-//! send commands to a running GUI instance. Protocol is JSON Lines: one
+//! Provides a TCP socket server (on 127.0.0.1) so that the `dzc-slim` binary
+//! can send commands to a running GUI instance. Protocol is JSON Lines: one
 //! JSON object per line, terminated by `\n`.
 //!
 //! - **Request**: `{"cmd":"list","args":{...}}`
 //! - **Success**: `{"ok":true,"data":...}`
 //! - **Error**:   `{"ok":false,"error":{"code":N,"message":"..."}}`
+//!
+//! The server binds to an OS-assigned port on 127.0.0.1 and writes the port
+//! number plus a per-process random token to a file (`port_file`). The client
+//! reads that file to discover and authenticate the local session. This works
+//! cross-platform (Linux, Windows, macOS).
 
 use crate::model::{ClipboardEntry, ClipboardKind};
 use crate::storage::Storage;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
@@ -69,11 +73,13 @@ impl IpcError {
 // ── JSON Lines protocol types ─────────────────────────────────────────
 
 /// A single request line sent by the CLI.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IpcRequest {
     pub cmd: String,
     #[serde(default)]
     pub args: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// A single response line sent back by the server.
@@ -118,74 +124,86 @@ impl IpcResponse {
 
 // ── Server ────────────────────────────────────────────────────────────
 
-/// IPC server that listens on a Unix domain socket and dispatches
+/// IPC server that listens on a TCP socket (127.0.0.1) and dispatches
 /// clipboard commands to the shared [`Storage`].
+///
+/// The server writes the bound port number and random token to a file so
+/// that clients can discover and authenticate the local session.
 pub struct IpcServer {
-    pub socket_path: PathBuf,
+    pub port_file: PathBuf,
 }
 
 impl IpcServer {
-    /// Resolve the default socket path:
-    /// 1. `$XDG_RUNTIME_DIR/deziroslim.sock` (when the env var is set,
-    ///    per XDG Base Directory spec; callers are expected to ensure the
-    ///    directory exists)
-    /// 2. `/tmp/deziroslim-$UID.sock`
-    pub fn socket_path_default() -> PathBuf {
-        if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR")
-            && !runtime.is_empty()
+    /// Resolve the default port-file path:
+    /// 1. `$XDG_RUNTIME_DIR/deziroslim.port` (Linux, when set)
+    /// 2. `{data_local_dir}/deziroslim/port` (cross-platform fallback)
+    pub fn port_file_default() -> PathBuf {
+        #[cfg(target_os = "linux")]
         {
-            return PathBuf::from(runtime).join("deziroslim.sock");
+            if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR")
+                && !runtime.is_empty()
+            {
+                return PathBuf::from(runtime).join("deziroslim.port");
+            }
         }
-        let uid = unsafe { libc::getuid() };
-        PathBuf::from(format!("/tmp/deziroslim-{uid}.sock"))
+        let base = dirs::data_local_dir().unwrap_or_else(std::env::temp_dir);
+        base.join("deziroslim").join("port")
     }
 
     /// Start the IPC server in a background thread.
     ///
-    /// - Removes a stale socket file if one already exists at `socket_path`.
-    /// - Creates the listener with 0600 permissions.
+    /// - Removes a stale port file if one already exists.
+    /// - Binds to 127.0.0.1 on an OS-assigned port.
+    /// - Writes the port number and random token to `port_file`.
     /// - Spawns a daemon thread that accepts connections in a loop.
     ///
-    /// Returns the server handle so the caller can inspect the socket path.
-    pub fn start(storage: Arc<Storage>, socket_path: PathBuf) -> Result<Self, IpcError> {
-        // Clean up stale socket from a previous crashed instance.
-        if socket_path.exists() {
-            std::fs::remove_file(&socket_path)?;
+    /// Returns the server handle so the caller can inspect the port file path.
+    pub fn start(storage: Arc<Storage>, port_file: PathBuf) -> Result<Self, IpcError> {
+        // Clean up stale port file from a previous crashed instance.
+        if port_file.exists() {
+            std::fs::remove_file(&port_file)?;
         }
 
         // Ensure parent directory exists.
-        if let Some(parent) = socket_path.parent() {
+        if let Some(parent) = port_file.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        let listener = UnixListener::bind(&socket_path)?;
+        // Bind to OS-assigned port on localhost.
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(IpcError::Io)?;
+        let port = listener.local_addr().map_err(IpcError::Io)?.port();
 
-        // Restrict to owner read/write (0600).
-        let perms = std::fs::Permissions::from_mode(0o600);
-        std::fs::set_permissions(&socket_path, perms)?;
+        let token = new_session_token();
+        std::fs::write(&port_file, format!("{port}\n{token}\n")).map_err(IpcError::Io)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(&port_file, perms)?;
+        }
 
-        let path_clone = socket_path.clone();
         thread::Builder::new()
             .name("ipc-server".into())
             .spawn(move || {
-                Self::accept_loop(listener, storage, &path_clone);
+                Self::accept_loop(listener, storage, token);
             })
             .map_err(IpcError::Io)?;
 
-        Ok(Self { socket_path })
+        Ok(Self { port_file })
     }
 
     /// Accept loop – runs until the listener is dropped or the process exits.
-    fn accept_loop(listener: UnixListener, storage: Arc<Storage>, _socket_path: &Path) {
+    fn accept_loop(listener: TcpListener, storage: Arc<Storage>, token: String) {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
                     let storage = storage.clone();
+                    let token = token.clone();
                     if let Err(e) =
                         thread::Builder::new()
                             .name("ipc-handler".into())
                             .spawn(move || {
-                                Self::handle_connection(stream, &storage);
+                                Self::handle_connection(stream, &storage, &token);
                             })
                     {
                         eprintln!("[ipc] handler spawn failed: {e}");
@@ -199,7 +217,7 @@ impl IpcServer {
     }
 
     /// Read one JSON Lines request, dispatch, write one JSON Lines response.
-    fn handle_connection(stream: UnixStream, storage: &Storage) {
+    fn handle_connection(stream: TcpStream, storage: &Storage, token: &str) {
         // Prevent indefinite blocking on slow/malicious clients.
         let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
 
@@ -237,12 +255,18 @@ impl IpcServer {
             }
         };
 
+        if request.token.as_deref() != Some(token) {
+            let resp = IpcResponse::err(&IpcError::IpcDisabled);
+            Self::write_response(&stream, &resp);
+            return;
+        }
+
         let response = Self::dispatch(&request.cmd, &request.args, storage);
         Self::write_response(&stream, &response);
     }
 
     /// Serialize and write a single JSON Lines response.
-    fn write_response(mut stream: &UnixStream, resp: &IpcResponse) {
+    fn write_response(mut stream: &TcpStream, resp: &IpcResponse) {
         if let Ok(mut json) = serde_json::to_string(resp) {
             json.push('\n');
             let _ = stream.write_all(json.as_bytes());
@@ -527,13 +551,21 @@ impl IpcServer {
 
 /// Send a single JSON Lines request to the IPC server and return the
 /// parsed response. This is a convenience function for `dzc-slim`.
-pub fn send_request(socket_path: &Path, request: &IpcRequest) -> Result<IpcResponse, IpcError> {
-    let stream = UnixStream::connect(socket_path).map_err(|_| IpcError::ConnectionRefused)?;
+///
+/// Reads the port number and token from `port_file`, connects to 127.0.0.1:port,
+/// sends the authenticated request, and reads the response.
+pub fn send_request(port_file: &Path, request: &IpcRequest) -> Result<IpcResponse, IpcError> {
+    let endpoint = IpcEndpoint::read(port_file)?;
+
+    let addr = format!("127.0.0.1:{}", endpoint.port);
+    let stream = TcpStream::connect(&addr).map_err(|_| IpcError::ConnectionRefused)?;
 
     // Write request.
     let mut writer = &stream;
+    let mut authenticated = request.clone();
+    authenticated.token = Some(endpoint.token);
     let mut json =
-        serde_json::to_string(request).map_err(|e| IpcError::InvalidJson(e.to_string()))?;
+        serde_json::to_string(&authenticated).map_err(|e| IpcError::InvalidJson(e.to_string()))?;
     json.push('\n');
     writer.write_all(json.as_bytes())?;
     writer.flush()?;
@@ -548,6 +580,38 @@ pub fn send_request(socket_path: &Path, request: &IpcRequest) -> Result<IpcRespo
     }
 
     serde_json::from_str::<IpcResponse>(line).map_err(|e| IpcError::InvalidJson(e.to_string()))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct IpcEndpoint {
+    port: u16,
+    token: String,
+}
+
+impl IpcEndpoint {
+    fn read(path: &Path) -> Result<Self, IpcError> {
+        let raw = std::fs::read_to_string(path).map_err(IpcError::Io)?;
+        let mut lines = raw.lines();
+        let port = lines
+            .next()
+            .ok_or_else(|| IpcError::InvalidJson("missing IPC port".into()))?
+            .trim()
+            .parse()
+            .map_err(|_| IpcError::InvalidJson("invalid port in port file".into()))?;
+        let token = lines
+            .next()
+            .ok_or_else(|| IpcError::InvalidJson("missing IPC token".into()))?
+            .trim()
+            .to_string();
+        if token.is_empty() {
+            return Err(IpcError::InvalidJson("empty IPC token".into()));
+        }
+        Ok(Self { port, token })
+    }
+}
+
+fn new_session_token() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -594,6 +658,30 @@ mod tests {
             serde_json::from_str(r#"{"cmd":"list","args":{"kind":"text"}}"#).unwrap();
         assert_eq!(req.cmd, "list");
         assert_eq!(req.args["kind"], "text");
+        assert_eq!(req.token, None);
+    }
+
+    #[test]
+    fn ipc_endpoint_reads_port_and_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let port_file = dir.path().join("test.port");
+        std::fs::write(&port_file, "12345\nabcdef\n").unwrap();
+
+        let endpoint = IpcEndpoint::read(&port_file).unwrap();
+
+        assert_eq!(endpoint.port, 12345);
+        assert_eq!(endpoint.token, "abcdef");
+    }
+
+    #[test]
+    fn ipc_endpoint_rejects_missing_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let port_file = dir.path().join("test.port");
+        std::fs::write(&port_file, "12345\n").unwrap();
+
+        let err = IpcEndpoint::read(&port_file).unwrap_err();
+
+        assert!(matches!(err, IpcError::InvalidJson(_)));
     }
 
     #[test]
@@ -601,6 +689,7 @@ mod tests {
         let req: IpcRequest = serde_json::from_str(r#"{"cmd":"status"}"#).unwrap();
         assert_eq!(req.cmd, "status");
         assert_eq!(req.args, serde_json::Value::Null);
+        assert_eq!(req.token, None);
     }
 
     #[test]
@@ -634,41 +723,50 @@ mod tests {
     }
 
     #[test]
-    fn socket_path_default_uses_xdg_runtime() {
-        let dir = tempfile::tempdir().expect("create tempdir");
-        let runtime = dir.path().to_str().expect("utf8 path").to_string();
-        let expected = dir.path().join("deziroslim.sock");
+    fn port_file_default_uses_xdg_runtime_on_linux() {
+        #[cfg(target_os = "linux")]
+        {
+            let dir = tempfile::tempdir().expect("create tempdir");
+            let runtime = dir.path().to_str().expect("utf8 path").to_string();
+            let expected = dir.path().join("deziroslim.port");
 
-        let old = std::env::var("XDG_RUNTIME_DIR").ok();
+            let old = std::env::var("XDG_RUNTIME_DIR").ok();
 
-        // SAFETY: test runs single-threaded in a temp context.
-        unsafe {
-            std::env::set_var("XDG_RUNTIME_DIR", &runtime);
-        }
-        let path = IpcServer::socket_path_default();
-        assert_eq!(path, expected);
+            // SAFETY: test runs single-threaded in a temp context.
+            unsafe {
+                std::env::set_var("XDG_RUNTIME_DIR", &runtime);
+            }
+            let path = IpcServer::port_file_default();
+            assert_eq!(path, expected);
 
-        match old {
-            Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
-            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+            match old {
+                Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
+                None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+            }
         }
     }
 
     #[test]
-    fn socket_path_default_fallback_to_tmp() {
-        let old = std::env::var("XDG_RUNTIME_DIR").ok();
-        // SAFETY: test runs single-threaded in a temp context.
-        unsafe {
-            std::env::remove_var("XDG_RUNTIME_DIR");
+    fn port_file_default_fallback() {
+        #[cfg(target_os = "linux")]
+        {
+            let old = std::env::var("XDG_RUNTIME_DIR").ok();
+            // SAFETY: test runs single-threaded in a temp context.
+            unsafe {
+                std::env::remove_var("XDG_RUNTIME_DIR");
+            }
         }
 
-        let path = IpcServer::socket_path_default();
-        let uid = unsafe { libc::getuid() };
-        assert_eq!(path, PathBuf::from(format!("/tmp/deziroslim-{uid}.sock")));
+        let path = IpcServer::port_file_default();
+        // Should end with deziroslim/port
+        assert!(path.ends_with("deziroslim/port") || path.ends_with("deziroslim\\port"));
 
-        if let Some(v) = old {
-            unsafe {
-                std::env::set_var("XDG_RUNTIME_DIR", v);
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(v) = old {
+                unsafe {
+                    std::env::set_var("XDG_RUNTIME_DIR", v);
+                }
             }
         }
     }
@@ -688,6 +786,7 @@ mod tests {
         let req = IpcRequest {
             cmd: "list".into(),
             args: serde_json::json!({"query": "test"}),
+            token: None,
         };
         let req_json = serde_json::to_string(&req).unwrap();
         let parsed: IpcRequest = serde_json::from_str(&req_json).unwrap();
@@ -710,8 +809,8 @@ mod tests {
         let storage = Arc::new(Storage::open(db_path).unwrap());
         storage.cleanup_expired().unwrap();
 
-        let sock_path = dir.path().join("test.sock");
-        let server = IpcServer::start(storage, sock_path.clone()).unwrap();
+        let port_file = dir.path().join("test.port");
+        let server = IpcServer::start(storage, port_file.clone()).unwrap();
 
         // Give the server thread a moment to bind.
         std::thread::sleep(Duration::from_millis(50));
@@ -720,15 +819,55 @@ mod tests {
         let req = IpcRequest {
             cmd: "status".into(),
             args: serde_json::Value::Null,
+            token: None,
         };
-        let resp = send_request(&server.socket_path, &req).unwrap();
+        let resp = send_request(&server.port_file, &req).unwrap();
         assert!(resp.ok);
         let data = resp.data.unwrap();
         assert_eq!(data["version"], env!("CARGO_PKG_VERSION"));
         assert!(data["entry_count"].as_u64().is_some());
 
         // Cleanup.
-        let _ = std::fs::remove_file(&sock_path);
+        let _ = std::fs::remove_file(&port_file);
+    }
+
+    #[test]
+    fn server_rejects_request_without_session_token() {
+        use std::net::TcpStream;
+        use std::time::Duration;
+
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test_ipc_auth.db");
+        let storage = Arc::new(Storage::open(db_path).unwrap());
+        storage.cleanup_expired().unwrap();
+
+        let port_file = dir.path().join("test_auth.port");
+        let server = IpcServer::start(storage, port_file.clone()).unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        let endpoint = IpcEndpoint::read(&server.port_file).unwrap();
+        let stream = TcpStream::connect(("127.0.0.1", endpoint.port)).unwrap();
+        let request = IpcRequest {
+            cmd: "status".into(),
+            args: serde_json::Value::Null,
+            token: None,
+        };
+        let mut writer = &stream;
+        let mut json = serde_json::to_string(&request).unwrap();
+        json.push('\n');
+        writer.write_all(json.as_bytes()).unwrap();
+        writer.flush().unwrap();
+
+        let mut reader = BufReader::new(&stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        let response: IpcResponse = serde_json::from_str(line.trim()).unwrap();
+
+        assert!(!response.ok);
+        assert_eq!(
+            response.error.unwrap().code,
+            IpcError::IpcDisabled.exit_code()
+        );
+        let _ = std::fs::remove_file(&port_file);
     }
 
     #[test]
@@ -740,20 +879,21 @@ mod tests {
         let storage = Arc::new(Storage::open(db_path).unwrap());
         storage.cleanup_expired().unwrap();
 
-        let sock_path = dir.path().join("test_list.sock");
-        let server = IpcServer::start(storage, sock_path.clone()).unwrap();
+        let port_file = dir.path().join("test_list.port");
+        let server = IpcServer::start(storage, port_file.clone()).unwrap();
         std::thread::sleep(Duration::from_millis(50));
 
         let req = IpcRequest {
             cmd: "list".into(),
             args: serde_json::Value::Null,
+            token: None,
         };
-        let resp = send_request(&server.socket_path, &req).unwrap();
+        let resp = send_request(&server.port_file, &req).unwrap();
         assert!(resp.ok);
         let entries = resp.data.unwrap();
         assert!(entries.as_array().unwrap().is_empty());
 
-        let _ = std::fs::remove_file(&sock_path);
+        let _ = std::fs::remove_file(&port_file);
     }
 
     #[test]
@@ -765,21 +905,22 @@ mod tests {
         let storage = Arc::new(Storage::open(db_path).unwrap());
         storage.cleanup_expired().unwrap();
 
-        let sock_path = dir.path().join("test_unk.sock");
-        let server = IpcServer::start(storage, sock_path.clone()).unwrap();
+        let port_file = dir.path().join("test_unk.port");
+        let server = IpcServer::start(storage, port_file.clone()).unwrap();
         std::thread::sleep(Duration::from_millis(50));
 
         let req = IpcRequest {
             cmd: "nonexistent".into(),
             args: serde_json::Value::Null,
+            token: None,
         };
-        let resp = send_request(&server.socket_path, &req).unwrap();
+        let resp = send_request(&server.port_file, &req).unwrap();
         assert!(!resp.ok);
         let err = resp.error.unwrap();
         assert!(err.code >= 100); // unknown command codes >= 100
         assert!(err.message.contains("unknown"));
 
-        let _ = std::fs::remove_file(&sock_path);
+        let _ = std::fs::remove_file(&port_file);
     }
 
     #[test]
@@ -791,41 +932,19 @@ mod tests {
         let storage = Arc::new(Storage::open(db_path).unwrap());
         storage.cleanup_expired().unwrap();
 
-        let sock_path = dir.path().join("test_del.sock");
-        let server = IpcServer::start(storage, sock_path.clone()).unwrap();
+        let port_file = dir.path().join("test_del.port");
+        let server = IpcServer::start(storage, port_file.clone()).unwrap();
         std::thread::sleep(Duration::from_millis(50));
 
         // Deleting non-existent id should succeed (SQLite DELETE is idempotent).
         let req = IpcRequest {
             cmd: "delete".into(),
             args: serde_json::json!({"id": 999999}),
+            token: None,
         };
-        let resp = send_request(&server.socket_path, &req).unwrap();
+        let resp = send_request(&server.port_file, &req).unwrap();
         assert!(resp.ok);
 
-        let _ = std::fs::remove_file(&sock_path);
-    }
-
-    #[test]
-    fn socket_permissions_are_0600() {
-        use std::time::Duration;
-
-        let dir = tempfile::tempdir().unwrap();
-        let db_path = dir.path().join("test_ipc_perm.db");
-        let storage = Arc::new(Storage::open(db_path).unwrap());
-        storage.cleanup_expired().unwrap();
-
-        let sock_path = dir.path().join("test_perm.sock");
-        let _server = IpcServer::start(storage, sock_path.clone()).unwrap();
-        std::thread::sleep(Duration::from_millis(50));
-
-        let meta = std::fs::metadata(&sock_path).unwrap();
-        let mode = meta.permissions().mode() & 0o7777;
-        assert_eq!(
-            mode, 0o600,
-            "socket permissions should be 0600, got {mode:o}"
-        );
-
-        let _ = std::fs::remove_file(&sock_path);
+        let _ = std::fs::remove_file(&port_file);
     }
 }
