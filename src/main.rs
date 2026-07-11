@@ -33,6 +33,7 @@ fn main() -> anyhow::Result<()> {
     storage
         .cleanup_expired()
         .context(rust_i18n::t!("error.cleanup_failed"))?;
+    let renderer = app::configured_renderer(&storage);
 
     let ipc_port_file = IpcServer::port_file_default();
     let ipc_storage = Arc::new(storage.clone());
@@ -82,7 +83,7 @@ fn main() -> anyhow::Result<()> {
 
     let options = eframe::NativeOptions {
         viewport,
-        renderer: eframe::Renderer::Wgpu,
+        renderer,
         ..Default::default()
     };
 
@@ -96,6 +97,41 @@ fn main() -> anyhow::Result<()> {
         }),
     )
     .map_err(|err| anyhow::anyhow!(err.to_string()))
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::*;
+
+    #[test]
+    fn native_renderer_prefers_lower_memory_backend() {
+        assert!(matches!(
+            app::renderer_from_preference("glow"),
+            eframe::Renderer::Glow
+        ));
+        assert!(matches!(
+            app::renderer_from_preference("wgpu"),
+            eframe::Renderer::Wgpu
+        ));
+        assert!(matches!(
+            app::renderer_from_preference("invalid"),
+            eframe::Renderer::Glow
+        ));
+    }
+
+    #[test]
+    fn saved_renderer_controls_startup_backend() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let storage = Storage::open(dir.path().join("renderer.db")).expect("temporary storage");
+        storage
+            .set_setting("ui.deziroslim", r#"{"renderer":"wgpu"}"#)
+            .expect("save renderer setting");
+
+        assert!(matches!(
+            app::configured_renderer(&storage),
+            eframe::Renderer::Wgpu
+        ));
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -35,6 +35,29 @@ pub fn draw_appearance_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, ctx: &eg
                 }
             });
             ui.add_space(4.0);
+            ui.label(t!("settings.appearance.renderer"));
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                let renderers = [
+                    (t!("settings.appearance.renderer_glow"), "glow"),
+                    (t!("settings.appearance.renderer_wgpu"), "wgpu"),
+                ];
+                for (label, value) in renderers {
+                    if filter_chip(ui, label.as_ref(), app.renderer == value, &app.theme).clicked()
+                    {
+                        app.renderer = value.to_string();
+                        app.persist_preferences();
+                    }
+                }
+            });
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(t!("settings.appearance.renderer_restart_hint"))
+                        .color(app.theme.muted),
+                )
+                .wrap_mode(egui::TextWrapMode::Wrap),
+            );
+            ui.add_space(4.0);
             ui.label(t!("settings.appearance.font"));
             let mut font_changed = false;
             font_changed |= font_combo_row(

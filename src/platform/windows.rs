@@ -21,13 +21,15 @@ use windows::Win32::Globalization::GetUserDefaultLocaleName;
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::Media::Audio::{PlaySoundW, SND_MEMORY, SND_NODEFAULT, SND_SYNC, SND_SYSTEM};
 use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
+use windows::Win32::System::ProcessStatus::K32EmptyWorkingSet;
 use windows::Win32::System::Registry::{
     HKEY, HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, REG_SZ,
     RRF_RT_REG_DWORD, RegCloseKey, RegDeleteValueW, RegEnumKeyExW, RegGetValueW, RegOpenKeyExW,
     RegQueryValueExW, RegSetValueExW,
 };
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    GetCurrentProcess, OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, HOT_KEY_MODIFIERS, INPUT, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT,
@@ -720,6 +722,18 @@ pub fn initialize_process() {
     unsafe {
         let _ = SetCurrentProcessExplicitAppUserModelID(PCWSTR(app_id.as_ptr()));
     }
+}
+
+pub fn trim_working_set_after_hide() {
+    thread::spawn(|| {
+        thread::sleep(Duration::from_millis(300));
+        // SAFETY: [Category 8 — FFI boundary]
+        // GetCurrentProcess always returns a valid pseudo-handle for the calling process, and
+        // K32EmptyWorkingSet only asks Windows to evict pageable resident pages from that process.
+        unsafe {
+            let _ = K32EmptyWorkingSet(GetCurrentProcess());
+        }
+    });
 }
 
 pub fn system_locale_name() -> Option<String> {

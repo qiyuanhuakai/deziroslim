@@ -155,6 +155,14 @@ pub fn initialize_process() {
 pub fn initialize_process() {}
 
 #[cfg(target_os = "windows")]
+pub fn trim_working_set_after_hide() {
+    windows::trim_working_set_after_hide();
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn trim_working_set_after_hide() {}
+
+#[cfg(target_os = "windows")]
 pub fn system_locale_name() -> Option<String> {
     windows::system_locale_name()
 }

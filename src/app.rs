@@ -408,6 +408,8 @@ struct AppPreferences {
     settings_panel_collapsed: Vec<bool>,
     #[serde(default = "default_color_mode")]
     color_mode: String,
+    #[serde(default = "default_renderer")]
+    renderer: String,
     #[serde(default)]
     primary_font: String,
     #[serde(default)]
@@ -503,6 +505,10 @@ fn normalize_settings_panel_collapsed(collapsed: &mut Vec<bool>) {
 
 fn default_color_mode() -> String {
     "system".to_string()
+}
+
+fn default_renderer() -> String {
+    "glow".to_string()
 }
 
 fn default_language() -> String {
@@ -615,6 +621,7 @@ impl Default for AppPreferences {
             primary_entry_limit: ENTRY_LIMIT_DEFAULT,
             window_level_applied: false,
             color_mode: default_color_mode(),
+            renderer: default_renderer(),
             primary_font: String::new(),
             fallback_font: String::new(),
             language: default_language(),
@@ -765,6 +772,7 @@ pub struct ClipboardApp {
     dev_mode: bool,
     show_dev_panel: bool,
     pub(crate) color_mode: String,
+    pub(crate) renderer: String,
     pub(crate) primary_font: String,
     pub(crate) fallback_font: String,
     pub(crate) language: String,
@@ -1015,6 +1023,7 @@ impl ClipboardApp {
             dev_mode,
             show_dev_panel: false,
             color_mode: preferences.color_mode.clone(),
+            renderer: preferences.renderer.clone(),
             export_scope: "all".to_string(),
             import_mode: "merge".to_string(),
             show_import_preview: false,
@@ -1865,6 +1874,7 @@ impl ClipboardApp {
         self.pending_edge_hide = None;
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        platform::trim_working_set_after_hide();
         self.status = t!("status.hidden_to_tray").to_string();
     }
 
@@ -2435,6 +2445,7 @@ impl ClipboardApp {
             primary_entry_limit: self.primary_entry_limit,
             window_level_applied: false,
             color_mode: self.color_mode.clone(),
+            renderer: self.renderer.clone(),
             primary_font: self.primary_font.clone(),
             fallback_font: self.fallback_font.clone(),
             language: self.language.clone(),
@@ -2583,6 +2594,7 @@ impl ClipboardApp {
         self.default_video_app = preferences.default_video_app;
         self.paste_method = preferences.paste_method;
         self.color_mode = preferences.color_mode;
+        self.renderer = preferences.renderer;
         self.primary_font = preferences.primary_font;
         self.fallback_font = preferences.fallback_font;
         if self.language != preferences.language {
@@ -2961,7 +2973,11 @@ impl ClipboardApp {
                         && toolbar_button(ui, "‹", t!("tooltip.back_to_clipboard"), &self.theme)
                             .clicked()
                     {
+                        let leaving_emoji = self.current_page == AppPage::Emoji;
                         self.current_page = AppPage::Clipboard;
+                        if leaving_emoji {
+                            ctx.forget_all_images();
+                        }
                     }
 
                     if page_title(
@@ -4172,6 +4188,7 @@ impl ClipboardApp {
                         {
                             self.emoji_group_index = index;
                             self.emoji_page = 0;
+                            ctx.forget_all_images();
                         }
                     }
                 });
@@ -4206,6 +4223,7 @@ impl ClipboardApp {
                         .clicked()
                     {
                         self.emoji_page = self.emoji_page.saturating_sub(1);
+                        ctx.forget_all_images();
                     }
                     if ui
                         .add_enabled_ui(self.emoji_page + 1 < total_pages, |ui| {
@@ -4219,6 +4237,7 @@ impl ClipboardApp {
                         .clicked()
                     {
                         self.emoji_page += 1;
+                        ctx.forget_all_images();
                     }
                 });
                 ui.add_space(6.0);
@@ -4773,11 +4792,39 @@ fn load_preferences(storage: &Storage) -> AppPreferences {
     let mut preferences: AppPreferences = saved_preferences
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
+    if preferences.renderer != "wgpu" {
+        preferences.renderer = default_renderer();
+    }
     preferences.persistent = true;
     preferences.sound_volume = preferences.sound_volume.min(100);
     normalize_settings_panel_collapsed(&mut preferences.settings_panel_collapsed);
     preferences.kde_connect_enabled = true;
     preferences
+}
+
+pub fn renderer_from_preference(preference: &str) -> eframe::Renderer {
+    match preference {
+        "wgpu" => eframe::Renderer::Wgpu,
+        _ => eframe::Renderer::Glow,
+    }
+}
+
+pub fn configured_renderer(storage: &Storage) -> eframe::Renderer {
+    #[derive(Deserialize)]
+    struct RendererPreference {
+        #[serde(default = "default_renderer")]
+        renderer: String,
+    }
+
+    let renderer = storage
+        .get_setting(PREFERENCES_KEY)
+        .ok()
+        .flatten()
+        .or_else(|| storage.get_setting(LEGACY_PREFERENCES_KEY).ok().flatten())
+        .and_then(|value| serde_json::from_str::<RendererPreference>(&value).ok())
+        .map(|preference| preference.renderer)
+        .unwrap_or_else(default_renderer);
+    renderer_from_preference(&renderer)
 }
 
 fn consume_scroll_input(ctx: &egui::Context) {
