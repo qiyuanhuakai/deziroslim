@@ -217,4 +217,131 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/*.AppImage
-            dist/${APP_NAME}-${{ github.ref_name }}-${{ matrix.arch }}-checksums.sha256
+            dist/*-checksums.sha256
+
+  windows-release:
+    name: Build Windows release (${{ matrix.arch }})
+    runs-on: windows-latest
+    needs: draft-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            arch: amd64
+            pe_machine: "8664"
+            msvc_arch: amd64
+          - target: aarch64-pc-windows-msvc
+            arch: arm64
+            pe_machine: "AA64"
+            msvc_arch: amd64_arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-${{ matrix.target }}
+
+      - name: Verify Cargo.toml version matches tag
+        shell: pwsh
+        run: |
+          $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          $version = ($metadata.packages | Where-Object name -eq $env:APP_NAME).version
+          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($version -ne $tagVersion) {
+            throw "Cargo.toml version ($version) does not match tag $env:GITHUB_REF_NAME ($tagVersion)"
+          }
+          Write-Output "Cargo.toml version $version matches tag $env:GITHUB_REF_NAME"
+
+      - name: Verify Windows icon exists
+        shell: pwsh
+        run: |
+          $icon = "assets/icons/$env:ICON_NAME.ico"
+          if (-not (Test-Path -LiteralPath $icon)) {
+            throw "Required icon file not found: $icon"
+          }
+          Write-Output "Found icon: $icon"
+
+      - name: Run Windows tests
+        if: matrix.arch == 'amd64'
+        run: cargo test --locked --target ${{ matrix.target }}
+
+      - name: Build Windows release binaries
+        run: cargo build --release --locked --target ${{ matrix.target }} --bins
+
+      - name: Verify PE architecture
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          EXPECTED_MACHINE: ${{ matrix.pe_machine }}
+        run: |
+          foreach ($binary in @($env:APP_NAME, 'dzc-slim')) {
+            $path = "target/$env:TARGET/release/$binary.exe"
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+            $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4).ToString('X4')
+            if ($machine -ne $env:EXPECTED_MACHINE) {
+              throw "$path has PE machine $machine, expected $env:EXPECTED_MACHINE"
+            }
+            Write-Output "${path}: PE machine $machine"
+          }
+
+      - name: Package Windows release
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $packageName = "$env:APP_NAME-$version-windows-$env:ARCH"
+          $packageDir = "packaging/$packageName"
+          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item "target/$env:TARGET/release/$env:APP_NAME.exe" $packageDir
+          Copy-Item "target/$env:TARGET/release/dzc-slim.exe" $packageDir
+          Copy-Item README.md, LICENSE $packageDir
+          $archive = "dist/$packageName.zip"
+          Compress-Archive -Path "$packageDir/*" -DestinationPath $archive -CompressionLevel Optimal
+          $archiveItem = Get-Item -LiteralPath $archive
+          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($archiveItem.Name)" | Set-Content "dist/$packageName-checksums.sha256"
+
+      - name: Smoke test Windows archive
+        shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $packageName = "$env:APP_NAME-$version-windows-$env:ARCH"
+          $extractDir = Join-Path $env:RUNNER_TEMP $packageName
+          Expand-Archive -LiteralPath "dist/$packageName.zip" -DestinationPath $extractDir
+          foreach ($file in @("$env:APP_NAME.exe", 'dzc-slim.exe', 'README.md', 'LICENSE')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $extractDir $file))) {
+              throw "Archive is missing $file"
+            }
+          }
+          Get-ChildItem -LiteralPath dist
+
+      - name: Upload Windows release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: |
+            dist/*.zip
+            dist/*-checksums.sha256
