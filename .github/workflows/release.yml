@@ -222,7 +222,6 @@ jobs:
   windows-release:
     name: Build Windows release (${{ matrix.arch }})
     runs-on: windows-latest
-    needs: draft-release
     strategy:
       fail-fast: false
       matrix:
@@ -282,6 +281,8 @@ jobs:
         run: cargo test --locked --target ${{ matrix.target }}
 
       - name: Build Windows release binaries
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
         run: cargo build --release --locked --target ${{ matrix.target }} --bins
 
       - name: Verify PE architecture
@@ -301,39 +302,66 @@ jobs:
             Write-Output "${path}: PE machine $machine"
           }
 
-      - name: Package Windows release
+      - name: Locate Inno Setup compiler
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            throw "Inno Setup compiler not found"
+          }
+          "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "Using Inno Setup compiler: $iscc"
+
+      - name: Build Windows installer
         shell: pwsh
         env:
           TARGET: ${{ matrix.target }}
           ARCH: ${{ matrix.arch }}
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          $packageName = "$env:APP_NAME-$version-windows-$env:ARCH"
-          $packageDir = "packaging/$packageName"
-          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          Copy-Item "target/$env:TARGET/release/$env:APP_NAME.exe" $packageDir
-          Copy-Item "target/$env:TARGET/release/dzc-slim.exe" $packageDir
-          Copy-Item README.md, LICENSE $packageDir
-          $archive = "dist/$packageName.zip"
-          Compress-Archive -Path "$packageDir/*" -DestinationPath $archive -CompressionLevel Optimal
-          $archiveItem = Get-Item -LiteralPath $archive
-          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $($archiveItem.Name)" | Set-Content "dist/$packageName-checksums.sha256"
+          $sourceDir = (Resolve-Path "target/$env:TARGET/release").Path
+          $outputDir = (Resolve-Path dist).Path
+          & $env:ISCC_PATH "/DAppVersion=$version" "/DSourceDir=$sourceDir" "/DOutputDir=$outputDir" "/DArch=$env:ARCH" "installer/windows/deziroslim.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compiler failed with exit code $LASTEXITCODE"
+          }
+          $installer = "dist/$env:APP_NAME-$version-windows-$env:ARCH-setup.exe"
+          if (-not (Test-Path -LiteralPath $installer)) {
+            throw "Installer was not created: $installer"
+          }
+          $installerItem = Get-Item -LiteralPath $installer
+          $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installerItem.Name)" | Set-Content "dist/$env:APP_NAME-$version-windows-$env:ARCH-checksums.sha256"
 
-      - name: Smoke test Windows archive
+      - name: Smoke test Windows installer
+        if: matrix.arch == 'amd64'
         shell: pwsh
         env:
           ARCH: ${{ matrix.arch }}
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          $packageName = "$env:APP_NAME-$version-windows-$env:ARCH"
-          $extractDir = Join-Path $env:RUNNER_TEMP $packageName
-          Expand-Archive -LiteralPath "dist/$packageName.zip" -DestinationPath $extractDir
+          $installer = "dist/$env:APP_NAME-$version-windows-$env:ARCH-setup.exe"
+          $installDir = Join-Path $env:RUNNER_TEMP "$env:APP_NAME-installer-smoke"
+          $install = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/CURRENTUSER', "/DIR=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "Installer exited with code $($install.ExitCode)"
+          }
           foreach ($file in @("$env:APP_NAME.exe", 'dzc-slim.exe', 'README.md', 'LICENSE')) {
-            if (-not (Test-Path -LiteralPath (Join-Path $extractDir $file))) {
-              throw "Archive is missing $file"
+            if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) {
+              throw "Installed application is missing $file"
             }
+          }
+          $uninstaller = Join-Path $installDir 'unins000.exe'
+          if (-not (Test-Path -LiteralPath $uninstaller)) {
+            throw "Uninstaller was not created"
+          }
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) {
+            throw "Uninstaller exited with code $($uninstall.ExitCode)"
           }
           Get-ChildItem -LiteralPath dist
 
@@ -343,5 +371,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           draft: true
           files: |
-            dist/*.zip
+            dist/*-setup.exe
             dist/*-checksums.sha256

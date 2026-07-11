@@ -33,7 +33,10 @@ Rust 原生的轻量剪贴板管理器。原始上游为 [`jimuzhe/dzc-slimpboar
 
 ## 使用方法
 
-从`release`中下载对应平台的安装包（支持`amd64`和`aarch64`平台，`deb`、`rpm`、`appimage`三种安装方式）并安装后即可使用
+从 `release` 下载对应平台和架构的安装包：
+
+- Windows：`deziroslim-<版本>-windows-amd64-setup.exe` 或 `deziroslim-<版本>-windows-arm64-setup.exe`。
+- Linux：支持 `amd64` / `aarch64` 的 `deb`、`rpm` 和 `AppImage`。
 
 ## 构建与运行
 
