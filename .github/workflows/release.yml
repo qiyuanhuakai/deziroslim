@@ -300,6 +300,13 @@ jobs:
               throw "$path has PE machine $machine, expected $env:EXPECTED_MACHINE"
             }
             Write-Output "${path}: PE machine $machine"
+            if ($binary -eq $env:APP_NAME) {
+              $subsystem = [BitConverter]::ToUInt16($bytes, $peOffset + 4 + 20 + 68).ToString('X4')
+              if ($subsystem -ne '0002') {
+                throw "$path has PE subsystem $subsystem, expected Windows GUI (0002)"
+              }
+              Write-Output "${path}: PE subsystem $subsystem (Windows GUI)"
+            }
           }
 
       - name: Locate Inno Setup compiler
