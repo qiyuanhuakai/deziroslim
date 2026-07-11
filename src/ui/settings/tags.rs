@@ -29,7 +29,7 @@ pub fn draw_tags_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
                 egui::Frame::none()
                     .fill(bg)
                     .rounding(egui::Rounding::same(8.0))
-                    .stroke(egui::Stroke::new(1.0, app.theme.glass_border))
+                    .stroke(egui::Stroke::new(1.0_f32, app.theme.glass_border))
                     .inner_margin(6.0)
                     .show(ui, |ui| {
                         ui.set_width((sidebar_w - 12.0).max(80.0));
@@ -87,7 +87,7 @@ pub fn draw_tags_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
                                         (
                                             accent,
                                             egui::Color32::WHITE,
-                                            egui::Stroke::new(1.0, accent),
+                                            egui::Stroke::new(1.0_f32, accent),
                                         )
                                     } else {
                                         (
@@ -134,7 +134,7 @@ pub fn draw_tags_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
                 egui::Frame::none()
                     .fill(app.theme.data_bg)
                     .rounding(egui::Rounding::same(8.0))
-                    .stroke(egui::Stroke::new(1.0, app.theme.data_border))
+                    .stroke(egui::Stroke::new(1.0_f32, app.theme.data_border))
                     .inner_margin(10.0)
                     .show(ui, |ui| {
                         ui.set_width((detail_w - 20.0).max(72.0));

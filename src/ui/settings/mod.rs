@@ -189,9 +189,9 @@ pub(crate) fn removable_hotkey_chip(
         theme.input_bg
     };
     let stroke = if response.hovered() {
-        egui::Stroke::new(1.0, theme.danger)
+        egui::Stroke::new(1.0_f32, theme.danger)
     } else {
-        egui::Stroke::new(1.0, theme.input_border)
+        egui::Stroke::new(1.0_f32, theme.input_border)
     };
     ui.painter()
         .rect(rect, egui::Rounding::same(theme.radius_input), fill, stroke);
@@ -314,9 +314,9 @@ pub(crate) fn searchable_combo_row(
             theme.input_bg
         };
         let stroke = if is_open {
-            egui::Stroke::new(1.2, theme.accent)
+            egui::Stroke::new(1.2_f32, theme.accent)
         } else {
-            egui::Stroke::new(1.0, theme.input_border)
+            egui::Stroke::new(1.0_f32, theme.input_border)
         };
         let (button_rect, button) =
             ui.allocate_exact_size(egui::vec2(button_width, 34.0), egui::Sense::click());
@@ -356,7 +356,7 @@ pub(crate) fn searchable_combo_row(
         let popup_direction = combo_popup_direction(ui, button.rect);
         let mut popup_style = ui.style().as_ref().clone();
         popup_style.visuals.window_fill = theme.select_menu_bg;
-        popup_style.visuals.window_stroke = egui::Stroke::new(1.0, theme.select_menu_border);
+        popup_style.visuals.window_stroke = egui::Stroke::new(1.0_f32, theme.select_menu_border);
         popup_style.visuals.window_shadow = egui::epaint::Shadow {
             offset: egui::vec2(0.0, 4.0),
             blur: 16.0,

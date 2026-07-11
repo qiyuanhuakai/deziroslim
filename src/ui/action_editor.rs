@@ -88,7 +88,7 @@ pub fn draw_action_editor_dialog(
         .frame(
             egui::Frame::none()
                 .fill(theme.card)
-                .stroke(egui::Stroke::new(1.0, theme.border))
+                .stroke(egui::Stroke::new(1.0_f32, theme.border))
                 .rounding(egui::Rounding::same(12.0))
                 .inner_margin(egui::Margin::same(20.0))
                 .shadow(egui::epaint::Shadow {

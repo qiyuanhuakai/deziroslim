@@ -16,7 +16,7 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
         ui.label(t!("settings.data.current_database"));
         egui::Frame::none()
             .fill(app.theme.data_bg)
-            .stroke(egui::Stroke::new(1.0, app.theme.data_border))
+            .stroke(egui::Stroke::new(1.0_f32, app.theme.data_border))
             .rounding(egui::Rounding::same(8.0))
             .inner_margin(egui::Margin::symmetric(10.0, 7.0))
             .show(ui, |ui| {
@@ -30,7 +30,7 @@ pub fn draw_data_panel(ui: &mut egui::Ui, app: &mut ClipboardApp, _ctx: &egui::C
         ui.label(t!("settings.data.restart_save_path"));
         egui::Frame::none()
             .fill(app.theme.glass_bg)
-            .stroke(egui::Stroke::new(1.0, app.theme.glass_border))
+            .stroke(egui::Stroke::new(1.0_f32, app.theme.glass_border))
             .rounding(egui::Rounding::same(8.0))
             .inner_margin(egui::Margin::symmetric(10.0, 7.0))
             .show(ui, |ui| {

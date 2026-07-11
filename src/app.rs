@@ -1130,11 +1130,11 @@ impl ClipboardApp {
         visuals.window_fill = self.theme.bg;
         visuals.override_text_color = Some(self.theme.fg);
         visuals.widgets.inactive.bg_fill = self.theme.card;
-        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, self.theme.border);
+        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, self.theme.border);
         visuals.widgets.hovered.bg_fill = self.theme.card_hover;
         visuals.widgets.active.bg_fill = self.theme.accent;
         visuals.selection.bg_fill = self.theme.accent;
-        visuals.selection.stroke = egui::Stroke::new(1.0, self.theme.accent);
+        visuals.selection.stroke = egui::Stroke::new(1.0_f32, self.theme.accent);
         visuals.window_rounding = egui::Rounding::same(self.theme.radius_window);
         ctx.set_visuals(visuals);
     }
@@ -2933,7 +2933,7 @@ impl ClipboardApp {
     fn draw_header(&mut self, ctx: &egui::Context) {
         let can_start_drag = self.can_start_window_drag(ctx);
         let app_border = if self.show_app_border {
-            egui::Stroke::new(1.0, self.theme.border)
+            egui::Stroke::new(1.0_f32, self.theme.border)
         } else {
             egui::Stroke::NONE
         };
@@ -3340,9 +3340,9 @@ impl ClipboardApp {
             self.theme.card
         };
         let stroke = if selected {
-            egui::Stroke::new(1.2, self.theme.accent)
+            egui::Stroke::new(1.2_f32, self.theme.accent)
         } else {
-            egui::Stroke::new(1.0, self.theme.border)
+            egui::Stroke::new(1.0_f32, self.theme.border)
         };
         let mut pending_action = None;
 
@@ -3552,7 +3552,7 @@ impl ClipboardApp {
             ui.painter().rect_stroke(
                 response.rect.expand(1.0).translate(egui::vec2(0.0, 1.0)),
                 egui::Rounding::same(13.0),
-                egui::Stroke::new(1.0, scale_alpha(self.theme.shadow_card, 0.75)),
+                egui::Stroke::new(1.0_f32, scale_alpha(self.theme.shadow_card, 0.75)),
             );
         }
 
@@ -3585,7 +3585,7 @@ impl ClipboardApp {
                 action_bar_rect,
                 egui::Rounding::same(8.0),
                 self.theme.glass_bg,
-                egui::Stroke::new(1.0, self.theme.glass_border),
+                egui::Stroke::new(1.0_f32, self.theme.glass_border),
             );
 
             let icon_color = self.theme.fg;
@@ -3817,7 +3817,7 @@ impl ClipboardApp {
             let size = fit_texture_size(texture.size_vec2(), egui::vec2(68.0, 52.0));
             egui::Frame::none()
                 .fill(self.theme.data_bg)
-                .stroke(egui::Stroke::new(1.0, self.theme.data_border))
+                .stroke(egui::Stroke::new(1.0_f32, self.theme.data_border))
                 .rounding(egui::Rounding::same(10.0))
                 .inner_margin(egui::Margin::same(3.0))
                 .show(ui, |ui| {
@@ -3868,7 +3868,7 @@ impl ClipboardApp {
             .show(ctx, |ui| {
                 egui::Frame::none()
                     .fill(opaque_popup_fill(&self.theme))
-                    .stroke(egui::Stroke::new(1.0, self.theme.border))
+                    .stroke(egui::Stroke::new(1.0_f32, self.theme.border))
                     .rounding(egui::Rounding::same(12.0))
                     .inner_margin(egui::Margin::same(12.0))
                     .show(ui, |ui| {
@@ -4111,7 +4111,7 @@ impl ClipboardApp {
         };
         egui::Frame::none()
             .fill(self.theme.data_bg)
-            .stroke(egui::Stroke::new(1.0, self.theme.data_border))
+            .stroke(egui::Stroke::new(1.0_f32, self.theme.data_border))
             .rounding(egui::Rounding::same(10.0))
             .inner_margin(egui::Margin::same(10.0))
             .show(ui, |ui| {
@@ -4261,7 +4261,7 @@ impl ClipboardApp {
                 if is_dragging {
                     egui::Frame::none()
                         .fill(scale_alpha(self.theme.accent, 0.14))
-                        .stroke(egui::Stroke::new(1.0, self.theme.accent))
+                        .stroke(egui::Stroke::new(1.0_f32, self.theme.accent))
                         .rounding(egui::Rounding::same(12.0))
                         .inner_margin(egui::Margin::same(12.0))
                         .show(ui, |ui| {
@@ -4481,7 +4481,7 @@ impl ClipboardApp {
             .show(ctx, |ui| {
                 let frame = egui::Frame::none()
                     .fill(theme.card)
-                    .stroke(egui::Stroke::new(1.0, theme.border))
+                    .stroke(egui::Stroke::new(1.0_f32, theme.border))
                     .rounding(egui::Rounding::same(12.0))
                     .inner_margin(egui::Margin::same(16.0));
 
@@ -4641,7 +4641,7 @@ impl ClipboardApp {
             .show(ctx, |ui| {
                 let frame = egui::Frame::none()
                     .fill(theme.card)
-                    .stroke(egui::Stroke::new(1.0, theme.border))
+                    .stroke(egui::Stroke::new(1.0_f32, theme.border))
                     .rounding(egui::Rounding::same(12.0))
                     .inner_margin(egui::Margin::same(16.0));
 
@@ -5399,7 +5399,7 @@ impl eframe::App for ClipboardApp {
 
         self.draw_header(ctx);
         let app_border = if self.show_app_border {
-            egui::Stroke::new(1.0, self.theme.border)
+            egui::Stroke::new(1.0_f32, self.theme.border)
         } else {
             egui::Stroke::NONE
         };
@@ -5783,7 +5783,7 @@ fn search_box(
 ) -> egui::Response {
     egui::Frame::none()
         .fill(theme.input_bg)
-        .stroke(egui::Stroke::new(1.0, theme.input_border))
+        .stroke(egui::Stroke::new(1.0_f32, theme.input_border))
         .rounding(egui::Rounding::same(theme.radius_input))
         .inner_margin(egui::Margin {
             left: 8.0,
@@ -5875,9 +5875,9 @@ pub(crate) fn filter_chip(
         theme.tag_bg
     };
     let stroke = if selected {
-        egui::Stroke::new(1.2, theme.accent)
+        egui::Stroke::new(1.2_f32, theme.accent)
     } else {
-        egui::Stroke::new(1.0, theme.border)
+        egui::Stroke::new(1.0_f32, theme.border)
     };
     let font_id = egui::FontId::new(10.5, egui::FontFamily::Proportional);
     let text_width = ui
@@ -5917,7 +5917,7 @@ fn emoji_button(ui: &mut egui::Ui, emoji: &str, theme: &MacosTokens) -> egui::Re
             rect,
             egui::Rounding::same(10.0),
             fill,
-            egui::Stroke::new(1.0, theme.border),
+            egui::Stroke::new(1.0_f32, theme.border),
         );
 
         let emoji_rect = egui::Rect::from_center_size(rect.center(), egui::vec2(25.0, 25.0));
@@ -6034,7 +6034,7 @@ fn vector_toolbar_button(
         theme.card,
         theme.card_hover,
         if active { Some(theme.accent) } else { None },
-        egui::Stroke::new(1.0, theme.border),
+        egui::Stroke::new(1.0_f32, theme.border),
         TOOLBAR_BUTTON_RADIUS,
         TOOLBAR_ICON_SIZE,
     );
@@ -6059,7 +6059,7 @@ fn action_bar_button(
         egui::Color32::TRANSPARENT,
         hover_bg,
         None,
-        egui::Stroke::new(1.0, scale_alpha(icon_color, 0.18)),
+        egui::Stroke::new(1.0_f32, scale_alpha(icon_color, 0.18)),
         7.0,
         (rect.width() - 4.0).max(8.0),
     );
@@ -6229,7 +6229,7 @@ fn kind_badge(ui: &mut egui::Ui, label: &str, theme: &MacosTokens) {
     let label = clipped_chip_label(label, 12);
     egui::Frame::none()
         .fill(theme.card)
-        .stroke(egui::Stroke::new(1.0, theme.border))
+        .stroke(egui::Stroke::new(1.0_f32, theme.border))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
             left: 7.0,
@@ -6251,7 +6251,7 @@ fn source_app_badge(ui: &mut egui::Ui, source: &str, theme: &MacosTokens) {
     let label = clipped_chip_label(source.trim(), 8);
     egui::Frame::none()
         .fill(theme.data_bg)
-        .stroke(egui::Stroke::new(1.0, theme.data_border))
+        .stroke(egui::Stroke::new(1.0_f32, theme.data_border))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
             left: 7.0,
@@ -6273,7 +6273,7 @@ fn primary_source_badge(ui: &mut egui::Ui, theme: &MacosTokens, compact: bool) {
     let horizontal_margin = if compact { 6.0 } else { 7.0 };
     egui::Frame::none()
         .fill(theme.accent_soft)
-        .stroke(egui::Stroke::new(1.0, theme.accent))
+        .stroke(egui::Stroke::new(1.0_f32, theme.accent))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
             left: horizontal_margin,
@@ -6295,7 +6295,7 @@ fn sensitive_badge(ui: &mut egui::Ui, theme: &MacosTokens, compact: bool) {
     let horizontal_margin = if compact { 6.0 } else { 8.0 };
     egui::Frame::none()
         .fill(theme.sensitive_bg)
-        .stroke(egui::Stroke::new(1.0, theme.sensitive))
+        .stroke(egui::Stroke::new(1.0_f32, theme.sensitive))
         .rounding(egui::Rounding::same(99.0))
         .inner_margin(egui::Margin {
             left: horizontal_margin,
@@ -6327,7 +6327,7 @@ fn thumbnail_placeholder(ui: &mut egui::Ui, label: impl AsRef<str>, theme: &Maco
     let label = label.as_ref();
     egui::Frame::none()
         .fill(theme.data_bg)
-        .stroke(egui::Stroke::new(2.0, theme.data_border))
+        .stroke(egui::Stroke::new(2.0_f32, theme.data_border))
         .rounding(egui::Rounding::same(12.0))
         .inner_margin(egui::Margin::same(10.0))
         .show(ui, |ui| {
@@ -6410,7 +6410,7 @@ fn draw_file_preview(ui: &mut egui::Ui, entry: &ClipboardEntry, theme: &MacosTok
     for (index, path) in paths.iter().take(24).enumerate() {
         egui::Frame::none()
             .fill(theme.data_bg)
-            .stroke(egui::Stroke::new(1.0, theme.data_border))
+            .stroke(egui::Stroke::new(1.0_f32, theme.data_border))
             .rounding(egui::Rounding::same(8.0))
             .inner_margin(egui::Margin::symmetric(8.0, 5.0))
             .show(ui, |ui| {

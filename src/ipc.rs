@@ -749,12 +749,11 @@ mod tests {
     #[test]
     fn port_file_default_fallback() {
         #[cfg(target_os = "linux")]
-        {
-            let old = std::env::var("XDG_RUNTIME_DIR").ok();
-            // SAFETY: test runs single-threaded in a temp context.
-            unsafe {
-                std::env::remove_var("XDG_RUNTIME_DIR");
-            }
+        let old = std::env::var("XDG_RUNTIME_DIR").ok();
+        #[cfg(target_os = "linux")]
+        // SAFETY: test runs single-threaded in a temp context.
+        unsafe {
+            std::env::remove_var("XDG_RUNTIME_DIR");
         }
 
         let path = IpcServer::port_file_default();

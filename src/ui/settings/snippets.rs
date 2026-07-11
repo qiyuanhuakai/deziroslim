@@ -63,9 +63,9 @@ fn draw_snippet_list(ui: &mut egui::Ui, app: &mut ClipboardApp) {
                     theme.card
                 };
                 let stroke = if is_selected {
-                    egui::Stroke::new(1.0, theme.accent)
+                    egui::Stroke::new(1.0_f32, theme.accent)
                 } else {
-                    egui::Stroke::new(1.0, theme.border)
+                    egui::Stroke::new(1.0_f32, theme.border)
                 };
 
                 let frame = egui::Frame::none()

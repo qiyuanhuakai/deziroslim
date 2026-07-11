@@ -118,7 +118,7 @@ impl MacosButton {
                     } else {
                         theme.card
                     };
-                    (theme.fg, fill, Stroke::new(1.0, theme.border))
+                    (theme.fg, fill, Stroke::new(1.0_f32, theme.border))
                 }
                 MacosButtonStyle::Primary => {
                     let fill = if response.hovered() || response.has_focus() {
@@ -126,7 +126,11 @@ impl MacosButton {
                     } else {
                         theme.accent
                     };
-                    (egui::Color32::WHITE, fill, Stroke::new(1.0, theme.accent))
+                    (
+                        egui::Color32::WHITE,
+                        fill,
+                        Stroke::new(1.0_f32, theme.accent),
+                    )
                 }
                 MacosButtonStyle::Danger => {
                     let fill = if response.hovered() || response.has_focus() {
@@ -134,7 +138,7 @@ impl MacosButton {
                     } else {
                         theme.card
                     };
-                    (theme.danger, fill, Stroke::new(1.0, theme.danger))
+                    (theme.danger, fill, Stroke::new(1.0_f32, theme.danger))
                 }
             };
             ui.painter()
@@ -270,7 +274,7 @@ pub fn macos_collapsible_group(
 
     egui::Frame::none()
         .fill(theme.settings_bg)
-        .stroke(Stroke::new(1.0, theme.settings_border))
+        .stroke(Stroke::new(1.0_f32, theme.settings_border))
         .rounding(Rounding::same(SETTINGS_R))
         .show(ui, |ui| {
             ui.set_width(available_width);
@@ -278,7 +282,7 @@ pub fn macos_collapsible_group(
             let header_font = egui::FontId::new(13.0, egui::FontFamily::Proportional);
             let header_resp = egui::Frame::none()
                 .fill(theme.settings_header_bg)
-                .stroke(Stroke::new(1.0, theme.settings_header_border))
+                .stroke(Stroke::new(1.0_f32, theme.settings_header_border))
                 .rounding(if *expanded {
                     Rounding {
                         nw: SETTINGS_R,
